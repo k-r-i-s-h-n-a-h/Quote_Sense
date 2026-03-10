@@ -1,0 +1,6 @@
+pydentic
+groq
+pymupdf
+python-dotenv
+supabase
+pandas

@@ -100,7 +100,7 @@ def main():
                 continue
             #-------------------
 
-            pdf_path = os.path.json(folder_path , filename)
+            pdf_path = os.path.join(folder_path , filename)
             
             try:
                 # 1. Read PDF

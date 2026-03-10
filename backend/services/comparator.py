@@ -35,82 +35,80 @@ def fetch_data():
     return df
 
 def analyze_market_baseline(df):
-    """Uses Pandas to calculate the true, unbiased market average for materials."""
+    """Uses Pandas to calculate the true market average for materials."""
     print("🧮 Running Pandas mathematical analysis...")
     
-    # Clean the element names (e.g., make "Wardrobe" and "wardrobe" match perfectly)
     df['clean_element'] = df['element'].astype(str).str.lower().str.strip()
     
     # Calculate the average unit rate across ALL vendors for each element
-    # This removes bias by establishing a baseline market rate
     market_rates = df.groupby('clean_element')['unit_rate'].mean().reset_index()
     market_rates.rename(columns={'unit_rate': 'market_avg_rate'}, inplace=True)
     
-    # Merge the market average back into our main table to compare individual vendors
     df = pd.merge(df, market_rates, on='clean_element', how='left')
-    
-    # Calculate how much a vendor deviates from the market average (Positive = Expensive, Negative = Cheaper)
     df['deviation_from_avg'] = df['unit_rate'] - df['market_avg_rate']
     
     return df, market_rates
 
-def generate_unbiased_insight(df, quotes_df):
-    """Sends the mathematical summary to Groq for an objective analysis."""
-    print("🧠 Generating unbiased AI insights...")
+def generate_customer_recommendation(df, quotes_df):
+    """Sends the expanded mathematical summary to Groq for a final customer recommendation."""
+    print("🧠 Generating Expert AI Recommendation...")
     
-    # Prepare a summary of grand totals to send to the LLM
-    vendor_totals = quotes_df[['vendor_name', 'grand_total']].to_dict(orient='records')
+    # Prepare a summary of grand totals
+    vendor_totals = quotes_df[['vendor_name', 'grand_total']].sort_values(by='grand_total').to_dict(orient='records')
     
-    # Prepare a sample of the most common items and their price spreads
-    top_items = df['clean_element'].value_counts().head(10).index
+    # INCREASED TO 30: Grab a much larger sample of the most common items across the 4 quotes
+    top_items = df['clean_element'].value_counts().head(30).index
     item_spreads = df[df['clean_element'].isin(top_items)].groupby(['clean_element', 'vendor_name'])['unit_rate'].mean().reset_index()
     
     prompt = f"""
-    You are an impartial, highly analytical Quantity Surveyor in Bengaluru.
-    Review the following mathematically calculated interior design market data.
+    You are 'QuoteSense', an expert Interior Design Consultant in Bengaluru advising a customer.
+    Review the following mathematically calculated market data comparing multiple vendor quotes.
     
-    Vendor Grand Totals:
+    Vendor Grand Totals (Sorted Lowest to Highest):
     {vendor_totals}
     
-    Unit Rate Variations across Vendors for key elements:
+    Unit Rate Variations across Vendors for Top 30 Key Elements:
     {item_spreads.to_dict(orient='records')}
     
-    Provide a highly objective, unbiased summary comparing the vendors. 
-    Do not lean towards any single vendor. State the facts clearly:
-    1. Who is the most cost-effective overall?
-    2. Who charges the highest premium on specific unit rates (e.g., wardrobes or kitchens)?
-    3. Are there any notable outliers in the pricing data?
+    Your job is to analyze this data and give the customer a definitive recommendation on who to hire.
+    Structure your response exactly like this:
     
-    Keep it professional, concise, and structured.
+    ### 🏆 Final Recommendation
+    (Explicitly state: "We recommend you choose [Vendor Name]." and give a 2-sentence justification based on price and fairness).
+    
+    ### 💰 Cost Overview
+    (Briefly summarize who is the cheapest and who is the most expensive overall).
+    
+    ### 🕵️ Tactical Pricing & Red Flags
+    (Look deeply at the unit rates. Is a vendor offering cheap woodwork (like wardrobes/lofts) but sneakily marking up hardware, profiles, mirrors, or handling fees to recover their margin? Call out any vendor doing this so the customer is warned).
+    
+    Speak directly to the customer in a professional, helpful, and decisive tone.
     """
 
     response = groq_client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=[{"role": "user", "content": prompt}],
-        temperature=0.2 # Slight temperature for readable writing, but mostly analytical
+        temperature=0.3 # Slightly higher temperature to make it sound like a friendly consultant
     )
     
     return response.choices[0].message.content
 
 def main():
     try:
-        # 1. Fetch
         raw_df = fetch_data()
         quotes_df = raw_df[['vendor_name', 'grand_total']].drop_duplicates()
         
-        # 2. Analyze (Math)
         analyzed_df, market_rates = analyze_market_baseline(raw_df)
         
-        # Print a quick terminal report of the Math
-        print("\n📊 --- PANDAS MARKET BASELINE (Top 5 common items) ---")
+        print("\n📊 --- PANDAS MARKET BASELINE (Top 5 Display) ---")
         top_elements = analyzed_df['clean_element'].value_counts().head(5).index
         baseline_display = market_rates[market_rates['clean_element'].isin(top_elements)]
         print(baseline_display.to_string(index=False))
         
-        # 3. AI Insights
-        ai_report = generate_unbiased_insight(analyzed_df, quotes_df)
+        # Call the newly updated AI function
+        ai_report = generate_customer_recommendation(analyzed_df, quotes_df)
         
-        print("\n🤖 --- UNBIASED AI MARKET ANALYSIS ---")
+        print("\n🤖 --- QUOTESENSE EXPERT RECOMMENDATION ---")
         print(ai_report)
         print("\n✅ Comparison Complete!")
         

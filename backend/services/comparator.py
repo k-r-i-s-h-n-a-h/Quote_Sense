@@ -3,12 +3,16 @@ import os
 import pandas as pd
 from dotenv import load_dotenv
 from supabase import create_client, Client
-from groq import Groq
+import traceback
+
+from google import genai
+from google.genai import types
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 load_dotenv()
 
-groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+gemini_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+
 supabase: Client = create_client(
     os.getenv("SUPABASE_URL"),
     os.getenv("SUPABASE_SERVICE_ROLE_KEY")
@@ -16,161 +20,133 @@ supabase: Client = create_client(
 
 def fetch_data(session_id):
     print(f"📥 Fetching data for Session: {session_id}...")
-    # Only grab quotes for this specific session
-    quotes_response = supabase.table("quotes").select("id, vendor_name, grand_total").eq("session_id", session_id).execute()
+    quotes_response = supabase.table("quotes").select("id, vendor_name, grand_total, source_filename").eq("session_id", session_id).execute()
     
     if not quotes_response.data:
-        raise ValueError("No data found for this session!")
+        raise ValueError("No quotes found in the database for this session!")
         
     quotes_df = pd.DataFrame(quotes_response.data)
     quote_ids = quotes_df['id'].tolist()
     
     items_response = supabase.table("quote_items").select("*").in_("quote_id", quote_ids).execute()
+    
+    if not items_response.data:
+        raise ValueError("I found the quotes, but there are no line items attached to them! The PDF extraction likely failed.")
+
     items_df = pd.DataFrame(items_response.data)
     
     df = pd.merge(items_df, quotes_df, left_on="quote_id", right_on="id", suffixes=('_item', '_quote'))
+    df['vendor_name'] = df['vendor_name'] + " (" + df['source_filename'] + ")"
+    
     return df
 
-def analyze_market_baseline(df):
-    print("🧮 Running Pandas mathematical analysis...")
-    df['clean_element'] = df['element'].astype(str).str.lower().str.strip()
-    market_rates = df.groupby('clean_element')['unit_rate'].mean().reset_index()
-    market_rates.rename(columns={'unit_rate': 'market_avg_rate'}, inplace=True)
-    df = pd.merge(df, market_rates, on='clean_element', how='left')
-    df['deviation_from_avg'] = df['unit_rate'] - df['market_avg_rate']
-    return df, market_rates
-
-def generate_customer_recommendation(df, quotes_df):
-    print("🧠 Generating Expert AI Recommendation...")
-    
-    # 1. Grab all the vendor totals
-    vendor_totals = quotes_df[['vendor_name', 'grand_total']].sort_values(by='grand_total').to_dict(orient='records')
-    
-    # 2. NEW LOGIC: Calculate the "Ground Truth" Mean (Average) of all quotes
-    mean_grand_total = quotes_df['grand_total'].mean()
-    
-    # 3. Get the item spreads and material specs
-    top_items = df['clean_element'].value_counts().head(30).index
-    item_spreads = df[df['clean_element'].isin(top_items)].groupby(['clean_element', 'vendor_name'])['unit_rate'].mean().reset_index()
-    item_specs = df[df['clean_element'].isin(top_items)][['clean_element', 'vendor_name', 'specifications']].drop_duplicates().to_dict(orient='records')
-
-    prompt = f"""
-    You are 'QuoteSense', an elite Interior Design Consultant in Bengaluru advising a customer.
-    We have calculated the mathematical "Ground Truth" (Mean Average) of the submitted quotes to establish a fair market baseline.
-    
-    Project Ground Truth (Average Cost): ₹{mean_grand_total:,.2f}
-    
-    Vendor Grand Totals:
-    {vendor_totals}
-    
-    Unit Rate Variations across Vendors:
-    {item_spreads.to_dict(orient='records')}
-
-    Extracted Material Specifications:
-    {item_specs}
-    
-    CRITICAL RULE: "Cheapest does NOT equal Best." A quote drastically below the Ground Truth often means low-grade materials (like cheap MDF instead of BWP Plywood) or hidden costs. 
-    Your goal is to find the most FAIR and RELIABLE quote by comparing how much each vendor deviates from the Ground Truth average. The ideal "Best Value" is usually the vendor closest to the mean, offering consistent unit rates and good materials.
-    
-    Structure your response EXACTLY like this using markdown:
-    
-    ### ⚖️ Market Baseline Analysis
-    (State the Ground Truth average. Briefly discuss how the vendors deviate from this mean—who is suspiciously below it, and who is way above it).
-    
-    ### 🏆 The 'Fair Value' Recommendation
-    (Recommend the vendor that is closest to the ground truth mean with consistent unit rates and quality materials. Explain why this is the safest, most transparent choice).
-    
-    ### 💸 The Budget Pick (With High-Risk Warnings)
-    (Identify the cheapest vendor. Strictly warn the customer that being drastically below the market mean often signals compromised material quality, untrained labor, or hidden fees later).
-    
-    ### 🕵️ Tactical Pricing & Red Flags
-    (Identify vendors marking up specific items like hardware/mirrors to recover margins, or explicitly point out if a cheap vendor is using inferior materials based on the specifications).
-
-    ### 🎯 Final Verdict
-    (Do not waffle or give multiple options here. Based on all the data, explicitly state exactly ONE vendor the customer should hire today and in one sentence say why.)
-    """
-
-    response = groq_client.chat.completions.create(
-        model="llama-3.1-8b-instant",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.2 # Low temperature for highly analytical reasoning
-    )
-    return response.choices[0].message.content
-
 def run_comparison(session_id):
-    """This is the function FastAPI was looking for!"""
     try:
-        raw_df = fetch_data(session_id)
-        quotes_df = raw_df[['vendor_name', 'grand_total']].drop_duplicates()
-        analyzed_df, market_rates = analyze_market_baseline(raw_df)
-        ai_report = generate_customer_recommendation(analyzed_df, quotes_df)
-
-        #math for the nextjs chart
+        df = fetch_data(session_id)
+        print("🧮 Running Pandas matrix analysis for detailed frontend checklist...")
+        
+        # 1. Prepare Chart Data
+        quotes_df = df[['vendor_name', 'grand_total']].drop_duplicates()
         chart_data = []
         for index, row in quotes_df.iterrows():
-            chart_data.append({
-                "vendor": row['vendor_name'],
-                "total": float(row['grand_total'])
-            })
-
-        # Sort so the chart goes from cheapest to most expensive
+            total_val = float(row['grand_total']) if pd.notna(row['grand_total']) else 0.0
+            chart_data.append({"vendor": row['vendor_name'], "total": total_val})
+            
         chart_data = sorted(chart_data, key=lambda x: x['total'])
 
+        # 2. Prepare Tabular Data & THE NOTEBOOK MEAN CALCULATION
+        detailed_totals = df.groupby(['service_category', 'sub_service', 'vendor_name'])['amount'].sum().reset_index()
+        pivot_df = detailed_totals.pivot(index=['service_category', 'sub_service'], columns='vendor_name', values='amount').fillna(0)
+        
+        vendors = pivot_df.columns.tolist()
+        table_data = [] # Renamed for React frontend!
+        
+        for index, row in pivot_df.iterrows():
+            # Calculate the Mean (Baseline) ONLY using vendors who actually provided the service (>0)
+            vendor_prices = [float(row[v]) for v in vendors if float(row[v]) > 0]
+            market_avg = sum(vendor_prices) / len(vendor_prices) if vendor_prices else 0.0
+
+            row_dict = {
+                "category": str(index[0]),
+                "sub_service": str(index[1]),
+                "market_average": round(market_avg, 2) # Adding the mean for the LLM to see!
+            }
+            for v in vendors:
+                row_dict[v] = float(row[v])
+            table_data.append(row_dict)
+
+        # 3. Generate Expert AI Recommendation using Gemini 2.5 Flash
+        print("🧠 Generating Expert AI Recommendation with Gemini...")
+        summary_prompt = f"""
+        You are 'QuoteSense', an expert procurement analyst for TatvaOps.
+        Analyze these quotes based strictly on the provided data.
+        
+        Data Matrix (Includes the 'market_average' mean for each sub-service):
+        {table_data}
+        Overall Totals: {chart_data}
+        
+        CRITICAL INSTRUCTIONS (Follow this exact flow):
+        1. Base Baseline Comparison: First, look at the overlapping services (e.g., Residential Construction). Compare the vendors against the 'market_average' (mean). State clearly who is deviating above or below the mean for the common work.
+        2. Scope Matching (Apples to Oranges): Point out the extra services. For example, if Vendor A has (Construction + Interior + Painting) but Vendor B only has (Construction + Interior), explicitly state that Vendor B's total is lower simply because they are missing the painting scope.
+        3. Keep your response to 4 concise, highly professional sentences.
+        """
+
+        summary_response = gemini_client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=summary_prompt,
+            config=types.GenerateContentConfig(temperature=0.2)
+        )
+        
+        ai_report = summary_response.text
+
+        # 4. FIXED KEYS FOR THE REACT FRONTEND!
         return {
-            "report": ai_report,
-            "chart_data": chart_data
+            "report": ai_report,         # Changed from summary_text
+            "chartData": chart_data,     # Changed from chart_data
+            "tableData": table_data,     # Changed from tabular_data
+            "vendors": vendors,           
+            "session_id": session_id
         }
+        
     except Exception as e:
-        return {
-            "report": f"❌ Error during comparison: {e}",
-            "chart_data": []
-        }
+        error_details = traceback.format_exc()
+        print(f"❌ Backend Crash Details:\n{error_details}")
+        return {"error": f"Error during comparison: {str(e)}"}
     
 def handle_chat_query(session_id, user_message):
-    """Feeds the user's specific session data to the LLM to answer their chat question."""
     print(f"💬 Processing chat query for Session: {session_id}...")
     try:
-        # 1. Fetch the exact data for this specific user
-        raw_df = fetch_data(session_id)
-        
-        # ✅ THE FIX: We must run the cleaning function to create the 'clean_element' column!
-        analyzed_df, _ = analyze_market_baseline(raw_df)
-        
-        quotes_df = raw_df[['vendor_name', 'grand_total']].drop_duplicates()
-        
-        # 2. Summarize the totals and key items so the LLM has perfect context
+        df = fetch_data(session_id)
+        quotes_df = df[['vendor_name', 'grand_total']].drop_duplicates()
         vendor_totals = quotes_df.to_dict(orient='records')
         
-        # Notice we are now using analyzed_df instead of raw_df!
-        top_items = analyzed_df['clean_element'].value_counts().head(20).index
-        item_spreads = analyzed_df[analyzed_df['clean_element'].isin(top_items)].groupby(['clean_element', 'vendor_name'])['unit_rate'].mean().reset_index().to_dict(orient='records')
+        top_items = df['sub_service'].value_counts().head(20).index
+        item_spreads = df[df['sub_service'].isin(top_items)].groupby(['sub_service', 'vendor_name'])['rate'].mean().reset_index().to_dict(orient='records')
+        item_specs = df[df['sub_service'].isin(top_items)][['sub_service', 'vendor_name', 'description']].drop_duplicates().to_dict(orient='records')
 
-        item_specs = analyzed_df[analyzed_df['clean_element'].isin(top_items)][['clean_element', 'vendor_name', 'specifications']].drop_duplicates().to_dict(orient='records')
-        # 3. Create the Agentic Prompt
         prompt = f"""
-        You are 'QuoteSense', an expert interior design AI assistant.
-        The user has uploaded and compared several quotes. Here is the exact mathematical data for their session:
+        You are 'QuoteSense', an expert AI assistant.
+        The user uploaded vendor quotes. Here is the mathematical data:
         
         Vendor Totals: {vendor_totals}
-        
-        Key Item Rates across Vendors: {item_spreads}
-
-        Material Specifications: {item_specs}
+        Key Item Rates: {item_spreads}
+        Descriptions/Specs: {item_specs}
 
         User Question: "{user_message}"
 
         CRITICAL RULES:
-        1. Answer the question accurately based ONLY on the provided data. 
+        1. Answer based ONLY on the provided data. 
         2. Be concise, professional, and helpful. 
-        3. Do not guess. If the data doesn't contain the answer, politely say you don't have that specific detail in the current quotes.
+        3. Do not guess. If the data doesn't contain the answer, politely say you don't have that detail.
         """
 
-        response = groq_client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.2
+        chat_response = gemini_client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt,
+            config=types.GenerateContentConfig(temperature=0.2)
         )
-        return response.choices[0].message.content
+        
+        return chat_response.text
 
     except Exception as e:
         return f"❌ Sorry, I encountered an error while accessing your data: {e}"

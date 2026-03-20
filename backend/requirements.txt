@@ -1,5 +1,5 @@
 pydentic
-groq
+generativeai
 pymupdf
 python-dotenv
 supabase
@@ -7,3 +7,5 @@ pandas
 fastapi
 uvicorn
 python-multipart
+tabulate
+generativeai

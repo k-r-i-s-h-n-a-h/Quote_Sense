@@ -7,21 +7,19 @@ import uuid
 
 # Import your extractor and comparator functions!
 from services.extractor import process_single_pdf
-from services.comparator import run_comparison,handle_chat_query
+from services.comparator import run_comparison, handle_chat_query
 
 app = FastAPI(title="QuoteSense API")
 
-# This allows your Next.js frontend (which runs on port 3000) to talk to this backend
+# FIXED: We added both port 3000 and 3001 to ensure Next.js never gets blocked!
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3001"],
+    allow_origins=["http://localhost:3000", "http://localhost:3001", "http://127.0.0.1:3000"], 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# FIXED: This will always resolve to the correct 'backend/temp_uploads' folder 
-# regardless of where your terminal is running from.
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 UPLOAD_DIR = os.path.join(BASE_DIR, "temp_uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -66,28 +64,29 @@ async def handle_customer_upload(
     for file_path in saved_files:
         os.remove(file_path)
 
-    # 6. Return the actual AI result to the frontend
+    # 6. FIXED: Pass the tableData and vendors to the frontend!
     return {
         "status": "success",
         "session_id": session_id,
         "message": f"Successfully received and analyzed {len(files)} files.",
         "report": comparison_result.get("report", "Error generating report."),
-        "chartData": comparison_result.get("chart_data", [])
+        "chartData": comparison_result.get("chartData", []), 
+        "tableData": comparison_result.get("tableData", []), # <-- Added this!
+        "vendors": comparison_result.get("vendors", [])      # <-- Added this!
     }
 
 class ChatRequest(BaseModel):
-    session_id : str
-    message : str
+    session_id: str
+    message: str
 
 @app.post("/api/chat")
-async def chat_with_data(request :ChatRequest):
+async def chat_with_data(request: ChatRequest):
     """
-    Recives a question form the frontend,quesries the LLM with the session data.
+    Receives a question from the frontend, queries the LLM with the session data,
     and returns the answer.
     """
-
     if not request.session_id:
-        return{"replay":"Error: missing session ID . please upload quotes first"}
+        return {"reply": "Error: missing session ID. Please upload quotes first."} # Fixed spelling here too!
     
-    answer = handle_chat_query(request.session_id , request.message)
-    return{"reply": answer}
+    answer = handle_chat_query(request.session_id, request.message)
+    return {"reply": answer}

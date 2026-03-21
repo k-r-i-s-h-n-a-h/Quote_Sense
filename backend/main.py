@@ -14,7 +14,7 @@ app = FastAPI(title="QuoteSense API")
 # FIXED: We added both port 3000 and 3001 to ensure Next.js never gets blocked!
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001", "http://127.0.0.1:3000"], 
+    allow_origins=["http://localhost:3000", "http://localhost:3001", "https://quote-comparator.vercel.app"], 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

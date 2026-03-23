@@ -5,6 +5,7 @@ from pydantic import BaseModel
 import os
 import shutil
 import uuid
+import asyncio
 
 # Import your extractor and comparator functions!
 from services.extractor import process_single_pdf
@@ -15,13 +16,8 @@ app = FastAPI(title="QuoteSense API")
 # FIXED: We added both port 3000 and 3001 to ensure Next.js never gets blocked!
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "https://quote-comparator.vercel.app",
-        "https://quote-comparator-iedl.vercel.app", # <--- ADD THIS ONE
-        "http://127.0.0.1:3000",
-    ],
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -60,10 +56,14 @@ async def handle_customer_upload(
         print(f"  -> Saved {file.filename}")
 
     # 3. Process the files using your extractor
-    for file_path in saved_files:
-        print(f"⌛ Starting extraction for: {os.path.basename(file_path)}")
-        await run_in_threadpool(process_single_pdf, file_path, session_id)
-    
+    print(f"parallel extraction for {len(saved_files)} files")
+
+    tasks = [
+        run_in_threadpool(process_single_pdf, file_path,session_id)
+        for file_path in saved_files
+    ]
+    await asyncio.gather(*tasks)
+
     # 4. Run the comparison using your comparator
     comparison_result = await run_in_threadpool(run_comparison, session_id)
     

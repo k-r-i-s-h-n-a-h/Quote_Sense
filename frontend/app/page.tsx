@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
 const LOADING_MESSAGES = [
@@ -64,54 +64,70 @@ export default function Home() {
     setChatHistory([]);
   };
 
-  const handleUpload = async () => {
-    if (files.length < 2) {
-      alert("Please upload at least 2 vendor quotes to run a comparison.");
-      return;
-    }
-
-    setLoading(true);
-    setReport("");
-    setChartData([]);
-    setTableData([]);
-    setVendors([]);
-    setChatHistory([]);
-
-    const formData = new FormData();
-    files.forEach((file) => {
-      formData.append("files", file);
-    });
-
-    try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/compare-quotes`, {
-        method: "POST",
-        body: formData,
-      });
-
-      const data = await response.json();
-      
-      if (data.report) {
-        setReport(data.report);
-        setChartData(data.chartData || []);
-        
-        // NOW ACTIVE: Populating the table data
-        setTableData(data.tableData || []);
-        setVendors(data.vendors || []);
-        
-        setSessionId(data.session_id);
-        setChatHistory([
-          { role: "ai", content: "Hi! I'm your QuoteSense Assistant. Ask me anything specific about these quotes, like 'Who has the cheapest kitchen?' or 'What's the price difference for the master bedroom wardrobe?'" }
-        ]);
-      } else {
-        setReport(`Error: Could not generate report. Backend sent: ${JSON.stringify(data)}`);
+    const handleUpload = async () => {
+      if (files.length < 2) {
+        alert("Please upload at least 2 vendor quotes to run a comparison.");
+        return;
       }
-    } catch (error: any) {
-      setReport(`❌ Browser Error: ${error.message}`);
-      console.error("Full Error Details:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+
+      setLoading(true);
+      setReport("");
+      setChartData([]);
+      setTableData([]);
+      setVendors([]);
+      setChatHistory([]);
+
+      const formData = new FormData();
+      files.forEach((file) => formData.append("files", file));
+
+      // 1. SETUP TIMEOUT CONTROLLER
+      const controller = new AbortController();
+      // 3-minute timeout (180,000ms)
+      const timeoutId = setTimeout(() => {
+        if (loading) { 
+          controller.abort();
+        }
+      }, 180000); 
+
+      try {
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8001";
+        
+        const response = await fetch(`${backendUrl}/api/compare-quotes`, {
+            method: "POST",
+            body: formData,
+            signal: controller.signal, 
+        });
+
+        const data = await response.json();
+        
+        // Clear the timeout immediately upon getting a response
+        clearTimeout(timeoutId);
+
+        if (data.report) {
+          setReport(data.report);
+          setChartData(data.chartData || []);
+          setTableData(data.tableData || []);
+          setVendors(data.vendors || []);
+          setSessionId(data.session_id);
+          setChatHistory([
+            { role: "ai", content: "Hi! I'm your QuoteSense Assistant. Ask me anything specific about these quotes..." }
+          ]);
+        } else {
+          setReport(`Error: Could not generate report. Backend sent: ${JSON.stringify(data)}`);
+        }
+      } catch (error: any) {
+        // 2. REFINED ERROR HANDLING
+        if (error.name === 'AbortError') {
+          setReport("🕒 Analysis is taking very long. The backend might be struggling with the Gemini API or large files. Check your terminal logs.");
+        } else {
+          setReport(`❌ Browser Error: ${error.message}`);
+        }
+        console.error("Full Error Details:", error);
+      } finally {
+        setLoading(false);
+        clearTimeout(timeoutId); // Final safety cleanup
+      }
+    };
 
   const handleChatSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -210,53 +226,70 @@ export default function Home() {
           </div>
         )}
 
-        {/* Dynamic Service Comparison Table */}
-        {tableData.length > 0 && (
-          <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200 animate-in fade-in slide-in-from-bottom-4 duration-700 overflow-x-auto">
-            <h2 className="text-2xl font-bold text-gray-800 mb-6">Tatva Quotes Comparison Matrix</h2>
-            <table className="w-full text-left border-collapse min-w-[800px]">
-              <thead>
-                <tr className="bg-gray-100 text-gray-700 uppercase text-xs font-bold tracking-wider">
-                  <th className="p-4 border-b border-gray-200 rounded-tl-lg">Category</th>
-                  <th className="p-4 border-b border-gray-200">Sub-Service</th>
-                  <th className="p-4 border-b border-gray-200 text-right text-blue-600 bg-blue-50">Baseline Mean</th>
-                  {vendors.map((vendor, i) => (
-                    <th key={i} className="p-4 border-b border-gray-200 text-right whitespace-nowrap">
-                      {vendor}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {tableData.map((row, idx) => {
-                  return (
-                    <tr key={idx} className="hover:bg-blue-50 transition-colors">
-                      <td className="p-4 text-gray-500 text-sm font-semibold">{row.category}</td>
-                      <td className="p-4 text-gray-900 font-bold">{row.sub_service}</td>
-                      <td className="p-4 text-right font-bold text-blue-600 bg-blue-50/50">
-                        ₹{Number(row.market_average).toLocaleString()}
-                      </td>
-                      {vendors.map((vendor, i) => {
-                        const value = row[vendor];
-                        return (
-                          <td key={i} className={`p-4 text-right whitespace-nowrap ${value === 0 ? "text-red-500" : "text-green-700"}`}>
-                            {value === 0 ? (
-                              <span className="flex items-center justify-end gap-1 font-bold italic text-xs">
-                                ❌ Not Provided
-                              </span>
-                            ) : (
-                              <span className="flex items-center justify-end gap-1 font-semibold">
-                                ✅ ₹{Number(value).toLocaleString()}
-                              </span>
-                            )}
+       {tableData.length > 0 && (
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 animate-in fade-in slide-in-from-bottom-4 duration-700 overflow-hidden">
+            <h2 className="text-2xl font-bold text-gray-800 mb-6 px-2">Tatva Quotes Comparison Matrix</h2>
+            
+            <div className="overflow-x-auto border rounded-lg">
+              <table className="w-full text-left border-collapse min-w-[800px]">
+                <thead>
+                  <tr className="bg-gray-50 text-gray-700 uppercase text-[10px] font-bold tracking-widest">
+                    <th className="p-4 border-b border-gray-200 w-[250px]">Service Description</th>
+                    <th className="p-4 border-b border-gray-200 text-right bg-blue-50/50 text-blue-700">Baseline Mean</th>
+                    {vendors.map((vendor, i) => (
+                      <th key={i} className="p-4 border-b border-gray-200 text-right max-w-[150px]">
+                        <div className="truncate" title={vendor}>{vendor.split(' (')[0]}</div>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                
+                <tbody className="divide-y divide-gray-100">
+                  {/* Grouping Logic */}
+                  {Object.entries(
+                    tableData.reduce((acc, item) => {
+                      if (!acc[item.category]) acc[item.category] = [];
+                      acc[item.category].push(item);
+                      return acc;
+                    }, {} as Record<string, any[]>)
+                  ).map(([category, items], groupIdx) => (
+                    <React.Fragment key={groupIdx}>
+                      {/* Category Header Row (The Dark Blue Row in your Sketch) */}
+                      <tr className="bg-blue-900/5">
+                        <td colSpan={vendors.length + 2} className="p-3 pl-4 text-sm font-black text-blue-900 uppercase tracking-wider border-y border-blue-100">
+                          📁 {category}
+                        </td>
+                      </tr>
+
+                      {/* Sub-Service Rows */}
+                      {(items as any[]).map((row, idx) => (
+                        <tr key={idx} className="hover:bg-gray-50/80 transition-colors group">
+                          <td className="p-4 pl-8">
+                            <div className="text-sm font-bold text-gray-900 leading-tight">{row.sub_service}</div>
+                            <div className="text-[10px] text-gray-400 mt-0.5 group-hover:text-gray-500 uppercase">Verified Service</div>
                           </td>
-                        );
-                      })}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                          <td className="p-4 text-right font-bold text-blue-600 bg-blue-50/30 border-x border-blue-50">
+                            ₹{Number(row.market_average).toLocaleString()}
+                          </td>
+                          {vendors.map((vendor, vIdx) => {
+                            const value = row[vendor];
+                            return (
+                              <td key={vIdx} className={`p-4 text-right ${value === 0 ? "opacity-40" : ""}`}>
+                                {value === 0 ? (
+                                  <span className="text-[10px] font-bold text-red-400 italic">N/A</span>
+                                ) : (
+                                  <span className="text-sm font-medium text-gray-700">₹{Number(value).toLocaleString()}</span>
+                                )}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </React.Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 

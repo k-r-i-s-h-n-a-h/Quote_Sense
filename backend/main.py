@@ -1,5 +1,6 @@
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 import os
 import shutil
@@ -60,14 +61,16 @@ async def handle_customer_upload(
 
     # 3. Process the files using your extractor
     for file_path in saved_files:
-        process_single_pdf(file_path, session_id)
+        print(f"⌛ Starting extraction for: {os.path.basename(file_path)}")
+        await run_in_threadpool(process_single_pdf, file_path, session_id)
     
     # 4. Run the comparison using your comparator
-    comparison_result = run_comparison(session_id)
+    comparison_result = await run_in_threadpool(run_comparison, session_id)
     
     # 5. Clean up the temporary files so we don't waste storage
     for file_path in saved_files:
-        os.remove(file_path)
+        if os.path.exists(file_path):
+            os.remove(file_path)
 
     # 6. FIXED: Pass the tableData and vendors to the frontend!
     return {

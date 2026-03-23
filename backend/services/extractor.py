@@ -105,15 +105,24 @@ def push_to_supabase(structured_data, filename, session_id):
 
 def process_single_pdf(file_path, session_id):
     filename = os.path.basename(file_path)
-    try:
-        structured_data = process_quote_with_gemini(file_path)
-        
-        print(f"\n🔥 --- RAW GEMINI JSON OUTPUT FOR {filename} --- 🔥")
-        print(json.dumps(structured_data, indent=2))
-        print("--------------------------------------------------\n")
-
-        push_to_supabase(structured_data, filename, session_id)
-        
-        print(f"  Successfully processed {filename} & pushed to DB")
-    except Exception as e:
-        print(f"  Failed to process {filename}: {e}")
+    max_retries = 3
+    retry_count = 0
+    
+    while retry_count < max_retries:
+        try:
+            structured_data = process_quote_with_gemini(file_path)
+            
+            print(f"\n🔥 --- RAW GEMINI JSON OUTPUT FOR {filename} --- 🔥")
+            # (Optional: limit print size if JSON is huge)
+            
+            push_to_supabase(structured_data, filename, session_id)
+            print(f"✅ Successfully processed {filename} on attempt {retry_count + 1}")
+            return # Exit function on success
+            
+        except Exception as e:
+            retry_count += 1
+            print(f"⚠️ Attempt {retry_count} failed for {filename}: {e}")
+            if retry_count < max_retries:
+                time.sleep(5) # Wait 5 seconds before retrying
+            else:
+                print(f"❌ Permanent Failure for {filename} after {max_retries} attempts.")

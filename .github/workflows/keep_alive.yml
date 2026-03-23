@@ -1,0 +1,17 @@
+name: Wake Up Render
+
+on:
+  schedule:
+    # Runs every 12 minutes to beat Render's 15-minute sleep timer
+    - cron: '*/12 * * * *'
+  # This allows you to manually trigger it from the GitHub Actions tab to test it
+  workflow_dispatch: 
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Render Backend
+        run: |
+          curl -s -I https://quote-comparator.onrender.com/ | grep "HTTP"
+          echo "Backend pinged successfully at $(date)"

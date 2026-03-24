@@ -304,7 +304,7 @@ export default function Home() {
         )}
 
         {/* Agentic Chatbot Section */}
-        {sessionId && (
+        {/*{sessionId && (
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col h-[500px] animate-in fade-in slide-in-from-bottom-4 duration-1000">
             <div className="bg-blue-900 text-white p-4 font-bold flex items-center gap-2">
               <span>💬</span> Talk to QuoteSense Data
@@ -349,6 +349,7 @@ export default function Home() {
             </form>
           </div>
         )}
+        */}
 
       </div>
     </main>

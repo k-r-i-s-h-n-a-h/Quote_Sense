@@ -227,7 +227,7 @@ SUPABASE_SERVICE_ROLE_KEY="your_supabase_service_role_key_here"
 # OPTIONAL: FRONTEND API CONFIGURATION
 # ============================================
 # If your frontend needs to call the API
-NEXT_PUBLIC_API_URL="http://localhost:8000"
+NEXT_PUBLIC_API_URL="http://localhost:8001"
 ```
 
 ## ▶️ Running the Application
@@ -244,19 +244,19 @@ cd /path/to/Quote_comparator
 source .venv/bin/activate
 
 # Start the FastAPI server using Uvicorn
-# Default: runs on http://localhost:8000
+# Default: runs on http://localhost:8001
 uvicorn backend.main:app --reload
 
 # Custom port (if you need a different port):
 # uvicorn backend.main:app --reload --port 8001
 
 # To run with multiple workers (production):
-# uvicorn backend.main:app --host 0.0.0.0 --port 8000 --workers 4
+# uvicorn backend.main:app --host 0.0.0.0 --port 8001--workers 4
 ```
 
 The backend server should display:
 ```
-INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     Uvicorn running on http://127.0.0.1:8001 (Press CTRL+C to quit)
 INFO:     Application startup complete
 ```
 
@@ -270,7 +270,7 @@ cd /path/to/Quote_comparator
 cd frontend
 
 # Start Next.js development server
-# Default: runs on http://localhost:3000
+# Default: runs on http://localhost:3001
 npm run dev
 
 # For production build and start:
@@ -281,17 +281,17 @@ npm run dev
 The frontend server should display:
 ```
 ▲ Next.js 16.1.6
-- Local:        http://localhost:3000
+- Local:        http://localhost:3001
 - Environments: .env.local
 ```
 
 ### Both Servers Running
 
 Once both servers are active:
-- **Backend API**: http://localhost:8000
-- **Frontend App**: http://localhost:3000
-- **API Documentation**: http://localhost:8000/docs (Swagger UI)
-- **Alternative API Docs**: http://localhost:8000/redoc (ReDoc)
+- **Backend API**: http://localhost:8001
+- **Frontend App**: http://localhost:3001
+- **API Documentation**: http://localhost:8001/docs (Swagger UI)
+- **Alternative API Docs**: http://localhost:8001/redoc (ReDoc)
 
 ## 📡 API Endpoints
 
@@ -299,7 +299,7 @@ Once both servers are active:
 
 **GET** `/`
 ```bash
-curl http://localhost:8000/
+curl http://localhost:8001/
 ```
 
 **Response:**
@@ -469,7 +469,7 @@ cd frontend
 npm run dev
 
 # Terminal 3: Test API
-curl -X POST http://localhost:8000/api/compare-quotes \
+curl -X POST http://localhost:8001/api/compare-quotes \
   -F "files=@vendor_a_quote.pdf" \
   -F "files=@vendor_b_quote.pdf" \
   -F "files=@vendor_c_quote.pdf" \
@@ -480,7 +480,7 @@ curl -X POST http://localhost:8000/api/compare-quotes \
 
 ```bash
 # Check API health
-curl http://localhost:8000/
+curl http://localhost:8001/
 
 # View interactive API documentation
 # Open in browser: http://localhost:8000/docs
@@ -539,10 +539,10 @@ cat .env
 **Solution:**
 ```bash
 # Check if backend is accessible
-curl http://localhost:8000/
+curl http://localhost:8001/
 
 # Update NEXT_PUBLIC_API_URL in .env
-NEXT_PUBLIC_API_URL="http://localhost:8000"
+NEXT_PUBLIC_API_URL="http://localhost:8001"
 
 # Restart frontend development server
 # Press Ctrl+C in frontend terminal and run:

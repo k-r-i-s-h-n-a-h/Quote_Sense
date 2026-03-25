@@ -245,7 +245,7 @@ source .venv/bin/activate
 
 # Start the FastAPI server using Uvicorn
 # Default: runs on http://localhost:8001
-uvicorn backend.main:app --reload
+uvicorn backend.main:app --port8001 --reload
 
 # Custom port (if you need a different port):
 # uvicorn backend.main:app --reload --port 8001
@@ -270,7 +270,7 @@ cd /path/to/Quote_comparator
 cd frontend
 
 # Start Next.js development server
-# Default: runs on http://localhost:3001
+# Default: runs on http://localhost:3000
 npm run dev
 
 # For production build and start:
@@ -281,7 +281,7 @@ npm run dev
 The frontend server should display:
 ```
 ▲ Next.js 16.1.6
-- Local:        http://localhost:3001
+- Local:        http://localhost:3000
 - Environments: .env.local
 ```
 
@@ -289,7 +289,7 @@ The frontend server should display:
 
 Once both servers are active:
 - **Backend API**: http://localhost:8001
-- **Frontend App**: http://localhost:3001
+- **Frontend App**: http://localhost:3000
 - **API Documentation**: http://localhost:8001/docs (Swagger UI)
 - **Alternative API Docs**: http://localhost:8001/redoc (ReDoc)
 

@@ -77,7 +77,9 @@ def push_to_supabase(structured_data, filename, session_id):
         "quote_date": structured_data.get("quote_date", ""),
         "grand_total": structured_data.get("grand_total", 0.0),
         "source_filename": filename,
-        "session_id": session_id 
+        "session_id": session_id ,
+        "quote_number":structured_data.get("vendor_name", "Unknown"),
+      
     }
     
     print(f"  -> Pushing metadata for {quote_payload['vendor_name']}...")

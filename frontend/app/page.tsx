@@ -276,7 +276,7 @@ export default function Home() {
                             return (
                               <td key={vIdx} className={`p-4 text-right ${value === 0 ? "opacity-60" : ""}`}>
                                 {value === 0 ? (
-                                  <span className="text-[15px] font-bold text-red-400 italic">N/A</span>
+                                  <span className="text-[14px] font-bold text-red-400 italic">N/A</span>
                                 ) : (
                                   <span className="text-sm font-medium text-gray-700">₹{Number(value).toLocaleString()}</span>
                                 )}

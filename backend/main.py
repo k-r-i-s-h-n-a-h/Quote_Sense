@@ -94,7 +94,7 @@ class ChatRequest(BaseModel):
     session_id: str
     message: str
 
-
+'''
 @app.post("/api/sync-mongodb-quotes")
 async def sync_mongodb_quotes(payload: Any=Body(...), session_id: str = None): # Use Any for maximum flexibility
     """
@@ -185,7 +185,112 @@ async def sync_mongodb_quotes(payload: Any=Body(...), session_id: str = None): #
     except Exception as e:
         print(f"❌ Mapping Error: {str(e)}")
         return {"status": "error", "message": str(e)}
-    
+   '''
+@app.post("/api/sync-mongodb-quotes")
+async def sync_mongodb_quotes(payload: Any = Body(...), session_id: str = None):
+    """
+    RECEIVES: Structured JSON from MongoDB (Single Object or List)
+    SAVES: To Supabase 'quotes' and 'quote_items'
+    RETURNS: Unified AI Comparison for all vendors
+    """
+    try:
+        # 1. ROBUST SAFETY CHECK: Identify the list of quotes
+        if isinstance(payload, dict) and "data" in payload:
+            data_content = payload["data"]
+            # Case A: Nested list [data: { quotes: [...] }]
+            if isinstance(data_content, dict) and "quotes" in data_content:
+                quotes_list = data_content["quotes"]
+            # Case B: Single object wrapper [data: { ... }]
+            else:
+                quotes_list = [data_content]
+        # Case C: Direct list of objects [[{...}, {...}]]
+        elif isinstance(payload, list):
+            quotes_list = payload
+        # Case D: Single raw object
+        elif isinstance(payload, dict):
+            quotes_list = [payload]
+        else:
+            return {"status": "error", "message": "Invalid format. Expected JSON object or list."}
+
+        print(f"📦 Processing {len(quotes_list)} quotes for session: {session_id}")
+
+        for data in quotes_list:
+            # --- VENDOR DATA EXTRACTION ---
+            vendor_detail = data.get("vendorDetail", {})
+            pricing_summary = data.get("pricingSummary", [])
+            
+            # Smart search for Grand Total (handles "Total", "Grand total", "Grand Total")
+            grand_total = 0
+            for item in pricing_summary:
+                label = str(item.get("label", "")).lower()
+                if "total" in label:
+                    grand_total = item.get("value", 0)
+
+            # --- STEP 1: PUSH TO 'quotes' TABLE ---
+            quote_res = supabase.table("quotes").insert({
+                "vendor_name": vendor_detail.get("companyName", "Unknown Vendor"),
+                "grand_total": grand_total,
+                "session_id": session_id,
+                "source_type": "mongodb_integrated",
+                "source_filename": data.get("quoteNumber", "DIRECT_SYNC"),
+                #"quote_number": data.get("quoteNumber", "DIRECT_SYNC")
+            }).execute()
+            
+            if not quote_res.data:
+                continue
+                
+            quote_id = quote_res.data[0]['id']
+            
+            # --- STEP 2: PUSH TO 'quote_items' TABLE ---
+            items_to_insert = []
+            work_summary = data.get("workSummary", [])
+            
+            for summary in work_summary:
+                for service_obj in summary.get("services", []):
+                    # serviceId -> name
+                    category_name = service_obj.get("serviceId", {}).get("name", "General")
+                    
+                    for work_item in service_obj.get("workItems", []):
+                        # subService -> name
+                        sub_service_name = work_item.get("subService", {}).get("name", work_item.get("workTitle"))
+                        
+                        # pricingInput extraction
+                        pricing_list = work_item.get("pricingInput", [])
+                        pricing = pricing_list[0] if pricing_list else {}
+                        
+                        items_to_insert.append({
+                            "quote_id": quote_id,
+                            "service_category": category_name,
+                            "sub_service": sub_service_name,
+                            "work_title": work_item.get("workTitle", ""),
+                            "description": work_item.get("description", "").replace("&nbsp;", " "),
+                            "quantity": pricing.get("quantity", 0),
+                            "pricing_method": work_item.get("pricingMethod", {}).get("name", "Unit"),
+                            "rate": pricing.get("rate", 0),
+                            "amount": pricing.get("amount", 0),
+                            "quote_number": data.get("quoteNumber", "DIRECT_SYNC")
+                        })
+
+            if items_to_insert:
+                supabase.table("quote_items").insert(items_to_insert).execute()
+
+        # --- STEP 3: THE TRIGGER ---
+        # Now that ALL 3 vendors are in Supabase, run comparison once
+        comparison_result = await run_in_threadpool(run_comparison, session_id)
+        
+        return {
+            "status": "success",
+            "session_id": session_id,
+            "message": f"Successfully integrated and analyzed {len(quotes_list)} MongoDB quotes.",
+            "report": comparison_result.get("report"),
+            "chartData": comparison_result.get("chartData"),
+            "tableData": comparison_result.get("tableData"),
+            "vendors": comparison_result.get("vendors")
+        }
+
+    except Exception as e:
+        print(f"❌ Mapping Error: {str(e)}")
+        return {"status": "error", "message": str(e)} 
 @app.post("/api/chat")
 async def chat_with_data(request: ChatRequest):
     """

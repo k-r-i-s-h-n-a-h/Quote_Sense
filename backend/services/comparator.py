@@ -4,6 +4,7 @@ import pandas as pd
 from dotenv import load_dotenv
 from supabase import create_client, Client
 import traceback
+import json
 
 from google import genai
 from google.genai import types
@@ -56,7 +57,7 @@ def run_comparison(session_id):
 
         # 2. Prepare Tabular Data & THE NOTEBOOK MEAN CALCULATION
         detailed_totals = df.groupby(['service_category', 'sub_service', 'vendor_name'])['amount'].sum().reset_index()
-        pivot_df = detailed_totals.pivot(index=['service_category', 'sub_service'], columns='vendor_name', values='amount').fillna(0)
+        pivot_df = detailed_totals.pivot(index=['service_category', 'sub_service'], columns='vendor_name', values='amount').fillna(0.0)
         
         vendors = pivot_df.columns.tolist()
         table_data = [] # Renamed for React frontend!
@@ -100,13 +101,17 @@ def run_comparison(session_id):
         ai_report = summary_response.text
 
         # 4. FIXED KEYS FOR THE REACT FRONTEND!
-        return {
+        final_output = {
             "report": ai_report,         # Changed from summary_text
             "chartData": chart_data,     # Changed from chart_data
             "tableData": table_data,     # Changed from tabular_data
             "vendors": vendors,           
             "session_id": session_id
         }
+
+        # This one-liner converts everything to a string and back to 
+        # ensure no non-compliant floats remain
+        return json.loads(json.dumps(final_output).replace('NaN', '0').replace('nan', '0'))
         
     except Exception as e:
         error_details = traceback.format_exc()

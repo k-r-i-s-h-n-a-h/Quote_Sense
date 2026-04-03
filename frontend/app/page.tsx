@@ -42,6 +42,12 @@ function QuoteSenseContent() {
   const [isChatting, setIsChatting] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
+  // --- REDIRECT LOGIC ---
+  const handleGoBack = () => {
+    // This sends the user back to the main dev dashboard
+    window.location.href = "https://tatvaops.com/my-projects";
+  };
+
   const processComparisonData = (data: any) => {
     if (data.report) {
       setReport(data.report);
@@ -333,11 +339,29 @@ function QuoteSenseContent() {
           </div>
         )}
 
+        {/* AI Recommendation Section */}
         {report && (
-          <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200 animate-in fade-in slide-in-from-bottom-4 duration-1000">
+          <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200">
             <h2 className="text-2xl font-bold text-gray-800 mb-4">Expert Recommendation</h2>
-            <div className="prose max-w-none whitespace-pre-wrap text-gray-700 leading-relaxed">
+            <div className="prose max-w-none whitespace-pre-wrap text-gray-700 leading-relaxed mb-8">
               {report}
+            </div>
+            
+            {/* THE REDIRECT BUTTON BLOCK */}
+            <div className="pt-6 border-t border-gray-100 flex flex-col sm:flex-row gap-4">
+              <button 
+                onClick={handleGoBack}
+                className="flex-1 bg-blue-900 text-white py-3 rounded-lg font-bold hover:bg-black transition-all flex items-center justify-center gap-2 shadow-md"
+              >
+                ⬅️ Return to Dashboard
+              </button>
+              
+              <button 
+                onClick={resetSelection}
+                className="px-8 py-3 text-gray-500 hover:text-red-600 font-semibold transition-colors border border-transparent hover:border-gray-200 rounded-lg"
+              >
+                Compare New Quotes
+              </button>
             </div>
           </div>
         )}

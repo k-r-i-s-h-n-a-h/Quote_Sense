@@ -364,7 +364,7 @@ async def sync_mongodb_quotes(payload: Any = Body(...), session_id: str = None):
                             "quantity": pricing.get("quantity", 0),
                             "pricing_method": work_item.get("pricingMethod", {}).get("name", "Unit"),
                             "rate": pricing.get("rate", 0),
-                            "amount": pricing.get("amount", 0)
+                            "amount": pricing.get("grandTotal", 0)
                         })
 
             if items_to_insert:

@@ -185,7 +185,7 @@ async def sync_mongodb_quotes(payload: Any=Body(...), session_id: str = None): #
     except Exception as e:
         print(f"❌ Mapping Error: {str(e)}")
         return {"status": "error", "message": str(e)}
-   '''
+   
 @app.post("/api/sync-mongodb-quotes")
 async def sync_mongodb_quotes(payload: Any = Body(...), session_id: str = None):
     """
@@ -291,7 +291,103 @@ async def sync_mongodb_quotes(payload: Any = Body(...), session_id: str = None):
     except Exception as e:
         print(f"❌ Mapping Error: {str(e)}")
         return {"status": "error", "message": str(e)} 
-    
+'''
+
+@app.post("/api/sync-mongodb-quotes")
+async def sync_mongodb_quotes(payload: Any = Body(...), session_id: str = None):
+    """
+    RECEIVES: Direct JSON list [...] from Postman/Other Webpage
+    """
+    try:
+        # 1. DIRECT ARRAY CHECK
+        # If you are sending [...] directly, payload will be a list
+        if isinstance(payload, list):
+            quotes_list = payload
+        elif isinstance(payload, dict) and "quotes" in payload:
+            # Fallback if someone wraps it in {"quotes": [...]}
+            quotes_list = payload["quotes"]
+        else:
+            # If it's a single object, wrap it in a list
+            quotes_list = [payload]
+
+        print(f"📦 Processing {len(quotes_list)} direct quotes for session: {session_id}")
+
+        for quote_data in quotes_list:
+            # --- VENDOR & TOTAL EXTRACTION ---
+            vendor_detail = quote_data.get("vendorDetail", {})
+            vendor_name = vendor_detail.get("companyName", "Unknown Vendor")
+            
+            # Find the Grand Total inside pricingSummary
+            grand_total = 0
+            pricing_summary = quote_data.get("pricingSummary", [])
+            for item in pricing_summary:
+                if "grand total" in str(item.get("label", "")).lower():
+                    grand_total = item.get("value", 0)
+
+            # --- STEP 1: PUSH TO 'quotes' TABLE ---
+            quote_res = supabase.table("quotes").insert({
+                "vendor_name": vendor_name,
+                "grand_total": grand_total,
+                "session_id": session_id,
+                "source_type": "mongodb_integrated",
+                "source_filename": quote_data.get("quoteNumber", "DIRECT_SYNC")
+            }).execute()
+            
+            if not quote_res.data:
+                continue
+                
+            quote_id = quote_res.data[0]['id']
+            
+            # --- STEP 2: PUSH TO 'quote_items' TABLE ---
+            items_to_insert = []
+            work_summary = quote_data.get("workSummary", [])
+            
+            for section in work_summary:
+                for service_obj in section.get("services", []):
+                    # Get Category Name
+                    category_name = service_obj.get("serviceId", {}).get("name", "General")
+                    
+                    for work_item in service_obj.get("workItems", []):
+                        # Get Sub Service Name
+                        sub_service_name = work_item.get("subService", {}).get("name", "General Service")
+                        
+                        # Get Pricing Details from pricingInput list
+                        pricing_list = work_item.get("pricingInput", [])
+                        pricing = pricing_list[0] if pricing_list else {}
+                        
+                        items_to_insert.append({
+                            "quote_id": quote_id,
+                            "service_category": category_name,
+                            "sub_service": sub_service_name,
+                            "work_title": work_item.get("workTitle", ""),
+                            "description": work_item.get("description", "").replace("&nbsp;", " "),
+                            "quantity": pricing.get("quantity", 0),
+                            "pricing_method": work_item.get("pricingMethod", {}).get("name", "Unit"),
+                            "rate": pricing.get("rate", 0),
+                            "amount": pricing.get("amount", 0)
+                        })
+
+            if items_to_insert:
+                supabase.table("quote_items").insert(items_to_insert).execute()
+
+        # --- STEP 3: WAIT & TRIGGER ---
+        await asyncio.sleep(1.5)
+        comparison_result = await run_in_threadpool(run_comparison, session_id)
+        
+        return {
+            "status": "success",
+            "session_id": session_id,
+            "report": comparison_result.get("report"),
+            "chartData": comparison_result.get("chartData"),
+            "tableData": comparison_result.get("tableData"),
+            "vendors": comparison_result.get("vendors")
+        }
+
+    except Exception as e:
+        print(f"❌ Mapping Error: {str(e)}")
+        return {"status": "error", "message": str(e)}
+
+
 @app.get("/api/get-comparison")
 async def get_existing_comparison(session_id: str):
     """

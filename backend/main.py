@@ -268,7 +268,7 @@ async def sync_mongodb_quotes(payload: Any = Body(...), session_id: str = None):
                             "pricing_method": work_item.get("pricingMethod", {}).get("name", "Unit"),
                             "rate": pricing.get("rate", 0),
                             "amount": pricing.get("amount", 0),
-                            "quote_number": data.get("quoteNumber", "DIRECT_SYNC")
+                           # "quote_number": data.get("quoteNumber", "DIRECT_SYNC")
                         })
 
             if items_to_insert:
@@ -291,6 +291,28 @@ async def sync_mongodb_quotes(payload: Any = Body(...), session_id: str = None):
     except Exception as e:
         print(f"❌ Mapping Error: {str(e)}")
         return {"status": "error", "message": str(e)} 
+    
+@app.get("/api/get-comparison")
+async def get_existing_comparison(session_id: str):
+    """
+    Used by the 'Auto-Lane' to fetch results for a session 
+    that was already processed via MongoDB sync.
+    """
+    print(f"📥 Fetching data for Session: {session_id}...")
+    
+    # This calls the SAME comparison engine your PDF upload uses!
+    comparison_result = await run_in_threadpool(run_comparison, session_id)
+    
+    return {
+        "status": "success",
+        "session_id": session_id,
+        "report": comparison_result.get("report"),
+        "chartData": comparison_result.get("chartData"),
+        "tableData": comparison_result.get("tableData"),
+        "vendors": comparison_result.get("vendors")
+    }
+
+
 @app.post("/api/chat")
 async def chat_with_data(request: ChatRequest):
     """

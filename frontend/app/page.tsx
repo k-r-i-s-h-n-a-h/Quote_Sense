@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, Suspense } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { useSearchParams } from 'next/navigation';
 
 const LOADING_MESSAGES = [
   "⚙️ Extracting data from vendor PDFs...",
@@ -12,7 +13,17 @@ const LOADING_MESSAGES = [
   "✨ Finalizing dashboard..."
 ];
 
+// Main export wrapped in Suspense to fix the Next.js/useSearchParams error
 export default function Home() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center min-h-screen">Loading QuoteSense...</div>}>
+      <QuoteSenseContent />
+    </Suspense>
+  );
+}
+
+function QuoteSenseContent() {
+  const searchParams = useSearchParams();
   const [files, setFiles] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingMsgIdx, setLoadingMsgIdx] = useState(0); 
@@ -31,6 +42,21 @@ export default function Home() {
   const [isChatting, setIsChatting] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
+  const processComparisonData = (data: any) => {
+    if (data.report) {
+      setReport(data.report);
+      setChartData(data.chartData || []);
+      setTableData(data.tableData || []);
+      setVendors(data.vendors || []);
+      setSessionId(data.session_id);
+      setChatHistory([
+        { role: "ai", content: "Hi! I'm your QuoteSense Assistant. I've analyzed the synced quotes. Ask me anything..." }
+      ]);
+    } else {
+      setReport(`Error: Could not generate report. Backend sent: ${JSON.stringify(data)}`);
+    }
+  };
+
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatHistory]);
@@ -48,9 +74,41 @@ export default function Home() {
     return () => clearInterval(interval);
   }, [loading]);
 
+  useEffect(() => {
+    const autoSessionId = searchParams.get('session_id');
+    
+    if (autoSessionId && !sessionId) { 
+      const fetchAutoData = async () => {
+        setLoading(true);
+        try {
+          const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8001";
+          const res = await fetch(`${backendUrl}/api/get-comparison?session_id=${autoSessionId}`);
+          const data = await res.json();
+          processComparisonData(data);
+        } catch (err) {
+          console.error("Auto-sync failed:", err);
+        } finally {
+          setLoading(false);
+        }
+      };
+      
+      fetchAutoData();
+    }
+  }, [searchParams, sessionId]);
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      setFiles(Array.from(e.target.files));
+      const newFiles = Array.from(e.target.files);
+      
+      setFiles((prevFiles) => {
+        const combinedFiles = [...prevFiles, ...newFiles];
+        const uniqueFiles = combinedFiles.filter((file, index, self) =>
+          index === self.findIndex((f) => f.name === file.name && f.size === file.size)
+        );
+        return uniqueFiles;
+      });
+
+      e.target.value = "";
     }
   };
 
@@ -64,70 +122,55 @@ export default function Home() {
     setChatHistory([]);
   };
 
-    const handleUpload = async () => {
-      if (files.length < 2) {
-        alert("Please upload at least 2 vendor quotes to run a comparison.");
-        return;
+  const handleUpload = async () => {
+    if (files.length < 2) {
+      alert("Please upload at least 2 vendor quotes to run a comparison.");
+      return;
+    }
+
+    setLoading(true);
+    setReport("");
+    setChartData([]);
+    setTableData([]);
+    setVendors([]);
+    setChatHistory([]);
+
+    const formData = new FormData();
+    files.forEach((file) => formData.append("files", file));
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      if (loading) { 
+        controller.abort();
       }
+    }, 180000); 
 
-      setLoading(true);
-      setReport("");
-      setChartData([]);
-      setTableData([]);
-      setVendors([]);
-      setChatHistory([]);
+    try {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8001";
+      
+      const response = await fetch(`${backendUrl}/api/compare-quotes`, {
+          method: "POST",
+          body: formData,
+          signal: controller.signal, 
+      });
 
-      const formData = new FormData();
-      files.forEach((file) => formData.append("files", file));
-
-      // 1. SETUP TIMEOUT CONTROLLER
-      const controller = new AbortController();
-      // 3-minute timeout (180,000ms)
-      const timeoutId = setTimeout(() => {
-        if (loading) { 
-          controller.abort();
-        }
-      }, 180000); 
-
-      try {
-        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8001";
-        
-        const response = await fetch(`${backendUrl}/api/compare-quotes`, {
-            method: "POST",
-            body: formData,
-            signal: controller.signal, 
-        });
-
-        const data = await response.json();
-        
-        // Clear the timeout immediately upon getting a response
-        clearTimeout(timeoutId);
-
-        if (data.report) {
-          setReport(data.report);
-          setChartData(data.chartData || []);
-          setTableData(data.tableData || []);
-          setVendors(data.vendors || []);
-          setSessionId(data.session_id);
-          setChatHistory([
-            { role: "ai", content: "Hi! I'm your QuoteSense Assistant. Ask me anything specific about these quotes..." }
-          ]);
-        } else {
-          setReport(`Error: Could not generate report. Backend sent: ${JSON.stringify(data)}`);
-        }
-      } catch (error: any) {
-        // 2. REFINED ERROR HANDLING
-        if (error.name === 'AbortError') {
-          setReport("🕒 Analysis is taking very long. The backend might be struggling with the Gemini API or large files. Check your terminal logs.");
-        } else {
-          setReport(`❌ Browser Error: ${error.message}`);
-        }
-        console.error("Full Error Details:", error);
-      } finally {
-        setLoading(false);
-        clearTimeout(timeoutId); // Final safety cleanup
+      const data = await response.json();
+      
+      clearTimeout(timeoutId);
+      processComparisonData(data);
+    }
+     catch (error: any) {
+      if (error.name === 'AbortError') {
+        setReport("🕒 Analysis is taking very long. The backend might be struggling with the Gemini API or large files. Check your terminal logs.");
+      } else {
+        setReport(`❌ Browser Error: ${error.message}`);
       }
-    };
+      console.error("Full Error Details:", error);
+    } finally {
+      setLoading(false);
+      clearTimeout(timeoutId); 
+    }
+  };
 
   const handleChatSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -245,7 +288,6 @@ export default function Home() {
                 </thead>
                 
                 <tbody className="divide-y divide-gray-100">
-                  {/* Grouping Logic */}
                   {Object.entries(
                     tableData.reduce((acc, item) => {
                       if (!acc[item.category]) acc[item.category] = [];
@@ -254,14 +296,12 @@ export default function Home() {
                     }, {} as Record<string, any[]>)
                   ).map(([category, items], groupIdx) => (
                     <React.Fragment key={groupIdx}>
-                      {/* Category Header Row (The Dark Blue Row in your Sketch) */}
                       <tr className="bg-blue-900/5">
                         <td colSpan={vendors.length + 2} className="p-3 pl-4 text-sm font-black text-blue-900 uppercase tracking-wider border-y border-blue-100">
                           📁 {category}
                         </td>
                       </tr>
 
-                      {/* Sub-Service Rows */}
                       {(items as any[]).map((row, idx) => (
                         <tr key={idx} className="hover:bg-gray-50/80 transition-colors group">
                           <td className="p-4 pl-8">
@@ -293,7 +333,6 @@ export default function Home() {
           </div>
         )}
 
-        {/* AI Report Output Section */}
         {report && (
           <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200 animate-in fade-in slide-in-from-bottom-4 duration-1000">
             <h2 className="text-2xl font-bold text-gray-800 mb-4">Expert Recommendation</h2>
@@ -302,55 +341,6 @@ export default function Home() {
             </div>
           </div>
         )}
-
-        {/* Agentic Chatbot Section */}
-        {/*{sessionId && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col h-[500px] animate-in fade-in slide-in-from-bottom-4 duration-1000">
-            <div className="bg-blue-900 text-white p-4 font-bold flex items-center gap-2">
-              <span>💬</span> Talk to QuoteSense Data
-            </div>
-            
-            <div className="flex-1 p-4 overflow-y-auto space-y-4 bg-gray-50">
-              {chatHistory.map((msg, i) => (
-                <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[80%] p-3 rounded-lg text-sm ${
-                    msg.role === 'user' ? 'bg-blue-600 text-white rounded-br-none' : 'bg-white border border-gray-200 text-gray-800 rounded-bl-none shadow-sm'
-                  }`}>
-                    {msg.content}
-                  </div>
-                </div>
-              ))}
-              {isChatting && (
-                <div className="flex justify-start">
-                  <div className="bg-white border border-gray-200 text-gray-500 p-3 rounded-lg rounded-bl-none text-sm animate-pulse">
-                    QuoteSense is crunching the numbers...
-                  </div>
-                </div>
-              )}
-              <div ref={chatEndRef} />
-            </div>
-
-            <form onSubmit={handleChatSubmit} className="p-4 bg-white border-t border-gray-200 flex gap-2">
-              <input
-                type="text"
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                placeholder="Ask about specific prices, materials, or vendors..."
-                disabled={isChatting}
-                className="flex-1 border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
-              />
-              <button 
-                type="submit" 
-                disabled={isChatting || !chatInput.trim()}
-                className="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-blue-700 disabled:bg-gray-400"
-              >
-                Send
-              </button>
-            </form>
-          </div>
-        )}
-        */}
-
       </div>
     </main>
   );

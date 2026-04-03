@@ -78,7 +78,7 @@ def push_to_supabase(structured_data, filename, session_id):
         "grand_total": structured_data.get("grand_total", 0.0),
         "source_filename": filename,
         "session_id": session_id ,
-        "quote_number":structured_data.get("vendor_name", "Unknown"),
+        #"quote_number":structured_data.get("vendor_name", "Unknown"),
       
     }
     

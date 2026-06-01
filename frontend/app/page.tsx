@@ -1,17 +1,18 @@
 "use client";
 
 import React, { useState, useEffect, useRef, Suspense } from "react";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
-import { useSearchParams } from 'next/navigation';
+import dynamic from "next/dynamic";
+import { useSearchParams } from "next/navigation";
+import CompareLoadingPanel from "../components/CompareLoadingPanel";
 
-const LOADING_MESSAGES = [
-  "⚙️ Extracting data from vendor PDFs...",
-  "🧮 Calculating market ground truth...",
-  "⚖️ Comparing vendor deviations...",
-  "🕵️ Analyzing tactical pricing and red flags...",
-  "🧠 AI is drafting the final report...",
-  "✨ Finalizing dashboard..."
-];
+const VendorChart = dynamic(() => import("../components/VendorChart"), {
+  ssr: false,
+  loading: () => (
+    <div className="h-80 w-full flex items-center justify-center text-gray-400 text-sm">
+      Loading chart…
+    </div>
+  ),
+});
 
 // Main export wrapped in Suspense to fix the Next.js/useSearchParams error
 export default function Home() {
@@ -72,10 +73,8 @@ function QuoteSenseContent() {
     if (loading) {
       setLoadingMsgIdx(0);
       interval = setInterval(() => {
-        setLoadingMsgIdx((prev) => 
-          prev < LOADING_MESSAGES.length - 1 ? prev + 1 : prev
-        );
-      }, 2500);
+        setLoadingMsgIdx((prev) => prev + 1);
+      }, 2800);
     }
     return () => clearInterval(interval);
   }, [loading]);
@@ -248,30 +247,22 @@ function QuoteSenseContent() {
             onClick={handleUpload}
             disabled={loading || files.length < 2}
             className={`mt-6 w-full py-3 rounded-lg font-bold text-white transition-colors flex items-center justify-center gap-2 ${
-              loading || files.length < 2 
-                ? "bg-gray-400 cursor-not-allowed" 
+              loading || files.length < 2
+                ? "bg-gray-400 cursor-not-allowed"
                 : "bg-blue-600 hover:bg-blue-700"
             }`}
           >
-            {loading ? LOADING_MESSAGES[loadingMsgIdx] : `Compare ${files.length > 1 ? files.length + ' ' : ''}Quotes Now`}
+            {loading ? "Analyzing quotes…" : `Compare ${files.length > 1 ? files.length + " " : ""}Quotes Now`}
           </button>
+
+          {loading && <CompareLoadingPanel messageIndex={loadingMsgIdx} />}
         </div>
 
         {/* Visual Chart Section */}
         {chartData.length > 0 && (
           <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <h2 className="text-2xl font-bold text-gray-800 mb-6">Total Cost Comparison</h2>
-            <div className="h-80 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="vendor" tick={{fontSize: 12}} interval={0} angle={-15} textAnchor="end" height={80} />
-                  <YAxis tickFormatter={(value) => `₹${(value / 100000).toFixed(1)}L`} />
-                  <Tooltip formatter={(value: any) => `₹${Number(value).toLocaleString()}`} />
-                  <Bar dataKey="total" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+            <VendorChart data={chartData} />
           </div>
         )}
 

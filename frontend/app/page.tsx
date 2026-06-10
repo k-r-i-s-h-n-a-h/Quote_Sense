@@ -1,17 +1,19 @@
 "use client";
 
-import React, { useState, useEffect, useRef, Suspense } from "react";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
-import { useSearchParams } from 'next/navigation';
+import React, { useState, useEffect, useRef, useMemo, Suspense } from "react";
+import dynamic from "next/dynamic";
+import { useSearchParams } from "next/navigation";
+import CompareLoadingPanel from "../components/CompareLoadingPanel";
+import { buildVendorLabels } from "../lib/format";
 
-const LOADING_MESSAGES = [
-  "⚙️ Extracting data from vendor PDFs...",
-  "🧮 Calculating market ground truth...",
-  "⚖️ Comparing vendor deviations...",
-  "🕵️ Analyzing tactical pricing and red flags...",
-  "🧠 AI is drafting the final report...",
-  "✨ Finalizing dashboard..."
-];
+const VendorChart = dynamic(() => import("../components/VendorChart"), {
+  ssr: false,
+  loading: () => (
+    <div className="h-80 w-full flex items-center justify-center text-gray-400 text-sm">
+      Loading chart…
+    </div>
+  ),
+});
 
 // Main export wrapped in Suspense to fix the Next.js/useSearchParams error
 export default function Home() {
@@ -41,6 +43,18 @@ function QuoteSenseContent() {
   const [chatHistory, setChatHistory] = useState<{role: string, content: string}[]>([]);
   const [isChatting, setIsChatting] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const loadingRef = useRef(false);
+
+  const vendorLabels = useMemo(() => buildVendorLabels(vendors), [vendors]);
+
+  const getBackendUrl = () =>
+    process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8001";
+
+  // --- REDIRECT LOGIC ---
+  const handleGoBack = () => {
+    // This sends the user back to the main dev dashboard
+    window.location.href = "https://tatvaops.com/my-projects";
+  };
 
   const processComparisonData = (data: any) => {
     if (data.report) {
@@ -62,14 +76,16 @@ function QuoteSenseContent() {
   }, [chatHistory]);
 
   useEffect(() => {
+    loadingRef.current = loading;
+  }, [loading]);
+
+  useEffect(() => {
     let interval: NodeJS.Timeout;
     if (loading) {
       setLoadingMsgIdx(0);
       interval = setInterval(() => {
-        setLoadingMsgIdx((prev) => 
-          prev < LOADING_MESSAGES.length - 1 ? prev + 1 : prev
-        );
-      }, 2500);
+        setLoadingMsgIdx((prev) => prev + 1);
+      }, 2800);
     }
     return () => clearInterval(interval);
   }, [loading]);
@@ -138,30 +154,54 @@ function QuoteSenseContent() {
     const formData = new FormData();
     files.forEach((file) => formData.append("files", file));
 
+    const backendUrl = getBackendUrl();
     const controller = new AbortController();
+    // Comparison runs Gemini on every PDF, so allow plenty of time before giving up.
+    const TIMEOUT_MS = 600000; // 10 minutes
     const timeoutId = setTimeout(() => {
-      if (loading) { 
-        controller.abort();
+      if (loadingRef.current) {
+        controller.abort(new DOMException("Comparison timed out", "TimeoutError"));
       }
-    }, 180000); 
+    }, TIMEOUT_MS);
 
     try {
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8001";
-      
+      try {
+        const health = await fetch(`${backendUrl}/api/health`, {
+          signal: AbortSignal.timeout(5000),
+        });
+        if (!health.ok) {
+          throw new Error(`Backend health check failed (${health.status})`);
+        }
+      } catch {
+        clearTimeout(timeoutId);
+        setReport(
+          `❌ Cannot reach the backend at ${backendUrl}. Start it from the backend folder:\n\n` +
+            `cd backend\nuvicorn main:app --port 8001 --host 127.0.0.1\n\n` +
+            `(Do not use backend.main:app when you are already inside backend/.)`
+        );
+        return;
+      }
+
       const response = await fetch(`${backendUrl}/api/compare-quotes`, {
-          method: "POST",
-          body: formData,
-          signal: controller.signal, 
+        method: "POST",
+        body: formData,
+        signal: controller.signal,
       });
 
       const data = await response.json();
-      
+
       clearTimeout(timeoutId);
       processComparisonData(data);
-    }
-     catch (error: any) {
-      if (error.name === 'AbortError') {
-        setReport("🕒 Analysis is taking very long. The backend might be struggling with the Gemini API or large files. Check your terminal logs.");
+    } catch (error: any) {
+      if (error.name === "AbortError" || error.name === "TimeoutError") {
+        setReport(
+          "🕒 The comparison is still running on the backend but the page stopped waiting after 10 minutes. " +
+            "Check the uvicorn terminal — if you see '📊 Built comparison matrix...', just run the compare again to load the result."
+        );
+      } else if (error.message === "Failed to fetch") {
+        setReport(
+          `❌ Connection lost to ${backendUrl}. The backend may have crashed mid-request — check the terminal running uvicorn.`
+        );
       } else {
         setReport(`❌ Browser Error: ${error.message}`);
       }
@@ -242,30 +282,22 @@ function QuoteSenseContent() {
             onClick={handleUpload}
             disabled={loading || files.length < 2}
             className={`mt-6 w-full py-3 rounded-lg font-bold text-white transition-colors flex items-center justify-center gap-2 ${
-              loading || files.length < 2 
-                ? "bg-gray-400 cursor-not-allowed" 
+              loading || files.length < 2
+                ? "bg-gray-400 cursor-not-allowed"
                 : "bg-blue-600 hover:bg-blue-700"
             }`}
           >
-            {loading ? LOADING_MESSAGES[loadingMsgIdx] : `Compare ${files.length > 1 ? files.length + ' ' : ''}Quotes Now`}
+            {loading ? "Analyzing quotes…" : `Compare ${files.length > 1 ? files.length + " " : ""}Quotes Now`}
           </button>
+
+          {loading && <CompareLoadingPanel messageIndex={loadingMsgIdx} />}
         </div>
 
         {/* Visual Chart Section */}
         {chartData.length > 0 && (
           <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <h2 className="text-2xl font-bold text-gray-800 mb-6">Total Cost Comparison</h2>
-            <div className="h-80 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="vendor" tick={{fontSize: 12}} interval={0} angle={-15} textAnchor="end" height={80} />
-                  <YAxis tickFormatter={(value) => `₹${(value / 100000).toFixed(1)}L`} />
-                  <Tooltip formatter={(value: any) => `₹${Number(value).toLocaleString()}`} />
-                  <Bar dataKey="total" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+            <VendorChart data={chartData} />
           </div>
         )}
 
@@ -279,11 +311,19 @@ function QuoteSenseContent() {
                   <tr className="bg-gray-50 text-gray-700 uppercase text-[10px] font-bold tracking-widest">
                     <th className="p-4 border-b border-gray-200 w-[250px]">Service Description</th>
                     <th className="p-4 border-b border-gray-200 text-right bg-blue-50/50 text-blue-700">Baseline Mean</th>
-                    {vendors.map((vendor, i) => (
-                      <th key={i} className="p-4 border-b border-gray-200 text-right max-w-[150px]">
-                        <div className="truncate" title={vendor}>{vendor.split(' (')[0]}</div>
-                      </th>
-                    ))}
+                    {vendors.map((vendor, i) => {
+                      const info = vendorLabels[vendor];
+                      return (
+                        <th key={i} className="p-4 border-b border-gray-200 text-right max-w-[150px]">
+                          <div
+                            className="text-[10px] font-bold leading-snug normal-case tracking-normal line-clamp-3 break-words"
+                            title={info?.full ?? vendor}
+                          >
+                            {info?.label ?? vendor.split(" (")[0]}
+                          </div>
+                        </th>
+                      );
+                    })}
                   </tr>
                 </thead>
                 
@@ -304,9 +344,12 @@ function QuoteSenseContent() {
 
                       {(items as any[]).map((row, idx) => (
                         <tr key={idx} className="hover:bg-gray-50/80 transition-colors group">
-                          <td className="p-4 pl-8">
+                          <td className="p-4 pl-8 max-w-[320px]">
                             <div className="text-sm font-bold text-gray-900 leading-tight">{row.sub_service}</div>
-                            <div className="text-[10px] text-gray-400 mt-0.5 group-hover:text-gray-500 uppercase">Verified Service</div>
+                            {row.detail && (
+                              <div className="text-[11px] text-gray-500 mt-0.5 leading-snug normal-case">{row.detail}</div>
+                            )}
+                            <div className="text-[10px] text-gray-400 mt-0.5 group-hover:text-gray-500 uppercase">{row.taxonomy || "Verified Service"}</div>
                           </td>
                           <td className="p-4 text-right font-bold text-blue-600 bg-blue-50/30 border-x border-blue-50">
                             ₹{Number(row.market_average).toLocaleString()}
@@ -333,11 +376,29 @@ function QuoteSenseContent() {
           </div>
         )}
 
+        {/* AI Recommendation Section */}
         {report && (
-          <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200 animate-in fade-in slide-in-from-bottom-4 duration-1000">
+          <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200">
             <h2 className="text-2xl font-bold text-gray-800 mb-4">Expert Recommendation</h2>
-            <div className="prose max-w-none whitespace-pre-wrap text-gray-700 leading-relaxed">
+            <div className="prose max-w-none whitespace-pre-wrap text-gray-700 leading-relaxed mb-8">
               {report}
+            </div>
+            
+            {/* THE REDIRECT BUTTON BLOCK */}
+            <div className="pt-6 border-t border-gray-100 flex flex-col sm:flex-row gap-4">
+              <button 
+                onClick={handleGoBack}
+                className="flex-1 bg-blue-900 text-white py-3 rounded-lg font-bold hover:bg-black transition-all flex items-center justify-center gap-2 shadow-md"
+              >
+                ⬅️ Return to Dashboard
+              </button>
+              
+              <button 
+                onClick={resetSelection}
+                className="px-8 py-3 text-gray-500 hover:text-red-600 font-semibold transition-colors border border-transparent hover:border-gray-200 rounded-lg"
+              >
+                Compare New Quotes
+              </button>
             </div>
           </div>
         )}

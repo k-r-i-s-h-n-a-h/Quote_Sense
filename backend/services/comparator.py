@@ -45,36 +45,90 @@ def run_comparison(session_id):
     try:
         df = fetch_data(session_id)
         print("🧮 Running Pandas matrix analysis for detailed frontend checklist...")
-        
-        # 1. Prepare Chart Data
+
+        # Sum of the extracted line items per vendor (used as a fallback for the chart)
+        line_item_totals = df.groupby('vendor_name')['amount'].sum().to_dict()
+
+        # 1. Prepare Chart Data — use the PDF grand_total, fall back to line-item sum
         quotes_df = df[['vendor_name', 'grand_total']].drop_duplicates()
         chart_data = []
         for index, row in quotes_df.iterrows():
-            total_val = float(row['grand_total']) if pd.notna(row['grand_total']) else 0.0
+            grand = float(row['grand_total']) if pd.notna(row['grand_total']) else 0.0
+            total_val = grand if grand > 0 else float(line_item_totals.get(row['vendor_name'], 0.0))
             chart_data.append({"vendor": row['vendor_name'], "total": total_val})
-            
+
         chart_data = sorted(chart_data, key=lambda x: x['total'])
 
         # 2. Prepare Tabular Data & THE NOTEBOOK MEAN CALCULATION
-        detailed_totals = df.groupby(['service_category', 'sub_service', 'vendor_name'])['amount'].sum().reset_index()
-        pivot_df = detailed_totals.pivot(index=['service_category', 'sub_service'], columns='vendor_name', values='amount').fillna(0.0)
-        
+        # Keep EVERY distinct line item. The fixed taxonomy "sub_service" (e.g. "Tiling")
+        # can repeat across several real PDF rows, and even the same work_title (e.g.
+        # "Kitchen") can cover two different purposes (Supply vs Installation). So we key
+        # down to the DESCRIPTION when it is available. If a vendor left the description
+        # blank, we do NOT split on it and fall back to work_title / sub_service.
+        df['work_title'] = df.get('work_title', '').fillna('').astype(str).str.strip()
+        df['sub_service'] = df['sub_service'].fillna('').astype(str).str.strip()
+        df['description'] = df.get('description', '').fillna('').astype(str).str.strip()
+
+        def _is_blank(value):
+            return (not value) or value.lower() in ('', 'nan', 'none', 'null')
+
+        # Short label shown in bold in the table.
+        def _line_label(r):
+            if not _is_blank(r['work_title']):
+                return r['work_title']
+            return r['sub_service'] or 'Unspecified Item'
+
+        # Finest distinguishing key: description first, else work_title, else sub_service.
+        def _detail_key(r):
+            if not _is_blank(r['description']):
+                return r['description']
+            if not _is_blank(r['work_title']):
+                return r['work_title']
+            return r['sub_service'] or 'Unspecified Item'
+
+        df['line_label'] = df.apply(_line_label, axis=1)
+        df['detail_key'] = df.apply(_detail_key, axis=1)
+
+        detailed_totals = (
+            df.groupby(
+                ['service_category', 'sub_service', 'line_label', 'detail_key', 'vendor_name']
+            )['amount']
+            .sum()
+            .reset_index()
+        )
+        pivot_df = detailed_totals.pivot(
+            index=['service_category', 'sub_service', 'line_label', 'detail_key'],
+            columns='vendor_name',
+            values='amount',
+        ).fillna(0.0)
+
         vendors = pivot_df.columns.tolist()
         table_data = [] # Renamed for React frontend!
-        
+
         for index, row in pivot_df.iterrows():
+            category, taxonomy_name, line_label, detail_key = index
             # Calculate the Mean (Baseline) ONLY using vendors who actually provided the service (>0)
             vendor_prices = [float(row[v]) for v in vendors if float(row[v]) > 0]
             market_avg = sum(vendor_prices) / len(vendor_prices) if vendor_prices else 0.0
 
+            # Only surface the description as a separate detail line when it actually
+            # adds information beyond the bold label / taxonomy name.
+            detail_text = ""
+            if detail_key and detail_key not in (line_label, taxonomy_name):
+                detail_text = detail_key
+
             row_dict = {
-                "category": str(index[0]),
-                "sub_service": str(index[1]),
+                "category": str(category),
+                "sub_service": str(line_label),   # short label shown in bold
+                "taxonomy": str(taxonomy_name),   # the normalized TatvaOps sub-service
+                "detail": str(detail_text),       # the purpose/description (Supply vs Install)
                 "market_average": round(market_avg, 2) # Adding the mean for the LLM to see!
             }
             for v in vendors:
                 row_dict[v] = float(row[v])
             table_data.append(row_dict)
+
+        print(f"📊 Built comparison matrix with {len(table_data)} line items across {len(vendors)} quotes.")
 
         # 3. Generate Expert AI Recommendation using Gemini 2.5 Flash
         print("🧠 Generating Expert AI Recommendation with Gemini...")

@@ -7,6 +7,10 @@ import os
 import shutil
 import uuid
 import asyncio
+from dotenv import load_dotenv
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+load_dotenv(os.path.join(BASE_DIR, ".env"))
 
 # Import your extractor and comparator functions!
 from services.extractor import process_single_pdf
@@ -24,7 +28,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 UPLOAD_DIR = os.path.join(BASE_DIR, "temp_uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
@@ -36,6 +39,16 @@ supabase: Client = create_client(
 @app.get("/")
 def read_root():
     return {"status": "QuoteSense Backend is running perfectly! 🚀"}
+
+@app.get("/api/health")
+def health():
+    return {
+        "ok": True,
+        "supabase_configured": bool(
+            os.getenv("SUPABASE_URL") and os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+        ),
+        "gemini_configured": bool(os.getenv("GEMINI_API_KEY")),
+    }
 
 @app.post("/api/compare-quotes")
 async def handle_customer_upload(

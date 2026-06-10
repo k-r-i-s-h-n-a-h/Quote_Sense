@@ -100,7 +100,8 @@ async def handle_customer_upload(
         "report": comparison_result.get("report", "Error generating report."),
         "chartData": comparison_result.get("chartData", []), 
         "tableData": comparison_result.get("tableData", []), # <-- Added this!
-        "vendors": comparison_result.get("vendors", [])      # <-- Added this!
+        "vendors": comparison_result.get("vendors", []),     # <-- Added this!
+        "vendorMeta": comparison_result.get("vendorMeta", {})
     }
 
 class ChatRequest(BaseModel):
@@ -322,7 +323,8 @@ async def get_existing_comparison(session_id: str):
         "report": comparison_result.get("report"),
         "chartData": comparison_result.get("chartData"),
         "tableData": comparison_result.get("tableData"),
-        "vendors": comparison_result.get("vendors")
+        "vendors": comparison_result.get("vendors"),
+        "vendorMeta": comparison_result.get("vendorMeta", {})
     }
 
 

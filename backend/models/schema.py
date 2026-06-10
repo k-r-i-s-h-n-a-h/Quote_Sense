@@ -20,6 +20,7 @@ class MainService(BaseModel):
 class ExtractedQuote(BaseModel):
     vendor_name: str = Field(description="The company providing the quote.")
     client_name: str = Field(description="The customer receiving the quote.")
-    quote_date: str = Field(description="The date of the quote.")
+    quote_number: str = Field(description="The quote/quotation reference number, e.g. 'Q52OW75' (strip any leading '#'). Empty string if not present.")
+    quote_date: str = Field(description="The date of the quote, e.g. '07/05/2026'.")
     grand_total: float = Field(description="The final total price including GST.")
     services: List[MainService] = Field(description="A list of all the main service categories added to this quote")

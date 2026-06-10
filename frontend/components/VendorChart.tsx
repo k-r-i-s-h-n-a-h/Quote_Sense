@@ -15,74 +15,94 @@ import {
   formatInrFull,
   getChartYAxisConfig,
   truncateLabel,
+  type VendorMeta,
 } from "../lib/format";
 
 type ChartRow = { vendor: string; total: number };
 
-type ChartPoint = ChartRow & { labelShort: string; labelFull: string };
+type ChartPoint = ChartRow & {
+  key: string;
+  line1: string;
+  line2: string;
+  labelFull: string;
+};
 
-/** Tilted, truncated company name (no PDF filename). */
-function VendorXAxisTick({
-  x,
-  y,
-  payload,
-}: {
-  x?: number;
-  y?: number;
-  payload?: { value?: string };
-}) {
-  if (x == null || y == null) return null;
-  return (
-    <g transform={`translate(${x},${y})`}>
-      <text
-        x={0}
-        y={0}
-        dy={12}
-        textAnchor="end"
-        fill="#64748b"
-        fontSize={9}
-        transform="rotate(-38)"
-      >
-        {payload?.value ?? ""}
-      </text>
-    </g>
-  );
+/** Two-line tilted X-axis tick: company on top, variant / quote no. below. */
+function makeTick(points: ChartPoint[]) {
+  return function VendorXAxisTick({
+    x,
+    y,
+    index,
+  }: {
+    x?: number;
+    y?: number;
+    index?: number;
+  }) {
+    if (x == null || y == null || index == null) return null;
+    const p = points[index];
+    if (!p) return null;
+    return (
+      <g transform={`translate(${x},${y}) rotate(-38)`}>
+        <text x={0} y={0} textAnchor="end" fill="#475569" fontSize={9}>
+          <tspan x={0} dy={10} fontWeight={600}>
+            {p.line1}
+          </tspan>
+          {p.line2 ? (
+            <tspan x={0} dy={11} fill="#64748b">
+              {p.line2}
+            </tspan>
+          ) : null}
+        </text>
+      </g>
+    );
+  };
 }
 
-export default function VendorChart({ data }: { data: ChartRow[] }) {
+export default function VendorChart({
+  data,
+  meta,
+}: {
+  data: ChartRow[];
+  meta?: Record<string, VendorMeta>;
+}) {
   const points: ChartPoint[] = useMemo(() => {
-    const labels = buildVendorLabels(data.map((d) => d.vendor));
+    const labels = buildVendorLabels(
+      data.map((d) => d.vendor),
+      meta
+    );
     const seen: Record<string, number> = {};
     return data.map((row) => {
       const info = labels[row.vendor];
-      const base = truncateLabel(info.label, 16);
-      // Recharts groups bars that share an identical X label (the tooltip then
-      // shows one value for all). Append invisible zero-width spaces to keep
-      // each category key unique while the label still looks the same.
+      const company = truncateLabel(info.company, 18);
+      // Second line: variant and/or quote number for separation.
+      const secondBits: string[] = [];
+      if (info.variant) secondBits.push(truncateLabel(info.variant, 16));
+      if (info.quoteNumber) secondBits.push(`#${info.quoteNumber}`);
+      const line2 = secondBits.join("  ");
+
+      // Keep each category key unique so Recharts never merges bars.
+      const base = info.label;
       const count = seen[base] ?? 0;
       seen[base] = count + 1;
-      const labelShort = base + "\u200B".repeat(count);
-      return { ...row, labelShort, labelFull: info.full };
+      const key = base + "\u200B".repeat(count);
+
+      return { ...row, key, line1: company, line2, labelFull: info.full };
     });
-  }, [data]);
+  }, [data, meta]);
 
-  const totals = useMemo(
-    () => data.map((d) => Number(d.total) || 0),
-    [data]
-  );
-
+  const totals = useMemo(() => data.map((d) => Number(d.total) || 0), [data]);
   const yAxis = useMemo(() => getChartYAxisConfig(totals), [totals]);
 
   return (
-    <div className="h-[22rem] w-full">
+    <div className="h-[24rem] w-full">
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={points} margin={{ top: 8, right: 12, left: 8, bottom: 80 }}>
+        <BarChart data={points} margin={{ top: 8, right: 12, left: 8, bottom: 96 }}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} />
           <XAxis
-            dataKey="labelShort"
+            dataKey="key"
             interval={0}
-            height={92}
-            tick={<VendorXAxisTick />}
+            height={108}
+            tick={makeTick(points)}
           />
           <YAxis
             domain={yAxis.domain}
@@ -93,6 +113,7 @@ export default function VendorChart({ data }: { data: ChartRow[] }) {
             width={48}
           />
           <Tooltip
+            cursor={{ fill: "rgba(59,130,246,0.06)" }}
             formatter={(value) => [formatInrFull(Number(value)), "Grand total"]}
             labelFormatter={(_, payload) => {
               const row = payload?.[0]?.payload as ChartPoint | undefined;

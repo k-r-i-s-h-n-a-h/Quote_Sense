@@ -1,5 +1,6 @@
 import sys
 import os
+import math
 import pandas as pd
 from dotenv import load_dotenv
 from supabase import create_client, Client
@@ -19,9 +20,32 @@ supabase: Client = create_client(
     os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 )
 
+
+def sanitize_for_json(obj):
+    """Convert NaN/Inf floats to 0 without corrupting string fields in JSON."""
+    if isinstance(obj, dict):
+        return {k: sanitize_for_json(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [sanitize_for_json(v) for v in obj]
+    if isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return 0.0
+        return obj
+    if isinstance(obj, (pd.Series, pd.DataFrame)):
+        return sanitize_for_json(obj.to_dict())
+    # pandas / numpy scalar types
+    if hasattr(obj, "item") and callable(obj.item):
+        try:
+            return sanitize_for_json(obj.item())
+        except (ValueError, TypeError):
+            pass
+    return obj
+
+
 def fetch_data(session_id):
     print(f"📥 Fetching data for Session: {session_id}...")
-    quotes_response = supabase.table("quotes").select("id, vendor_name, grand_total, source_filename").eq("session_id", session_id).execute()
+    # select("*") so optional columns (e.g. quote_number) don't error if absent.
+    quotes_response = supabase.table("quotes").select("*").eq("session_id", session_id).execute()
     
     if not quotes_response.data:
         raise ValueError("No quotes found in the database for this session!")
@@ -37,6 +61,8 @@ def fetch_data(session_id):
     items_df = pd.DataFrame(items_response.data)
     
     df = pd.merge(items_df, quotes_df, left_on="quote_id", right_on="id", suffixes=('_item', '_quote'))
+    # Keep the original company name, then build the unique vendor key used everywhere.
+    df['company'] = df['vendor_name']
     df['vendor_name'] = df['vendor_name'] + " (" + df['source_filename'] + ")"
     
     return df
@@ -59,45 +85,44 @@ def run_comparison(session_id):
 
         chart_data = sorted(chart_data, key=lambda x: x['total'])
 
+        # 1b. Per-vendor metadata so the frontend can build professional labels
+        #     (company name + quote number + quote date) for the chart and table.
+        has_quote_number = 'quote_number' in df.columns
+        has_quote_date = 'quote_date' in df.columns
+        vendor_meta = {}
+        for _, r in df.drop_duplicates('vendor_name').iterrows():
+            key = r['vendor_name']
+            vendor_meta[key] = {
+                "company": str(r.get('company', '') or '').strip(),
+                "filename": str(r.get('source_filename', '') or '').strip(),
+                "quote_number": (str(r.get('quote_number', '') or '').strip() if has_quote_number else ''),
+                "quote_date": (str(r.get('quote_date', '') or '').strip() if has_quote_date else ''),
+            }
+
         # 2. Prepare Tabular Data & THE NOTEBOOK MEAN CALCULATION
-        # Keep EVERY distinct line item. The fixed taxonomy "sub_service" (e.g. "Tiling")
-        # can repeat across several real PDF rows, and even the same work_title (e.g.
-        # "Kitchen") can cover two different purposes (Supply vs Installation). So we key
-        # down to the DESCRIPTION when it is available. If a vendor left the description
-        # blank, we do NOT split on it and fall back to work_title / sub_service.
+        # Group at work-item level: same category + taxonomy + work_title are clubbed.
         df['work_title'] = df.get('work_title', '').fillna('').astype(str).str.strip()
         df['sub_service'] = df['sub_service'].fillna('').astype(str).str.strip()
-        df['description'] = df.get('description', '').fillna('').astype(str).str.strip()
 
         def _is_blank(value):
             return (not value) or value.lower() in ('', 'nan', 'none', 'null')
 
-        # Short label shown in bold in the table.
-        def _line_label(r):
+        def _work_item(r):
             if not _is_blank(r['work_title']):
                 return r['work_title']
             return r['sub_service'] or 'Unspecified Item'
 
-        # Finest distinguishing key: description first, else work_title, else sub_service.
-        def _detail_key(r):
-            if not _is_blank(r['description']):
-                return r['description']
-            if not _is_blank(r['work_title']):
-                return r['work_title']
-            return r['sub_service'] or 'Unspecified Item'
-
-        df['line_label'] = df.apply(_line_label, axis=1)
-        df['detail_key'] = df.apply(_detail_key, axis=1)
+        df['work_item'] = df.apply(_work_item, axis=1)
 
         detailed_totals = (
             df.groupby(
-                ['service_category', 'sub_service', 'line_label', 'detail_key', 'vendor_name']
+                ['service_category', 'sub_service', 'work_item', 'vendor_name']
             )['amount']
             .sum()
             .reset_index()
         )
         pivot_df = detailed_totals.pivot(
-            index=['service_category', 'sub_service', 'line_label', 'detail_key'],
+            index=['service_category', 'sub_service', 'work_item'],
             columns='vendor_name',
             values='amount',
         ).fillna(0.0)
@@ -106,23 +131,16 @@ def run_comparison(session_id):
         table_data = [] # Renamed for React frontend!
 
         for index, row in pivot_df.iterrows():
-            category, taxonomy_name, line_label, detail_key = index
+            category, taxonomy_name, work_item = index
             # Calculate the Mean (Baseline) ONLY using vendors who actually provided the service (>0)
             vendor_prices = [float(row[v]) for v in vendors if float(row[v]) > 0]
             market_avg = sum(vendor_prices) / len(vendor_prices) if vendor_prices else 0.0
 
-            # Only surface the description as a separate detail line when it actually
-            # adds information beyond the bold label / taxonomy name.
-            detail_text = ""
-            if detail_key and detail_key not in (line_label, taxonomy_name):
-                detail_text = detail_key
-
             row_dict = {
                 "category": str(category),
-                "sub_service": str(line_label),   # short label shown in bold
-                "taxonomy": str(taxonomy_name),   # the normalized TatvaOps sub-service
-                "detail": str(detail_text),       # the purpose/description (Supply vs Install)
-                "market_average": round(market_avg, 2) # Adding the mean for the LLM to see!
+                "sub_service": str(work_item),    # work item shown in the table
+                "taxonomy": str(taxonomy_name),   # normalized TatvaOps sub-service
+                "market_average": round(market_avg, 2),  # kept for AI; hidden in UI
             }
             for v in vendors:
                 row_dict[v] = float(row[v])
@@ -159,13 +177,12 @@ def run_comparison(session_id):
             "report": ai_report,         # Changed from summary_text
             "chartData": chart_data,     # Changed from chart_data
             "tableData": table_data,     # Changed from tabular_data
-            "vendors": vendors,           
+            "vendors": vendors,
+            "vendorMeta": vendor_meta,
             "session_id": session_id
         }
 
-        # This one-liner converts everything to a string and back to 
-        # ensure no non-compliant floats remain
-        return json.loads(json.dumps(final_output).replace('NaN', '0').replace('nan', '0'))
+        return sanitize_for_json(final_output)
         
     except Exception as e:
         error_details = traceback.format_exc()

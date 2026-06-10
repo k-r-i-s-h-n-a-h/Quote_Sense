@@ -71,19 +71,30 @@ def process_quote_with_gemini(pdf_path):
     return json.loads(response.text)
 
 def push_to_supabase(structured_data, filename, session_id):
+    quote_number = str(structured_data.get("quote_number", "") or "").lstrip("#").strip()
+
     quote_payload = {
         "vendor_name": structured_data.get("vendor_name", "Unknown"),
         "client_name": structured_data.get("client_name", "Unknown"),
         "quote_date": structured_data.get("quote_date", ""),
         "grand_total": structured_data.get("grand_total", 0.0),
         "source_filename": filename,
-        "session_id": session_id ,
-        #"quote_number":structured_data.get("vendor_name", "Unknown"),
-      
+        "session_id": session_id,
+        "quote_number": quote_number,
     }
-    
+
     print(f"  -> Pushing metadata for {quote_payload['vendor_name']}...")
-    quote_res = supabase.table("quotes").insert(quote_payload).execute()
+    try:
+        quote_res = supabase.table("quotes").insert(quote_payload).execute()
+    except Exception as e:
+        # The 'quote_number' column may not exist yet — fall back without it so the
+        # pipeline keeps working. Add the column in Supabase to enable it (see notes).
+        if "quote_number" in str(e):
+            print("  -> 'quote_number' column missing in Supabase; inserting without it.")
+            quote_payload.pop("quote_number", None)
+            quote_res = supabase.table("quotes").insert(quote_payload).execute()
+        else:
+            raise
     new_quote_id = quote_res.data[0]['id']
     
     items_payload = []

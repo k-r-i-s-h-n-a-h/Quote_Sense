@@ -56,30 +56,61 @@ function distinguishingTokens(names: string[]): string[] {
   });
 }
 
+export type VendorMeta = {
+  company?: string;
+  filename?: string;
+  quote_number?: string;
+  quote_date?: string;
+};
+
+export type VendorLabel = {
+  company: string;
+  variant: string;
+  quoteNumber: string;
+  quoteDate: string;
+  /** Short primary text for a chart tick. */
+  label: string;
+  /** One-line full description for tooltips. */
+  full: string;
+};
+
 /**
  * Build a display label per vendor string. When several quotes share the same
- * company name (e.g. same vendor, different material options), the label falls
- * back to the distinguishing part of the filename so each bar/column is unique.
+ * company name (e.g. same vendor, different material options), a distinguishing
+ * "variant" is derived from the filename. Quote number and date come from the
+ * backend metadata (vendorMeta) when available.
  */
 export function buildVendorLabels(
-  vendors: string[]
-): Record<string, { label: string; full: string }> {
-  const companies = vendors.map(vendorCompanyName);
+  vendors: string[],
+  meta?: Record<string, VendorMeta>
+): Record<string, VendorLabel> {
+  const companies = vendors.map(
+    (v, i) => meta?.[v]?.company?.trim() || vendorCompanyName(v)
+  );
   const counts: Record<string, number> = {};
   companies.forEach((c) => (counts[c] = (counts[c] || 0) + 1));
 
-  const cleanedFiles = vendors.map((v) => cleanFileName(vendorFileName(v)));
+  const cleanedFiles = vendors.map(
+    (v) => cleanFileName(meta?.[v]?.filename || vendorFileName(v))
+  );
   const variants = distinguishingTokens(cleanedFiles);
 
-  const result: Record<string, { label: string; full: string }> = {};
+  const result: Record<string, VendorLabel> = {};
   vendors.forEach((vendor, i) => {
     const company = companies[i];
-    if (counts[company] > 1) {
-      const variant = variants[i] || cleanedFiles[i] || company;
-      result[vendor] = { label: variant, full: `${company} — ${variant}` };
-    } else {
-      result[vendor] = { label: company, full: company };
-    }
+    const quoteNumber = (meta?.[vendor]?.quote_number || "").trim();
+    const quoteDate = (meta?.[vendor]?.quote_date || "").trim();
+    const variant =
+      counts[company] > 1 ? variants[i] || cleanedFiles[i] || "" : "";
+
+    const label = variant ? `${company} — ${variant}` : company;
+
+    const fullParts = [label];
+    if (quoteNumber) fullParts.push(`#${quoteNumber}`);
+    if (quoteDate) fullParts.push(quoteDate);
+    const full = fullParts.join("  ·  ");
+
+    result[vendor] = { company, variant, quoteNumber, quoteDate, label, full };
   });
   return result;
 }

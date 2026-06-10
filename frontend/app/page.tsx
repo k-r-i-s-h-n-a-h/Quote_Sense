@@ -36,6 +36,7 @@ function QuoteSenseContent() {
   // Matrix Table State
   const [tableData, setTableData] = useState<any[]>([]);
   const [vendors, setVendors] = useState<string[]>([]);
+  const [vendorMeta, setVendorMeta] = useState<Record<string, any>>({});
 
   // Chat State Variables
   const [sessionId, setSessionId] = useState("");
@@ -45,7 +46,10 @@ function QuoteSenseContent() {
   const chatEndRef = useRef<HTMLDivElement>(null);
   const loadingRef = useRef(false);
 
-  const vendorLabels = useMemo(() => buildVendorLabels(vendors), [vendors]);
+  const vendorLabels = useMemo(
+    () => buildVendorLabels(vendors, vendorMeta),
+    [vendors, vendorMeta]
+  );
 
   const getBackendUrl = () =>
     process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8001";
@@ -62,6 +66,7 @@ function QuoteSenseContent() {
       setChartData(data.chartData || []);
       setTableData(data.tableData || []);
       setVendors(data.vendors || []);
+      setVendorMeta(data.vendorMeta || {});
       setSessionId(data.session_id);
       setChatHistory([
         { role: "ai", content: "Hi! I'm your QuoteSense Assistant. I've analyzed the synced quotes. Ask me anything..." }
@@ -134,6 +139,7 @@ function QuoteSenseContent() {
     setChartData([]);
     setTableData([]); 
     setVendors([]);   
+    setVendorMeta({});
     setSessionId("");
     setChatHistory([]);
   };
@@ -149,6 +155,7 @@ function QuoteSenseContent() {
     setChartData([]);
     setTableData([]);
     setVendors([]);
+    setVendorMeta({});
     setChatHistory([]);
 
     const formData = new FormData();
@@ -297,7 +304,7 @@ function QuoteSenseContent() {
         {chartData.length > 0 && (
           <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <h2 className="text-2xl font-bold text-gray-800 mb-6">Total Cost Comparison</h2>
-            <VendorChart data={chartData} />
+            <VendorChart data={chartData} meta={vendorMeta} />
           </div>
         )}
 
@@ -310,16 +317,27 @@ function QuoteSenseContent() {
                 <thead>
                   <tr className="bg-gray-50 text-gray-700 uppercase text-[10px] font-bold tracking-widest">
                     <th className="p-4 border-b border-gray-200 w-[250px]">Service Description</th>
-                    <th className="p-4 border-b border-gray-200 text-right bg-blue-50/50 text-blue-700">Baseline Mean</th>
                     {vendors.map((vendor, i) => {
                       const info = vendorLabels[vendor];
+                      const meta = vendorMeta[vendor] || {};
                       return (
-                        <th key={i} className="p-4 border-b border-gray-200 text-right max-w-[150px]">
-                          <div
-                            className="text-[10px] font-bold leading-snug normal-case tracking-normal line-clamp-3 break-words"
-                            title={info?.full ?? vendor}
-                          >
-                            {info?.label ?? vendor.split(" (")[0]}
+                        <th key={i} className="p-4 border-b border-gray-200 text-right align-top max-w-[170px]">
+                          <div className="ml-auto max-w-[170px]" title={info?.full ?? vendor}>
+                            <div className="text-[11px] font-bold leading-snug normal-case tracking-normal text-gray-800 line-clamp-2 break-words">
+                              {info?.company ?? vendor.split(" (")[0]}
+                            </div>
+                            {info?.variant && (
+                              <div className="text-[10px] font-semibold text-blue-700 normal-case tracking-normal mt-0.5 line-clamp-1">
+                                {info.variant}
+                              </div>
+                            )}
+                            {(info?.quoteNumber || info?.quoteDate || meta.quote_date) && (
+                              <div className="text-[9px] font-normal text-gray-400 normal-case tracking-normal mt-0.5">
+                                {info?.quoteNumber ? `#${info.quoteNumber}` : ""}
+                                {info?.quoteNumber && (info?.quoteDate || meta.quote_date) ? " · " : ""}
+                                {info?.quoteDate || meta.quote_date || ""}
+                              </div>
+                            )}
                           </div>
                         </th>
                       );
@@ -337,7 +355,7 @@ function QuoteSenseContent() {
                   ).map(([category, items], groupIdx) => (
                     <React.Fragment key={groupIdx}>
                       <tr className="bg-blue-900/5">
-                        <td colSpan={vendors.length + 2} className="p-3 pl-4 text-sm font-black text-blue-900 uppercase tracking-wider border-y border-blue-100">
+                        <td colSpan={vendors.length + 1} className="p-3 pl-4 text-sm font-black text-blue-900 uppercase tracking-wider border-y border-blue-100">
                           📁 {category}
                         </td>
                       </tr>
@@ -346,13 +364,7 @@ function QuoteSenseContent() {
                         <tr key={idx} className="hover:bg-gray-50/80 transition-colors group">
                           <td className="p-4 pl-8 max-w-[320px]">
                             <div className="text-sm font-bold text-gray-900 leading-tight">{row.sub_service}</div>
-                            {row.detail && (
-                              <div className="text-[11px] text-gray-500 mt-0.5 leading-snug normal-case">{row.detail}</div>
-                            )}
                             <div className="text-[10px] text-gray-400 mt-0.5 group-hover:text-gray-500 uppercase">{row.taxonomy || "Verified Service"}</div>
-                          </td>
-                          <td className="p-4 text-right font-bold text-blue-600 bg-blue-50/30 border-x border-blue-50">
-                            ₹{Number(row.market_average).toLocaleString()}
                           </td>
                           {vendors.map((vendor, vIdx) => {
                             const value = row[vendor];

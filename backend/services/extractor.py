@@ -126,7 +126,11 @@ def process_single_pdf(file_path, session_id):
             structured_data = process_quote_with_gemini(file_path)
             
             print(f"\n🔥 --- RAW GEMINI JSON OUTPUT FOR {filename} --- 🔥")
-            # (Optional: limit print size if JSON is huge)
+            print(
+                f"  -> Extracted vendor='{structured_data.get('vendor_name')}' "
+                f"quote_number='{structured_data.get('quote_number')}' "
+                f"quote_date='{structured_data.get('quote_date')}'"
+            )
             
             push_to_supabase(structured_data, filename, session_id)
             print(f"✅ Successfully processed {filename} on attempt {retry_count + 1}")

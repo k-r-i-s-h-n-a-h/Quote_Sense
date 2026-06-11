@@ -158,10 +158,22 @@ def run_comparison(session_id):
         {table_data}
         Overall Totals: {chart_data}
         
-        CRITICAL INSTRUCTIONS (Follow this exact flow):
-        1. Base Baseline Comparison: First, look at the overlapping services (e.g., Residential Construction). Compare the vendors against the 'market_average' (mean). State clearly who is deviating above or below the mean for the common work.
-        2. Scope Matching (Apples to Oranges): Point out the extra services. For example, if Vendor A has (Construction + Interior + Painting) but Vendor B only has (Construction + Interior), explicitly state that Vendor B's total is lower simply because they are missing the painting scope.
-        3. Keep your response to 4 concise, highly professional sentences.
+        Write the analysis as SHORT, POINT-WISE bullets — NOT a paragraph.
+
+        FORMAT RULES (follow exactly):
+        - Output 4 to 6 bullet points, each on its own line starting with "- ".
+        - Begin every bullet with a short bold label using double asterisks, then a colon,
+          then one concise sentence. Example: "- **Best Overall Value:** Vendor X ...".
+        - Keep each bullet to a single, plain, professional sentence anyone can understand.
+        - Do NOT write any intro or closing paragraph; output only the bullets.
+
+        COVER THESE POINTS (one bullet each):
+        - **Lowest Total:** which quote is cheapest overall and by roughly how much.
+        - **Price vs Market:** who tends to price above or below the market average on common work.
+        - **Scope Difference:** call out apples-to-oranges — a lower total may just mean fewer
+          services/items, so name what is missing or extra.
+        - **Strength:** which vendor is the better choice for a key service category and why.
+        - **Recommendation:** a clear, practical suggestion on which to pick or what to confirm.
         """
 
         summary_response = gemini_client.models.generate_content(

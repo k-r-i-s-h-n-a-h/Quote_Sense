@@ -4,6 +4,8 @@ import React, { useState, useEffect, useRef, useMemo, Suspense } from "react";
 import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
 import CompareLoadingPanel from "../components/CompareLoadingPanel";
+import VendorInsights from "../components/VendorInsights";
+import RecommendationView from "../components/RecommendationView";
 import { buildVendorLabels } from "../lib/format";
 
 const VendorChart = dynamic(() => import("../components/VendorChart"), {
@@ -142,6 +144,130 @@ function QuoteSenseContent() {
     setVendorMeta({});
     setSessionId("");
     setChatHistory([]);
+  };
+
+  const handleDownloadPdf = () => {
+    if (tableData.length === 0 || vendors.length === 0) return;
+
+    const esc = (v: any) =>
+      String(v ?? "").replace(/[&<>"']/g, (c) =>
+        ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string)
+      );
+
+    // Vendor column headers (company + variant + quote no/date)
+    const vendorHeadCells = vendors
+      .map((vendor) => {
+        const info = vendorLabels[vendor] || ({} as any);
+        const meta = vendorMeta[vendor] || ({} as any);
+        const company = info.company ?? vendor.split(" (")[0];
+        const variant = info.variant ? `<div class="v-variant">${esc(info.variant)}</div>` : "";
+        const qno = info.quoteNumber ? `#${esc(info.quoteNumber)}` : "";
+        const qdate = info.quoteDate || meta.quote_date || "";
+        const sep = qno && qdate ? " · " : "";
+        const sub =
+          qno || qdate ? `<div class="v-sub">${qno}${esc(sep)}${esc(qdate)}</div>` : "";
+        return `<th class="num"><div class="v-company">${esc(company)}</div>${variant}${sub}</th>`;
+      })
+      .join("");
+
+    // Group rows by category, preserving order
+    const grouped: Record<string, any[]> = {};
+    const order: string[] = [];
+    tableData.forEach((item) => {
+      if (!grouped[item.category]) {
+        grouped[item.category] = [];
+        order.push(item.category);
+      }
+      grouped[item.category].push(item);
+    });
+
+    const bodyRows = order
+      .map((category) => {
+        const catRow = `<tr class="cat"><td colspan="${vendors.length + 1}">${esc(
+          category
+        )}</td></tr>`;
+        const itemRows = grouped[category]
+          .map((row) => {
+            const cells = vendors
+              .map((vendor) => {
+                const value = row[vendor];
+                if (value === 0 || value === undefined || value === null) {
+                  return `<td class="num na">N/A</td>`;
+                }
+                return `<td class="num">₹${Number(value).toLocaleString("en-IN")}</td>`;
+              })
+              .join("");
+            return `<tr><td class="desc"><span class="svc">${esc(
+              row.sub_service
+            )}</span><span class="tax">${esc(
+              row.taxonomy || "Verified Service"
+            )}</span></td>${cells}</tr>`;
+          })
+          .join("");
+        return catRow + itemRows;
+      })
+      .join("");
+
+    const today = new Date().toLocaleDateString("en-IN", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+
+    const html = `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Tatva Quotes Comparison Matrix</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #1f2937; margin: 28px; }
+  .head { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 18px; }
+  .head h1 { font-size: 20px; margin: 0; color: #0f172a; }
+  .head .meta { font-size: 11px; color: #6b7280; text-align: right; }
+  table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  thead th { background: #f8fafc; border-bottom: 2px solid #e2e8f0; padding: 8px 10px; vertical-align: top; }
+  thead th:first-child { text-align: left; width: 240px; text-transform: uppercase; letter-spacing: .06em; font-size: 9px; color: #64748b; }
+  th.num { text-align: right; }
+  .v-company { font-size: 11px; font-weight: 700; color: #111827; }
+  .v-variant { font-size: 10px; font-weight: 600; color: #1d4ed8; margin-top: 2px; }
+  .v-sub { font-size: 9px; font-weight: 400; color: #9ca3af; margin-top: 2px; }
+  tbody td { padding: 7px 10px; border-bottom: 1px solid #f1f5f9; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.num.na { color: #f87171; font-style: italic; }
+  td.desc .svc { display: block; font-weight: 700; color: #111827; }
+  td.desc .tax { display: block; font-size: 9px; text-transform: uppercase; color: #9ca3af; margin-top: 2px; }
+  tr.cat td { background: #eef2ff; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: #1e3a8a; font-size: 10px; border-top: 1px solid #c7d2fe; border-bottom: 1px solid #c7d2fe; }
+  tr { page-break-inside: avoid; }
+  thead { display: table-header-group; }
+  @page { size: A4 landscape; margin: 14mm; }
+</style>
+</head>
+<body>
+  <div class="head">
+    <h1>Tatva Quotes Comparison Matrix</h1>
+    <div class="meta">Generated by QuoteSense · ${esc(today)}</div>
+  </div>
+  <table>
+    <thead>
+      <tr><th>Service Description</th>${vendorHeadCells}</tr>
+    </thead>
+    <tbody>${bodyRows}</tbody>
+  </table>
+  <script>
+    window.onload = function () { window.focus(); window.print(); };
+  </script>
+</body>
+</html>`;
+
+    const win = window.open("", "_blank");
+    if (!win) {
+      alert("Please allow pop-ups for this site to download the PDF.");
+      return;
+    }
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
   };
 
   const handleUpload = async () => {
@@ -310,7 +436,21 @@ function QuoteSenseContent() {
 
        {tableData.length > 0 && (
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 animate-in fade-in slide-in-from-bottom-4 duration-700 overflow-hidden">
-            <h2 className="text-2xl font-bold text-gray-800 mb-6 px-2">Tatva Quotes Comparison Matrix</h2>
+            <div className="flex items-center justify-between mb-6 px-2">
+              <h2 className="text-2xl font-bold text-gray-800">Tatva Quotes Comparison Matrix</h2>
+              <button
+                onClick={handleDownloadPdf}
+                title="Download comparison as PDF"
+                className="inline-flex items-center gap-2 bg-blue-900 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-black transition-all shadow-sm"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+                Download PDF
+              </button>
+            </div>
             
             <div className="overflow-x-auto border rounded-lg">
               <table className="w-full text-left border-collapse min-w-[800px]">
@@ -388,12 +528,17 @@ function QuoteSenseContent() {
           </div>
         )}
 
+        {/* Interactive Insights (between the matrix and the AI recommendation) */}
+        {tableData.length > 0 && vendors.length > 0 && (
+          <VendorInsights tableData={tableData} vendors={vendors} meta={vendorMeta} />
+        )}
+
         {/* AI Recommendation Section */}
         {report && (
           <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200">
             <h2 className="text-2xl font-bold text-gray-800 mb-4">Expert Recommendation</h2>
-            <div className="prose max-w-none whitespace-pre-wrap text-gray-700 leading-relaxed mb-8">
-              {report}
+            <div className="mb-8">
+              <RecommendationView text={report} />
             </div>
             
             {/* THE REDIRECT BUTTON BLOCK */}

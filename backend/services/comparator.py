@@ -53,7 +53,18 @@ def fetch_data(session_id):
     quotes_df = pd.DataFrame(quotes_response.data)
     quote_ids = quotes_df['id'].tolist()
     
-    items_response = supabase.table("quote_items").select("*").in_("quote_id", quote_ids).execute()
+    # Order by id so line items come back in the sequence they were inserted,
+    # which mirrors the quote's original top-to-bottom flow.
+    try:
+        items_response = (
+            supabase.table("quote_items")
+            .select("*")
+            .in_("quote_id", quote_ids)
+            .order("id")
+            .execute()
+        )
+    except Exception:
+        items_response = supabase.table("quote_items").select("*").in_("quote_id", quote_ids).execute()
     
     if not items_response.data:
         raise ValueError("I found the quotes, but there are no line items attached to them! The PDF extraction likely failed.")
@@ -100,29 +111,58 @@ def run_comparison(session_id):
             }
 
         # 2. Prepare Tabular Data & THE NOTEBOOK MEAN CALCULATION
-        # Group at work-item level: same category + taxonomy + work_title are clubbed.
+        # Three-level hierarchy that mirrors the quote flow:
+        #   service_category  ->  sub_service (normalized taxonomy)  ->  item_name (room)
+        # The row label is the vendor's ORIGINAL item wording (item_name), with the
+        # room shown as secondary. We "stop the diffusion" (clubbing) at this level.
         df['work_title'] = df.get('work_title', '').fillna('').astype(str).str.strip()
+        df['item_name'] = df.get('item_name', '').fillna('').astype(str).str.strip()
         df['sub_service'] = df['sub_service'].fillna('').astype(str).str.strip()
+        df['service_category'] = df['service_category'].fillna('').astype(str).str.strip()
 
         def _is_blank(value):
             return (not value) or value.lower() in ('', 'nan', 'none', 'null')
 
-        def _work_item(r):
+        df['service_category'] = df['service_category'].apply(
+            lambda v: v if not _is_blank(v) else 'Other'
+        )
+        df['sub_service'] = df['sub_service'].apply(
+            lambda v: v if not _is_blank(v) else 'General'
+        )
+
+        # Row label = original item name; fall back to room, then sub-service.
+        def _item_label(r):
+            if not _is_blank(r['item_name']):
+                return r['item_name']
             if not _is_blank(r['work_title']):
                 return r['work_title']
             return r['sub_service'] or 'Unspecified Item'
 
-        df['work_item'] = df.apply(_work_item, axis=1)
+        df['item_label'] = df.apply(_item_label, axis=1)
+        df['room'] = df['work_title'].apply(lambda v: v if not _is_blank(v) else '')
+        # Backward-compat alias used by some callers.
+        df['work_item'] = df['item_label']
+
+        # First-appearance ordering so rows follow the quote's natural top-to-bottom flow.
+        df = df.reset_index(drop=True)
+        df['__seq'] = range(len(df))
+        cat_order = df.groupby('service_category')['__seq'].min().to_dict()
+        sub_order = df.groupby(['service_category', 'sub_service'])['__seq'].min().to_dict()
+        item_order = (
+            df.groupby(
+                ['service_category', 'sub_service', 'item_label', 'room']
+            )['__seq'].min().to_dict()
+        )
 
         detailed_totals = (
             df.groupby(
-                ['service_category', 'sub_service', 'work_item', 'vendor_name']
+                ['service_category', 'sub_service', 'item_label', 'room', 'vendor_name']
             )['amount']
             .sum()
             .reset_index()
         )
         pivot_df = detailed_totals.pivot(
-            index=['service_category', 'sub_service', 'work_item'],
+            index=['service_category', 'sub_service', 'item_label', 'room'],
             columns='vendor_name',
             values='amount',
         ).fillna(0.0)
@@ -131,20 +171,35 @@ def run_comparison(session_id):
         table_data = [] # Renamed for React frontend!
 
         for index, row in pivot_df.iterrows():
-            category, taxonomy_name, work_item = index
+            category, sub_service_name, item_label, room = index
             # Calculate the Mean (Baseline) ONLY using vendors who actually provided the service (>0)
             vendor_prices = [float(row[v]) for v in vendors if float(row[v]) > 0]
             market_avg = sum(vendor_prices) / len(vendor_prices) if vendor_prices else 0.0
 
             row_dict = {
-                "category": str(category),
-                "sub_service": str(work_item),    # work item shown in the table
-                "taxonomy": str(taxonomy_name),   # normalized TatvaOps sub-service
+                "category": str(category),             # level 1: service category group
+                "sub_service": str(sub_service_name),  # level 2: normalized TatvaOps sub-service
+                "item_name": str(item_label),          # level 3: vendor's original item wording
+                "room": str(room),                     # location shown as secondary text
+                "work_item": str(item_label),          # kept for backward-compat
+                "taxonomy": str(sub_service_name),     # kept for backward-compat
                 "market_average": round(market_avg, 2),  # kept for AI; hidden in UI
+                "_cat_order": float(cat_order.get(category, 1e9)),
+                "_sub_order": float(sub_order.get((category, sub_service_name), 1e9)),
+                "_item_order": float(
+                    item_order.get((category, sub_service_name, item_label, room), 1e9)
+                ),
             }
             for v in vendors:
                 row_dict[v] = float(row[v])
             table_data.append(row_dict)
+
+        # Sort to follow the quote flow: category, then sub-service, then item.
+        table_data.sort(key=lambda r: (r["_cat_order"], r["_sub_order"], r["_item_order"]))
+        for r in table_data:
+            r.pop("_cat_order", None)
+            r.pop("_sub_order", None)
+            r.pop("_item_order", None)
 
         print(f"📊 Built comparison matrix with {len(table_data)} line items across {len(vendors)} quotes.")
 

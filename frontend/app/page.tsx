@@ -17,6 +17,40 @@ const VendorChart = dynamic(() => import("../components/VendorChart"), {
   ),
 });
 
+type SubGroup = { sub: string; rows: any[] };
+type CatGroup = { category: string; subs: SubGroup[] };
+
+/**
+ * Group flat tableData rows into the quote-flow hierarchy:
+ *   category -> sub_service -> work-item rows.
+ * Backend already pre-sorts rows in quote order, so we just preserve
+ * the first-seen order of each category and sub-service.
+ */
+function groupTableData(rows: any[]): CatGroup[] {
+  const cats: CatGroup[] = [];
+  const catIdx = new Map<string, number>();
+  const subIdx = new Map<string, number>();
+
+  for (const item of rows) {
+    const category = item.category || "Other";
+    const sub = item.sub_service || "General";
+
+    if (!catIdx.has(category)) {
+      catIdx.set(category, cats.length);
+      cats.push({ category, subs: [] });
+    }
+    const cat = cats[catIdx.get(category)!];
+
+    const subKey = `${category}||${sub}`;
+    if (!subIdx.has(subKey)) {
+      subIdx.set(subKey, cat.subs.length);
+      cat.subs.push({ sub, rows: [] });
+    }
+    cat.subs[subIdx.get(subKey)!].rows.push(item);
+  }
+  return cats;
+}
+
 // Main export wrapped in Suspense to fix the Next.js/useSearchParams error
 export default function Home() {
   return (
@@ -170,41 +204,39 @@ function QuoteSenseContent() {
       })
       .join("");
 
-    // Group rows by category, preserving order
-    const grouped: Record<string, any[]> = {};
-    const order: string[] = [];
-    tableData.forEach((item) => {
-      if (!grouped[item.category]) {
-        grouped[item.category] = [];
-        order.push(item.category);
-      }
-      grouped[item.category].push(item);
-    });
+    // Group rows into category -> sub-service -> work-item (quote-flow order)
+    const priceCells = (row: any) =>
+      vendors
+        .map((vendor) => {
+          const value = row[vendor];
+          if (value === 0 || value === undefined || value === null) {
+            return `<td class="num na">N/A</td>`;
+          }
+          return `<td class="num">₹${Number(value).toLocaleString("en-IN")}</td>`;
+        })
+        .join("");
 
-    const bodyRows = order
-      .map((category) => {
+    const bodyRows = groupTableData(tableData)
+      .map((cat) => {
         const catRow = `<tr class="cat"><td colspan="${vendors.length + 1}">${esc(
-          category
+          cat.category
         )}</td></tr>`;
-        const itemRows = grouped[category]
-          .map((row) => {
-            const cells = vendors
-              .map((vendor) => {
-                const value = row[vendor];
-                if (value === 0 || value === undefined || value === null) {
-                  return `<td class="num na">N/A</td>`;
-                }
-                return `<td class="num">₹${Number(value).toLocaleString("en-IN")}</td>`;
+        const subBlocks = cat.subs
+          .map((sub) => {
+            const subRow = `<tr class="sub"><td colspan="${vendors.length + 1}">${esc(
+              sub.sub
+            )}</td></tr>`;
+            const itemRows = sub.rows
+              .map((row) => {
+                const name = esc(row.item_name || row.work_item || row.sub_service);
+                const room = row.room ? `<span class="room">${esc(row.room)}</span>` : "";
+                return `<tr><td class="desc">${name}${room}</td>${priceCells(row)}</tr>`;
               })
               .join("");
-            return `<tr><td class="desc"><span class="svc">${esc(
-              row.sub_service
-            )}</span><span class="tax">${esc(
-              row.taxonomy || "Verified Service"
-            )}</span></td>${cells}</tr>`;
+            return subRow + itemRows;
           })
           .join("");
-        return catRow + itemRows;
+        return catRow + subBlocks;
       })
       .join("");
 
@@ -235,9 +267,10 @@ function QuoteSenseContent() {
   tbody td { padding: 7px 10px; border-bottom: 1px solid #f1f5f9; }
   td.num { text-align: right; font-variant-numeric: tabular-nums; }
   td.num.na { color: #f87171; font-style: italic; }
-  td.desc .svc { display: block; font-weight: 700; color: #111827; }
-  td.desc .tax { display: block; font-size: 9px; text-transform: uppercase; color: #9ca3af; margin-top: 2px; }
+  td.desc { padding-left: 28px; font-weight: 600; color: #111827; }
+  td.desc .room { display: block; font-size: 9px; font-weight: 400; text-transform: uppercase; color: #9ca3af; margin-top: 2px; }
   tr.cat td { background: #eef2ff; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: #1e3a8a; font-size: 10px; border-top: 1px solid #c7d2fe; border-bottom: 1px solid #c7d2fe; }
+  tr.sub td { background: #f8fafc; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: #64748b; font-size: 9px; padding-left: 18px; }
   tr { page-break-inside: avoid; }
   thead { display: table-header-group; }
   @page { size: A4 landscape; margin: 14mm; }
@@ -486,39 +519,52 @@ function QuoteSenseContent() {
                 </thead>
                 
                 <tbody className="divide-y divide-gray-100">
-                  {Object.entries(
-                    tableData.reduce((acc, item) => {
-                      if (!acc[item.category]) acc[item.category] = [];
-                      acc[item.category].push(item);
-                      return acc;
-                    }, {} as Record<string, any[]>)
-                  ).map(([category, items], groupIdx) => (
-                    <React.Fragment key={groupIdx}>
+                  {groupTableData(tableData).map((cat, ci) => (
+                    <React.Fragment key={ci}>
+                      {/* Level 1 — Service category */}
                       <tr className="bg-blue-900/5">
                         <td colSpan={vendors.length + 1} className="p-3 pl-4 text-sm font-black text-blue-900 uppercase tracking-wider border-y border-blue-100">
-                          📁 {category}
+                          📁 {cat.category}
                         </td>
                       </tr>
 
-                      {(items as any[]).map((row, idx) => (
-                        <tr key={idx} className="hover:bg-gray-50/80 transition-colors group">
-                          <td className="p-4 pl-8 max-w-[320px]">
-                            <div className="text-sm font-bold text-gray-900 leading-tight">{row.sub_service}</div>
-                            <div className="text-[10px] text-gray-400 mt-0.5 group-hover:text-gray-500 uppercase">{row.taxonomy || "Verified Service"}</div>
-                          </td>
-                          {vendors.map((vendor, vIdx) => {
-                            const value = row[vendor];
-                            return (
-                              <td key={vIdx} className={`p-4 text-right ${value === 0 ? "opacity-60" : ""}`}>
-                                {value === 0 ? (
-                                  <span className="text-[14px] font-bold text-red-400 italic">N/A</span>
-                                ) : (
-                                  <span className="text-sm font-medium text-gray-700">₹{Number(value).toLocaleString()}</span>
+                      {cat.subs.map((sub, si) => (
+                        <React.Fragment key={si}>
+                          {/* Level 2 — Sub-service */}
+                          <tr className="bg-gray-50/80">
+                            <td colSpan={vendors.length + 1} className="py-2 pl-7 pr-4 text-[11px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-100">
+                              {sub.sub}
+                            </td>
+                          </tr>
+
+                          {/* Level 3 — Work items (vendor's original wording + room) */}
+                          {sub.rows.map((row, idx) => (
+                            <tr key={idx} className="hover:bg-gray-50/80 transition-colors group">
+                              <td className="py-3 pl-11 pr-4 max-w-[320px]">
+                                <div className="text-sm font-semibold text-gray-900 leading-tight">
+                                  {row.item_name || row.work_item || row.sub_service}
+                                </div>
+                                {row.room && (
+                                  <div className="text-[10px] text-gray-400 mt-0.5 uppercase tracking-wide group-hover:text-gray-500">
+                                    {row.room}
+                                  </div>
                                 )}
                               </td>
-                            );
-                          })}
-                        </tr>
+                              {vendors.map((vendor, vIdx) => {
+                                const value = row[vendor];
+                                return (
+                                  <td key={vIdx} className={`p-4 text-right ${value === 0 ? "opacity-60" : ""}`}>
+                                    {value === 0 ? (
+                                      <span className="text-[14px] font-bold text-red-400 italic">N/A</span>
+                                    ) : (
+                                      <span className="text-sm font-medium text-gray-700">₹{Number(value).toLocaleString()}</span>
+                                    )}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ))}
+                        </React.Fragment>
                       ))}
                     </React.Fragment>
                   ))}

@@ -19,11 +19,11 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Normalize commit author to the Vercel account
-        run: |
-          git config user.email "infrawithtatva@gmail.com"
-          git config user.name "infra-9507"
-          git commit --amend --no-edit --reset-author
+      #- name: Normalize commit author to the Vercel account
+       # run: |
+       #   git config user.email "infrawithtatva@gmail.com"
+       #   git config user.name "infra-9507"
+       #   git commit --amend --no-edit --reset-author
 
       - uses: actions/setup-node@v6
         with:

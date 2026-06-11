@@ -29,20 +29,21 @@ type ChartPoint = ChartRow & {
 
 /** Two-line tilted X-axis tick: company on top, variant / quote no. below. */
 function makeTick(points: ChartPoint[]) {
-  return function VendorXAxisTick({
-    x,
-    y,
-    index,
-  }: {
-    x?: number;
-    y?: number;
+  // Recharts' tick render prop is loosely typed (x/y can be string|number),
+  // so accept a permissive props object and coerce to numbers here.
+  return function VendorXAxisTick(props: {
+    x?: string | number;
+    y?: string | number;
     index?: number;
   }) {
+    const { x, y, index } = props;
     if (x == null || y == null || index == null) return null;
+    const px = Number(x);
+    const py = Number(y);
     const p = points[index];
     if (!p) return null;
     return (
-      <g transform={`translate(${x},${y}) rotate(-38)`}>
+      <g transform={`translate(${px},${py}) rotate(-38)`}>
         <text x={0} y={0} textAnchor="end" fill="#475569" fontSize={9}>
           <tspan x={0} dy={10} fontWeight={600}>
             {p.line1}

@@ -78,7 +78,14 @@ def fetch_data(session_id):
     
     return df
 
-def run_comparison(session_id):
+def run_comparison(session_id, on_matrix_ready=None):
+    """Build the comparison matrix, then generate the recommendation.
+
+    If ``on_matrix_ready`` is provided, it's invoked with the matrix payload
+    (chart + table + vendors, no report) the moment the fast Pandas step finishes
+    — before the slower Gemini recommendation call. This lets the frontend render
+    results immediately while the recommendation is still being written.
+    """
     try:
         df = fetch_data(session_id)
         print("🧮 Running Pandas matrix analysis for detailed frontend checklist...")
@@ -115,10 +122,13 @@ def run_comparison(session_id):
         #   service_category  ->  sub_service (normalized taxonomy)  ->  item_name (room)
         # The row label is the vendor's ORIGINAL item wording (item_name), with the
         # room shown as secondary. We "stop the diffusion" (clubbing) at this level.
-        df['work_title'] = df.get('work_title', '').fillna('').astype(str).str.strip()
-        df['item_name'] = df.get('item_name', '').fillna('').astype(str).str.strip()
-        df['sub_service'] = df['sub_service'].fillna('').astype(str).str.strip()
-        df['service_category'] = df['service_category'].fillna('').astype(str).str.strip()
+        # Some optional columns (item_name, work_title) may be missing entirely if
+        # the Supabase schema lacks them. Create them before normalizing so we never
+        # call .fillna on a plain string (which raises AttributeError).
+        for col in ('work_title', 'item_name', 'sub_service', 'service_category'):
+            if col not in df.columns:
+                df[col] = ''
+            df[col] = df[col].fillna('').astype(str).str.strip()
 
         def _is_blank(value):
             return (not value) or value.lower() in ('', 'nan', 'none', 'null')
@@ -203,8 +213,23 @@ def run_comparison(session_id):
 
         print(f"📊 Built comparison matrix with {len(table_data)} line items across {len(vendors)} quotes.")
 
-        # 3. Generate Expert AI Recommendation using Gemini 2.5 Flash
-        print("🧠 Generating Expert AI Recommendation with Gemini...")
+        # Publish the fast matrix result before the slow recommendation call so the
+        # frontend can render the chart + table right away.
+        matrix_payload = sanitize_for_json({
+            "chartData": chart_data,
+            "tableData": table_data,
+            "vendors": vendors,
+            "vendorMeta": vendor_meta,
+            "session_id": session_id,
+        })
+        if on_matrix_ready is not None:
+            try:
+                on_matrix_ready(matrix_payload)
+            except Exception as cb_err:
+                print(f"⚠️ on_matrix_ready callback failed: {cb_err}")
+
+        # 3. Generate Expert Recommendation using Tatva Intelligence (Gemini 2.5 Flash)
+        print("🧠 Generating Expert Recommendation with Tatva Intelligence...")
         summary_prompt = f"""
         You are 'QuoteSense', an expert procurement analyst for TatvaOps.
         Analyze these quotes based strictly on the provided data.
@@ -239,15 +264,8 @@ def run_comparison(session_id):
         
         ai_report = summary_response.text
 
-        # 4. FIXED KEYS FOR THE REACT FRONTEND!
-        final_output = {
-            "report": ai_report,         # Changed from summary_text
-            "chartData": chart_data,     # Changed from chart_data
-            "tableData": table_data,     # Changed from tabular_data
-            "vendors": vendors,
-            "vendorMeta": vendor_meta,
-            "session_id": session_id
-        }
+        # Reuse the already-sanitized matrix and just attach the report.
+        final_output = {**matrix_payload, "report": ai_report}
 
         return sanitize_for_json(final_output)
         

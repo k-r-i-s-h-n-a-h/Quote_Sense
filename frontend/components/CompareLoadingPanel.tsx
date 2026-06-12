@@ -1,21 +1,14 @@
 "use client";
 
-const STEPS = [
-  "Reading vendor PDFs with AI…",
-  "Extracting line items and pricing…",
-  "Saving quotes to the database…",
-  "Building comparison matrix…",
-  "Calculating baseline averages…",
-  "Generating expert recommendation…",
-  "Almost there — finalizing your dashboard…",
-];
-
 type Props = {
-  messageIndex: number;
+  message: string;
+  processed: number;
+  total: number;
 };
 
-export default function CompareLoadingPanel({ messageIndex }: Props) {
-  const message = STEPS[messageIndex % STEPS.length];
+export default function CompareLoadingPanel({ message, processed, total }: Props) {
+  const hasCount = total > 0;
+  const pct = hasCount ? Math.min(100, Math.round((processed / total) * 100)) : 0;
 
   return (
     <div
@@ -34,21 +27,26 @@ export default function CompareLoadingPanel({ messageIndex }: Props) {
 
         <div className="space-y-1">
           <p className="text-sm font-semibold text-blue-900">{message}</p>
+          {hasCount && (
+            <p className="text-xs font-medium text-blue-700">
+              {processed} of {total} quotes processed
+            </p>
+          )}
           <p className="text-xs text-blue-700/80">
-            Comparing multiple quotes can take couple of minutes — please keep this tab open.
+            This can take a minute or two — you can keep this tab open and watch the progress.
           </p>
         </div>
 
-        <div className="flex w-full max-w-xs gap-1.5 pt-1">
-          {STEPS.map((_, i) => (
-            <div
-              key={i}
-              className={`h-1 flex-1 rounded-full transition-colors duration-300 ${
-                i === messageIndex % STEPS.length ? "bg-blue-600" : "bg-blue-200"
-              }`}
-            />
-          ))}
-        </div>
+        {hasCount && (
+          <div className="w-full max-w-xs pt-1">
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-blue-200">
+              <div
+                className="h-full rounded-full bg-blue-600 transition-all duration-500 ease-out"
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -64,7 +64,11 @@ function QuoteSenseContent() {
   const searchParams = useSearchParams();
   const [files, setFiles] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
-  const [loadingMsgIdx, setLoadingMsgIdx] = useState(0); 
+  const [loadingMessage, setLoadingMessage] = useState("Starting analysis…");
+  const [loadingProgress, setLoadingProgress] = useState<{ processed: number; total: number }>({
+    processed: 0,
+    total: 0,
+  });
   
   const [report, setReport] = useState("");
   const [chartData, setChartData] = useState<any[]>([]);
@@ -81,6 +85,7 @@ function QuoteSenseContent() {
   const [isChatting, setIsChatting] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const loadingRef = useRef(false);
+  const partialAppliedRef = useRef(false);
 
   const vendorLabels = useMemo(
     () => buildVendorLabels(vendors, vendorMeta),
@@ -112,6 +117,17 @@ function QuoteSenseContent() {
     }
   };
 
+  // Render the chart + table from the partial matrix while the recommendation
+  // is still being generated. Does NOT set the report or chat greeting yet.
+  const applyPartialData = (data: any) => {
+    if (!data) return;
+    setChartData(data.chartData || []);
+    setTableData(data.tableData || []);
+    setVendors(data.vendors || []);
+    setVendorMeta(data.vendorMeta || {});
+    if (data.session_id) setSessionId(data.session_id);
+  };
+
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatHistory]);
@@ -121,22 +137,12 @@ function QuoteSenseContent() {
   }, [loading]);
 
   useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (loading) {
-      setLoadingMsgIdx(0);
-      interval = setInterval(() => {
-        setLoadingMsgIdx((prev) => prev + 1);
-      }, 2800);
-    }
-    return () => clearInterval(interval);
-  }, [loading]);
-
-  useEffect(() => {
     const autoSessionId = searchParams.get('session_id');
     
     if (autoSessionId && !sessionId) { 
       const fetchAutoData = async () => {
         setLoading(true);
+        setLoadingMessage("Loading your synced comparison…");
         try {
           const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8001";
           const res = await fetch(`${backendUrl}/api/get-comparison?session_id=${autoSessionId}`);
@@ -303,6 +309,55 @@ function QuoteSenseContent() {
     win.document.close();
   };
 
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  // Poll the backend for live progress until the job finishes, errors, or times out.
+  const pollProgress = async (sid: string, backendUrl: string) => {
+    const POLL_MS = 1500;
+    const MAX_MS = 600000; // 10 minutes safety cap
+    const startedAt = Date.now();
+
+    while (Date.now() - startedAt < MAX_MS) {
+      if (!loadingRef.current) return; // user reset/navigated away
+
+      let data: any;
+      try {
+        const res = await fetch(`${backendUrl}/api/progress/${sid}`);
+        data = await res.json();
+      } catch {
+        await sleep(POLL_MS); // transient network blip — keep trying
+        continue;
+      }
+
+      if (data.message) setLoadingMessage(data.message);
+      if (typeof data.processed === "number") {
+        setLoadingProgress({ processed: data.processed, total: data.total || 0 });
+      }
+
+      // Show chart + table the moment the matrix is ready (recommendation still cooking).
+      if (data.partial && !partialAppliedRef.current) {
+        applyPartialData(data.partial);
+        partialAppliedRef.current = true;
+      }
+
+      if (data.status === "done") {
+        processComparisonData(data.result);
+        return;
+      }
+      if (data.status === "error") {
+        setReport(`❌ ${data.error || data.message || "Comparison failed on the backend."}`);
+        return;
+      }
+
+      await sleep(POLL_MS);
+    }
+
+    setReport(
+      "🕒 The comparison is taking unusually long. It may still be running on the backend — " +
+        "please try again in a moment."
+    );
+  };
+
   const handleUpload = async () => {
     if (files.length < 2) {
       alert("Please upload at least 2 vendor quotes to run a comparison.");
@@ -316,30 +371,24 @@ function QuoteSenseContent() {
     setVendors([]);
     setVendorMeta({});
     setChatHistory([]);
+    setLoadingMessage("Uploading quotes…");
+    setLoadingProgress({ processed: 0, total: files.length });
+    partialAppliedRef.current = false;
 
     const formData = new FormData();
     files.forEach((file) => formData.append("files", file));
 
     const backendUrl = getBackendUrl();
-    const controller = new AbortController();
-    // Comparison runs Gemini on every PDF, so allow plenty of time before giving up.
-    const TIMEOUT_MS = 600000; // 10 minutes
-    const timeoutId = setTimeout(() => {
-      if (loadingRef.current) {
-        controller.abort(new DOMException("Comparison timed out", "TimeoutError"));
-      }
-    }, TIMEOUT_MS);
 
     try {
       try {
-        const health = await fetch(`${backendUrl}/api/health`, {
+        // A reachability probe only: any HTTP response (even 404) proves the
+        // server is up. We only treat network errors / timeouts as "down" so an
+        // older deploy missing /api/health doesn't block the whole UI.
+        await fetch(`${backendUrl}/api/health`, {
           signal: AbortSignal.timeout(5000),
         });
-        if (!health.ok) {
-          throw new Error(`Backend health check failed (${health.status})`);
-        }
       } catch {
-        clearTimeout(timeoutId);
         setReport(
           `❌ Cannot reach the backend at ${backendUrl}. Start it from the backend folder:\n\n` +
             `cd backend\nuvicorn main:app --port 8001 --host 127.0.0.1\n\n` +
@@ -348,25 +397,26 @@ function QuoteSenseContent() {
         return;
       }
 
+      // 1. Kick off the background job — returns a session_id almost instantly.
       const response = await fetch(`${backendUrl}/api/compare-quotes`, {
         method: "POST",
         body: formData,
-        signal: controller.signal,
       });
+      const startData = await response.json();
 
-      const data = await response.json();
+      if (!startData.session_id) {
+        setReport(`❌ Backend did not start the job: ${JSON.stringify(startData)}`);
+        return;
+      }
 
-      clearTimeout(timeoutId);
-      processComparisonData(data);
+      setLoadingMessage(startData.message || "Processing started…");
+
+      // 2. Poll for live progress until the result is ready.
+      await pollProgress(startData.session_id, backendUrl);
     } catch (error: any) {
-      if (error.name === "AbortError" || error.name === "TimeoutError") {
+      if (error.message === "Failed to fetch") {
         setReport(
-          "🕒 The comparison is still running on the backend but the page stopped waiting after 10 minutes. " +
-            "Check the uvicorn terminal — if you see '📊 Built comparison matrix...', just run the compare again to load the result."
-        );
-      } else if (error.message === "Failed to fetch") {
-        setReport(
-          `❌ Connection lost to ${backendUrl}. The backend may have crashed mid-request — check the terminal running uvicorn.`
+          `❌ Connection lost to ${backendUrl}. The backend may have crashed — check the terminal running uvicorn.`
         );
       } else {
         setReport(`❌ Browser Error: ${error.message}`);
@@ -374,7 +424,6 @@ function QuoteSenseContent() {
       console.error("Full Error Details:", error);
     } finally {
       setLoading(false);
-      clearTimeout(timeoutId); 
     }
   };
 
@@ -456,7 +505,13 @@ function QuoteSenseContent() {
             {loading ? "Analyzing quotes…" : `Compare ${files.length > 1 ? files.length + " " : ""}Quotes Now`}
           </button>
 
-          {loading && <CompareLoadingPanel messageIndex={loadingMsgIdx} />}
+          {loading && (
+            <CompareLoadingPanel
+              message={loadingMessage}
+              processed={loadingProgress.processed}
+              total={loadingProgress.total}
+            />
+          )}
         </div>
 
         {/* Visual Chart Section */}

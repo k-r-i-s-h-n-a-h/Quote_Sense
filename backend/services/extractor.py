@@ -24,14 +24,14 @@ supabase: Client = create_client(
     os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 )
 
-def process_quote_with_gemini(pdf_path):
-    print(f"  -> Uploading {os.path.basename(pdf_path)} to Gemini Vision API...")
+def process_quote_with_gemini(pdf_path, temperature=0.0, extra_instruction=""):
+    print(f"  -> Sending {os.path.basename(pdf_path)} to Tatva Intelligence...")
 
-    # 3. NEW UPLOAD SYNTAX
-    pdf_file = gemini_client.files.upload(file=pdf_path, config={'mime_type': 'application/pdf'})
-    
-    # Give Google a brief second to process the document
-    time.sleep(2)
+    # Send the PDF inline instead of via the Files API. This avoids a separate
+    # upload round-trip, the fixed processing sleep, and a delete call — three
+    # network hops removed per quote. (Inline is supported for PDFs up to ~20MB.)
+    with open(pdf_path, "rb") as f:
+        pdf_bytes = f.read()
 
     schema_json = ExtractedQuote.model_json_schema()
 
@@ -58,21 +58,21 @@ def process_quote_with_gemini(pdf_path):
     {json.dumps(schema_json, indent=2)}
 
     Output ONLY valid JSON exactly matching the schema above.
+    {extra_instruction}
     """
 
-    # 4. NEW GENERATE CONTENT SYNTAX (Using 2.5 Flash!)
     response = gemini_client.models.generate_content(
         model='gemini-2.5-flash',
-        contents=[pdf_file, prompt],
+        contents=[
+            types.Part.from_bytes(data=pdf_bytes, mime_type='application/pdf'),
+            prompt,
+        ],
         config=types.GenerateContentConfig(
             response_mime_type="application/json",
-            temperature=0.0,
+            temperature=temperature,
         ),
     )
 
-    # 5. NEW DELETE SYNTAX
-    gemini_client.files.delete(name=pdf_file.name)
-    
     return json.loads(response.text)
 
 def push_to_supabase(structured_data, filename, session_id):
@@ -170,42 +170,60 @@ def validate_extraction(structured_data):
 
 def process_single_pdf(file_path, session_id):
     filename = os.path.basename(file_path)
-    max_retries = 3
-    retry_count = 0
-    
-    while retry_count < max_retries:
+    # Reconciliation re-extraction is capped at ONE retry: the first pass is
+    # deterministic (temperature 0); the retry raises the temperature and adds an
+    # explicit "you missed rows" hint so it can actually produce a different (better)
+    # result. Re-running an identical deterministic prompt only reproduces the gap.
+    max_reconcile_attempts = 2
+    # Independent budget for hard failures (network/JSON errors), worth a quick retry.
+    max_error_retries = 2
+
+    error_retries = 0
+    reconcile_attempt = 0
+    structured_data = None
+
+    while reconcile_attempt < max_reconcile_attempts:
+        is_retry = reconcile_attempt > 0
         try:
-            structured_data = process_quote_with_gemini(file_path)
-            
-            print(f"\n🔥 --- RAW GEMINI JSON OUTPUT FOR {filename} --- 🔥")
-            print(
-                f"  -> Extracted vendor='{structured_data.get('vendor_name')}' "
-                f"quote_number='{structured_data.get('quote_number')}' "
-                f"quote_date='{structured_data.get('quote_date')}'"
+            structured_data = process_quote_with_gemini(
+                file_path,
+                temperature=0.4 if is_retry else 0.0,
+                extra_instruction=(
+                    "PREVIOUS ATTEMPT MISSED ROWS: your extracted line items did not "
+                    "sum to the printed Subtotal. Re-read the services table carefully "
+                    "and include EVERY numbered row from all pages."
+                    if is_retry else ""
+                ),
             )
-
-            ok, msg = validate_extraction(structured_data)
-            is_last_attempt = retry_count >= max_retries - 1
-            if ok:
-                print(f"  -> ✅ Reconciliation OK — {msg}")
-            elif not is_last_attempt:
-                # Numbers don't add up: re-extract to try to recover missed rows.
-                print(f"  -> ⚠️ {msg}. Re-extracting (attempt {retry_count + 1}/{max_retries})...")
-                retry_count += 1
-                time.sleep(5)
-                continue
-            else:
-                # Last attempt: push anyway, but flag the gap loudly.
-                print(f"  -> ⚠️ {msg}. Out of retries — saving best-effort extraction.")
-
-            push_to_supabase(structured_data, filename, session_id)
-            print(f"✅ Successfully processed {filename} on attempt {retry_count + 1}")
-            return # Exit function on success
-            
         except Exception as e:
-            retry_count += 1
-            print(f"⚠️ Attempt {retry_count} failed for {filename}: {e}")
-            if retry_count < max_retries:
-                time.sleep(5) # Wait 5 seconds before retrying
-            else:
-                print(f"❌ Permanent Failure for {filename} after {max_retries} attempts.")
+            error_retries += 1
+            print(f"⚠️ Extraction error for {filename}: {e}")
+            if error_retries <= max_error_retries:
+                time.sleep(2)
+                continue  # transient failure: retry without spending a reconcile attempt
+            print(f"❌ Permanent failure for {filename} after {max_error_retries} error retries.")
+            return
+
+        print(f"\n🔥 --- RAW GEMINI JSON OUTPUT FOR {filename} --- 🔥")
+        print(
+            f"  -> Extracted vendor='{structured_data.get('vendor_name')}' "
+            f"quote_number='{structured_data.get('quote_number')}' "
+            f"quote_date='{structured_data.get('quote_date')}'"
+        )
+
+        ok, msg = validate_extraction(structured_data)
+        if ok:
+            print(f"  -> ✅ Reconciliation OK — {msg}")
+            break
+
+        reconcile_attempt += 1
+        if reconcile_attempt < max_reconcile_attempts:
+            print(f"  -> ⚠️ {msg}. Re-extracting once with a stronger hint...")
+        else:
+            print(f"  -> ⚠️ {msg}. Saving best-effort extraction.")
+
+    if structured_data is None:
+        return
+
+    push_to_supabase(structured_data, filename, session_id)
+    print(f"✅ Successfully processed {filename}")

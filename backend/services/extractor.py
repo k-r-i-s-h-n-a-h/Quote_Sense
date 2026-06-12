@@ -62,7 +62,7 @@ def process_quote_with_gemini(pdf_path, temperature=0.0, extra_instruction=""):
     """
 
     response = gemini_client.models.generate_content(
-        model='gemini-2.5-flash',
+        model='gemini-3.5-flash',
         contents=[
             types.Part.from_bytes(data=pdf_bytes, mime_type='application/pdf'),
             prompt,

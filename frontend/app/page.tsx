@@ -385,8 +385,10 @@ function QuoteSenseContent() {
         // A reachability probe only: any HTTP response (even 404) proves the
         // server is up. We only treat network errors / timeouts as "down" so an
         // older deploy missing /api/health doesn't block the whole UI.
+        // Render's free tier cold-starts can take 30-60s, so allow a generous
+        // timeout instead of aborting after a few seconds.
         await fetch(`${backendUrl}/api/health`, {
-          signal: AbortSignal.timeout(5000),
+          signal: AbortSignal.timeout(60000),
         });
       } catch {
         setReport(

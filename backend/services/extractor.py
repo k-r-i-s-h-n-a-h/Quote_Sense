@@ -136,8 +136,14 @@ def push_to_supabase(structured_data, filename, session_id):
 def validate_extraction(structured_data):
     """Reconcile the sum of extracted line items against the quote's subtotal.
 
-    Returns (ok: bool, message: str). When the model misses rows, the line-item
-    sum falls short of the printed subtotal, which we use to trigger a re-try.
+    Returns (ok: bool, message: str, should_retry: bool).
+      - ok:           within 2% — extraction is trustworthy.
+      - should_retry: off by more than 10% — likely whole rows missed, so a
+                      re-extraction is worth the extra Gemini call.
+      - in between (2-10%): accept best-effort WITHOUT a retry. A small gap is
+                      usually rounding/taxes, not missing rows, so paying for a
+                      second full extraction there just doubles the time for no
+                      real gain.
     """
     line_sum = 0.0
     item_count = 0
@@ -155,16 +161,20 @@ def validate_extraction(structured_data):
         subtotal = 0.0
 
     if subtotal <= 0:
-        return True, f"no subtotal to reconcile ({item_count} items, sum {line_sum:.0f})"
+        return True, f"no subtotal to reconcile ({item_count} items, sum {line_sum:.0f})", False
 
     diff = abs(line_sum - subtotal)
-    tolerance = max(0.02 * subtotal, 1.0)  # allow 2% for rounding
+    tolerance = max(0.02 * subtotal, 1.0)        # within 2% = good
+    severe_tolerance = max(0.10 * subtotal, 1.0)  # off >10% = likely missed rows
     if diff <= tolerance:
-        return True, f"reconciled: {item_count} items sum {line_sum:.0f} ≈ subtotal {subtotal:.0f}"
+        return True, f"reconciled: {item_count} items sum {line_sum:.0f} ≈ subtotal {subtotal:.0f}", False
+
+    should_retry = diff > severe_tolerance
     return (
         False,
         f"MISMATCH: {item_count} items sum {line_sum:.0f} vs subtotal {subtotal:.0f} "
-        f"(diff {diff:.0f}) — likely missed rows",
+        f"(diff {diff:.0f}){' — likely missed rows' if should_retry else ' — minor, accepting'}",
+        should_retry,
     )
 
 
@@ -211,9 +221,15 @@ def process_single_pdf(file_path, session_id):
             f"quote_date='{structured_data.get('quote_date')}'"
         )
 
-        ok, msg = validate_extraction(structured_data)
+        ok, msg, should_retry = validate_extraction(structured_data)
         if ok:
             print(f"  -> ✅ Reconciliation OK — {msg}")
+            break
+
+        # Only spend a second (expensive) extraction when the gap is large enough
+        # to suggest whole rows were missed. Minor gaps are accepted as-is.
+        if not should_retry:
+            print(f"  -> ⚠️ {msg}. Accepting without a retry.")
             break
 
         reconcile_attempt += 1

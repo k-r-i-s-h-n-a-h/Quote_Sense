@@ -1,11 +1,17 @@
 import sys
 import os
 import math
+import concurrent.futures
 import pandas as pd
 from dotenv import load_dotenv
 from supabase import create_client, Client
 import traceback
 import json
+
+# Hard ceiling for the recommendation LLM call. If Gemini takes longer than this
+# (huge prompt, slow upstream, or a hang), we stop waiting and return a
+# data-driven fallback so the run always finishes with a report.
+RECOMMENDATION_TIMEOUT_SEC = 45
 
 from google import genai
 from google.genai import types
@@ -77,6 +83,72 @@ def fetch_data(session_id):
     df['vendor_name'] = df['vendor_name'] + " (" + df['source_filename'] + ")"
     
     return df
+
+def _build_fallback_report(chart_data):
+    """A deterministic, no-AI recommendation built straight from the totals.
+
+    Used when the Gemini recommendation call times out or errors, so the user
+    still gets a usable summary alongside the comparison table.
+    """
+    if not chart_data:
+        return (
+            "- **Recommendation:** Comparison table is ready above; the AI summary "
+            "could not be generated this time — please re-run to retry."
+        )
+    ranked = sorted(chart_data, key=lambda x: x.get("total", 0))
+    cheapest = ranked[0]
+    priciest = ranked[-1]
+    lines = [
+        f"- **Lowest Total:** {cheapest['vendor']} is the cheapest overall at "
+        f"₹{cheapest['total']:,.0f}."
+    ]
+    if len(ranked) > 1 and priciest.get("total", 0) > 0:
+        diff_pct = (priciest["total"] - cheapest["total"]) / priciest["total"] * 100
+        lines.append(
+            f"- **Spread:** {priciest['vendor']} is the highest at "
+            f"₹{priciest['total']:,.0f} (~{diff_pct:.0f}% more than the lowest)."
+        )
+    lines.append(
+        "- **Scope Check:** A lower total may just mean a smaller scope — compare the "
+        "line items in the table before deciding."
+    )
+    lines.append(
+        "- **Recommendation:** This is an automatic summary (the detailed AI write-up "
+        "timed out). Re-run the comparison to retry the full analysis."
+    )
+    return "\n".join(lines)
+
+
+def _generate_recommendation(summary_prompt, chart_data):
+    """Run the recommendation LLM call with a hard timeout + graceful fallback.
+
+    The Gemini call runs in a worker thread so we can abandon it after
+    RECOMMENDATION_TIMEOUT_SEC instead of letting a slow/hung request block the
+    whole job forever. We don't wait on the orphaned thread (shutdown wait=False).
+    """
+    ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    try:
+        future = ex.submit(
+            lambda: gemini_client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=summary_prompt,
+                config=types.GenerateContentConfig(temperature=0.2),
+            )
+        )
+        summary_response = future.result(timeout=RECOMMENDATION_TIMEOUT_SEC)
+        return summary_response.text
+    except concurrent.futures.TimeoutError:
+        print(
+            f"⚠️ Recommendation timed out after {RECOMMENDATION_TIMEOUT_SEC}s — "
+            "returning data-driven fallback summary."
+        )
+        return _build_fallback_report(chart_data)
+    except Exception as e:
+        print(f"⚠️ Recommendation generation failed: {e} — using fallback summary.")
+        return _build_fallback_report(chart_data)
+    finally:
+        ex.shutdown(wait=False)
+
 
 def run_comparison(session_id, on_matrix_ready=None):
     """Build the comparison matrix, then generate the recommendation.
@@ -230,12 +302,29 @@ def run_comparison(session_id, on_matrix_ready=None):
 
         # 3. Generate Expert Recommendation using Tatva Intelligence (Gemini 2.5 Flash)
         print("🧠 Generating Expert Recommendation with Tatva Intelligence...")
+
+        # Send a COMPACT view of the matrix to the LLM — only the fields it needs
+        # to reason about price (item, sub-service, category, market avg, and each
+        # vendor's amount). This drops duplicate/UI-only keys (room, work_item,
+        # taxonomy) and roughly halves the prompt size, making the call faster and
+        # far less likely to hang on large quotes.
+        compact_matrix = [
+            {
+                "item": r["item_name"],
+                "sub_service": r["sub_service"],
+                "category": r["category"],
+                "market_avg": r["market_average"],
+                **{v: round(float(r.get(v, 0.0)), 2) for v in vendors},
+            }
+            for r in table_data
+        ]
+
         summary_prompt = f"""
         You are 'QuoteSense', an expert procurement analyst for TatvaOps.
         Analyze these quotes based strictly on the provided data.
         
-        Data Matrix (Includes the 'market_average' mean for each sub-service):
-        {table_data}
+        Data Matrix (Includes the 'market_avg' mean for each line item):
+        {compact_matrix}
         Overall Totals: {chart_data}
         
         Write the analysis as SHORT, POINT-WISE bullets — NOT a paragraph.
@@ -256,13 +345,7 @@ def run_comparison(session_id, on_matrix_ready=None):
         - **Recommendation:** a clear, practical suggestion on which to pick or what to confirm.
         """
 
-        summary_response = gemini_client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=summary_prompt,
-            config=types.GenerateContentConfig(temperature=0.2)
-        )
-        
-        ai_report = summary_response.text
+        ai_report = _generate_recommendation(summary_prompt, chart_data)
 
         # Reuse the already-sanitized matrix and just attach the report.
         final_output = {**matrix_payload, "report": ai_report}

@@ -322,7 +322,10 @@ function QuoteSenseContent() {
 
       let data: any;
       try {
-        const res = await fetch(`${backendUrl}/api/progress/${sid}`);
+        // Once we've applied the matrix, tell the backend so it stops re-sending
+        // the (large) partial payload on every poll.
+        const hasPartialParam = partialAppliedRef.current ? "?has_partial=true" : "";
+        const res = await fetch(`${backendUrl}/api/progress/${sid}${hasPartialParam}`);
         data = await res.json();
       } catch {
         await sleep(POLL_MS); // transient network blip — keep trying

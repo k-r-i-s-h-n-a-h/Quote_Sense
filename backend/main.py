@@ -190,8 +190,13 @@ async def handle_customer_upload(
 
 
 @app.get("/api/progress/{session_id}")
-async def get_progress(session_id: str):
-    """Poll endpoint for the async compare pipeline."""
+async def get_progress(session_id: str, has_partial: bool = False):
+    """Poll endpoint for the async compare pipeline.
+
+    ``has_partial`` lets the frontend say "I already have the matrix", so we
+    don't re-send the (large) partial payload on every 1.5s poll — that was
+    wasting ~12.9kB per request for the whole run.
+    """
     job = JOBS.get(session_id)
     if not job:
         return {"status": "unknown", "message": "No job found for this session."}
@@ -205,7 +210,8 @@ async def get_progress(session_id: str):
     }
     # While still processing, expose the partial matrix (chart + table) once it's
     # ready so the frontend can render results before the recommendation finishes.
-    if job.get("status") == "processing" and job.get("partial"):
+    # Send it only until the client confirms it has it (has_partial=true).
+    if job.get("status") == "processing" and job.get("partial") and not has_partial:
         payload["partial"] = job.get("partial")
     # Only ship the full (large) result once, when finished.
     if job.get("status") == "done":

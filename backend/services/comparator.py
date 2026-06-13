@@ -87,12 +87,21 @@ def fetch_data(session_id):
     return df
 
 
-def _moving_avg_key(service_category: str, sub_service: str) -> dict:
-    """Supabase row identity for a moving-average bucket (sub-service level)."""
+def _line_item_key(item_label: str, room: str) -> str:
+    """Stable Supabase item_key for one comparison-matrix row."""
+    label = (item_label or "").strip()
+    loc = (room or "").strip()
+    if loc and loc.lower() not in ("", "nan", "none") and loc != label:
+        return f"{label}::{loc}"
+    return label or loc or "Unspecified"
+
+
+def _moving_avg_key(service_category: str, sub_service: str, item_key: str) -> dict:
+    """Supabase row identity for a moving-average bucket (line-item level)."""
     return {
         "service_category": service_category,
         "sub_service": sub_service,
-        "item_key": sub_service,
+        "item_key": item_key,
     }
 
 
@@ -147,6 +156,7 @@ def _update_moving_average(
     session_id: str,
     service_category: str,
     sub_service: str,
+    item_key: str,
     batch_prices: list[float],
 ) -> tuple[float, int]:
     """Merge this session's batch into the stored weighted moving average.
@@ -155,17 +165,18 @@ def _update_moving_average(
       new_avg = (prev_avg × prev_weight + batch_avg × batch_weight) / (prev_weight + batch_weight)
       new_weight = prev_weight + batch_weight
 
-    ``batch_prices`` = vendor amounts > 0 for this sub-service in the current session.
+    ``batch_prices`` = vendor amounts > 0 for this line item in the current session.
     """
+    label = f"{sub_service} / {item_key}"
     batch_weight = len(batch_prices)
+    key = _moving_avg_key(service_category, sub_service, item_key)
     if batch_weight == 0:
-        existing = _fetch_moving_average_row(_moving_avg_key(service_category, sub_service))
+        existing = _fetch_moving_average_row(key)
         if existing:
             return float(existing["moving_average"]), int(existing["weight"])
         return 0.0, 0
 
     batch_avg = sum(batch_prices) / batch_weight
-    key = _moving_avg_key(service_category, sub_service)
     existing = _fetch_moving_average_row(key)
 
     if existing and _session_already_applied(session_id, existing["id"]):
@@ -177,7 +188,7 @@ def _update_moving_average(
         moving_avg = batch_avg
         weight = batch_weight
         print(
-            f"  📊 Moving avg bootstrap: {sub_service} → "
+            f"  📊 Moving avg bootstrap: {label} → "
             f"₹{moving_avg:,.0f} (weight {weight} from {batch_weight} quote(s) in this session)"
         )
     else:
@@ -186,7 +197,7 @@ def _update_moving_average(
         moving_avg = ((prev_avg * prev_weight) + (batch_avg * batch_weight)) / (prev_weight + batch_weight)
         weight = prev_weight + batch_weight
         print(
-            f"  📊 Moving avg updated: {sub_service} → "
+            f"  📊 Moving avg updated: {label} → "
             f"₹{moving_avg:,.0f} (weight {prev_weight} + {batch_weight} = {weight})"
         )
 
@@ -381,27 +392,18 @@ def run_comparison(session_id, on_matrix_ready=None):
         vendors = pivot_df.columns.tolist()
         table_data = [] # Renamed for React frontend!
 
-        # Weighted moving averages per sub-service, built from real quote amounts.
-        # First comparison for a sub-service bootstraps the row; later ones merge in.
-        moving_avg_cache: dict[tuple[str, str], tuple[float, int]] = {}
-        for category, sub_service_name in pivot_df.index.droplevel([2, 3]).unique():
-            sub_rows = pivot_df.xs(
-                (category, sub_service_name),
-                level=["service_category", "sub_service"],
-            )
-            if isinstance(sub_rows, pd.Series):
-                sub_rows = sub_rows.to_frame().T
-            vendor_sums = sub_rows.sum(axis=0)
-            batch_prices = [float(vendor_sums[v]) for v in vendors if float(vendor_sums[v]) > 0]
-            cache_key = (str(category), str(sub_service_name))
-            moving_avg_cache[cache_key] = _update_moving_average(
-                session_id, str(category), str(sub_service_name), batch_prices
-            )
-
         for index, row in pivot_df.iterrows():
             category, sub_service_name, item_label, room = index
-            cache_key = (str(category), str(sub_service_name))
-            moving_avg, moving_weight = moving_avg_cache.get(cache_key, (0.0, 0))
+            line_key = _line_item_key(str(item_label), str(room))
+            # Per line item: each vendor's price for THIS row only (>0).
+            batch_prices = [float(row[v]) for v in vendors if float(row[v]) > 0]
+            moving_avg, moving_weight = _update_moving_average(
+                session_id,
+                str(category),
+                str(sub_service_name),
+                line_key,
+                batch_prices,
+            )
 
             row_dict = {
                 "category": str(category),             # level 1: service category group

@@ -217,3 +217,14 @@ export function getChartYAxisConfig(totals: number[]): {
 export function formatInrFull(value: number): string {
   return `₹${Number(value).toLocaleString("en-IN")}`;
 }
+
+/** Compare a vendor price to the moving-average baseline. */
+export function priceVsBaseline(
+  price: number,
+  baseline: number
+): "below" | "above" | "neutral" {
+  if (!baseline || baseline <= 0 || !price || price <= 0) return "neutral";
+  const diffPct = ((price - baseline) / baseline) * 100;
+  if (Math.abs(diffPct) < 2) return "neutral";
+  return diffPct < 0 ? "below" : "above";
+}

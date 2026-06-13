@@ -13,5 +13,5 @@ jobs:
     steps:
       - name: Ping Render Backend
         run: |
-          curl -s -I https://quote-comparator.onrender.com/ | grep "HTTP"
+          curl -s -I https://tatvaops-quotesense.onrender.com/api/health | grep "HTTP"
           echo "Backend pinged successfully at $(date)"

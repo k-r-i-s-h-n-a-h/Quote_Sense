@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation";
 import CompareLoadingPanel from "../components/CompareLoadingPanel";
 import VendorInsights from "../components/VendorInsights";
 import RecommendationView from "../components/RecommendationView";
-import { buildVendorLabels } from "../lib/format";
+import { buildVendorLabels, formatInrFull, priceVsBaseline } from "../lib/format";
 
 const VendorChart = dynamic(() => import("../components/VendorChart"), {
   ssr: false,
@@ -222,21 +222,29 @@ function QuoteSenseContent() {
         })
         .join("");
 
+    const movingAvgCell = (row: any) => {
+      const avg = Number(row.moving_average ?? row.market_average) || 0;
+      const weight = Number(row.moving_weight) || 0;
+      if (avg <= 0) return `<td class="num na">—</td>`;
+      const weightNote = weight > 0 ? `<div class="ma-weight">${weight} quotes</div>` : "";
+      return `<td class="num ma">${esc(formatInrFull(avg))}${weightNote}</td>`;
+    };
+
     const bodyRows = groupTableData(tableData)
       .map((cat) => {
-        const catRow = `<tr class="cat"><td colspan="${vendors.length + 1}">${esc(
+        const catRow = `<tr class="cat"><td colspan="${vendors.length + 2}">${esc(
           cat.category
         )}</td></tr>`;
         const subBlocks = cat.subs
           .map((sub) => {
-            const subRow = `<tr class="sub"><td colspan="${vendors.length + 1}">${esc(
+            const subRow = `<tr class="sub"><td colspan="${vendors.length + 2}">${esc(
               sub.sub
             )}</td></tr>`;
             const itemRows = sub.rows
               .map((row) => {
                 const name = esc(row.item_name || row.work_item || row.sub_service);
                 const room = row.room ? `<span class="room">${esc(row.room)}</span>` : "";
-                return `<tr><td class="desc">${name}${room}</td>${priceCells(row)}</tr>`;
+                return `<tr><td class="desc">${name}${room}</td>${movingAvgCell(row)}${priceCells(row)}</tr>`;
               })
               .join("");
             return subRow + itemRows;
@@ -272,7 +280,8 @@ function QuoteSenseContent() {
   .v-sub { font-size: 9px; font-weight: 400; color: #9ca3af; margin-top: 2px; }
   tbody td { padding: 7px 10px; border-bottom: 1px solid #f1f5f9; }
   td.num { text-align: right; font-variant-numeric: tabular-nums; }
-  td.num.na { color: #f87171; font-style: italic; }
+  td.num.ma { color: #4338ca; font-weight: 600; }
+  .ma-weight { font-size: 8px; font-weight: 500; color: #94a3b8; margin-top: 2px; }
   td.desc { padding-left: 28px; font-weight: 600; color: #111827; }
   td.desc .room { display: block; font-size: 9px; font-weight: 400; text-transform: uppercase; color: #9ca3af; margin-top: 2px; }
   tr.cat td { background: #eef2ff; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: #1e3a8a; font-size: 10px; border-top: 1px solid #c7d2fe; border-bottom: 1px solid #c7d2fe; }
@@ -289,7 +298,7 @@ function QuoteSenseContent() {
   </div>
   <table>
     <thead>
-      <tr><th>Service Description</th>${vendorHeadCells}</tr>
+      <tr><th>Service Description</th><th class="num">Moving Avg</th>${vendorHeadCells}</tr>
     </thead>
     <tbody>${bodyRows}</tbody>
   </table>
@@ -459,16 +468,21 @@ function QuoteSenseContent() {
   };
 
   return (
-    <main className="min-h-screen bg-gray-50 p-6 md:p-10 font-sans text-gray-800 pb-20">
+    <main className="min-h-screen bg-[#f8fafc] p-6 md:p-10 font-sans text-slate-800 pb-20">
       <div className="max-w-5xl mx-auto space-y-8">
         
-        <div className="text-center space-y-2">
-          <h1 className="text-4xl font-bold text-blue-900">QuoteSense 📊</h1>
-          <p className="text-gray-600 text-lg">TatvaOps Intelligent Quote Comparator</p>
+        <div className="text-center space-y-3 pt-2">
+          <div className="inline-flex items-center gap-2 rounded-full bg-blue-50 border border-blue-100 px-3 py-1 text-xs font-semibold text-blue-700 tracking-wide uppercase">
+            TatvaOps · Procurement Intelligence
+          </div>
+          <h1 className="text-3xl md:text-4xl font-bold text-slate-900 tracking-tight">QuoteSense</h1>
+          <p className="text-slate-500 text-base md:text-lg max-w-xl mx-auto">
+            Compare vendor quotes side-by-side with AI-powered insights and a live market baseline.
+          </p>
         </div>
 
         {/* Upload Section */}
-        <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200">
+        <div className="qs-card p-8">
           <div className="flex items-center justify-between mb-5">
             <h2 className="text-xl font-semibold">1. Select Vendor Quotes (PDF)</h2>
             {files.length > 0 && !loading && (
@@ -521,16 +535,22 @@ function QuoteSenseContent() {
 
         {/* Visual Chart Section */}
         {chartData.length > 0 && (
-          <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <h2 className="text-2xl font-bold text-gray-800 mb-6">Total Cost Comparison</h2>
+          <div className="qs-card p-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <h2 className="text-xl font-semibold text-slate-900 mb-1">Total Cost Comparison</h2>
+            <p className="text-sm text-slate-500 mb-6">Grand total across all quoted services per vendor.</p>
             <VendorChart data={chartData} meta={vendorMeta} />
           </div>
         )}
 
        {tableData.length > 0 && (
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 animate-in fade-in slide-in-from-bottom-4 duration-700 overflow-hidden">
-            <div className="flex items-center justify-between mb-6 px-2">
-              <h2 className="text-2xl font-bold text-gray-800">Tatva Quotes Comparison Matrix</h2>
+          <div className="qs-card p-6 md:p-8 animate-in fade-in slide-in-from-bottom-4 duration-700 overflow-hidden">
+            <div className="flex items-center justify-between mb-6 px-1">
+              <div>
+                <h2 className="text-xl font-semibold text-slate-900">Comparison Matrix</h2>
+                <p className="text-sm text-slate-500 mt-1">
+                  Line-by-line pricing with a historical moving average baseline.
+                </p>
+              </div>
               <button
                 onClick={handleDownloadPdf}
                 title="Download comparison as PDF"
@@ -545,16 +565,22 @@ function QuoteSenseContent() {
               </button>
             </div>
             
-            <div className="overflow-x-auto border rounded-lg">
-              <table className="w-full text-left border-collapse min-w-[800px]">
+            <div className="overflow-x-auto border border-slate-200 rounded-lg qs-table-scroll max-h-[70vh]">
+              <table className="w-full text-left border-collapse min-w-[900px]">
                 <thead>
-                  <tr className="bg-gray-50 text-gray-700 uppercase text-[10px] font-bold tracking-widest">
-                    <th className="p-4 border-b border-gray-200 w-[250px]">Service Description</th>
+                  <tr className="text-slate-500 uppercase text-[10px] font-bold tracking-widest">
+                    <th className="p-4 border-b border-slate-200 w-[250px] bg-slate-50">Service Description</th>
+                    <th className="p-4 border-b border-slate-200 text-right w-[120px] bg-indigo-50/60 text-indigo-700">
+                      <div>Moving Avg</div>
+                      <div className="text-[9px] font-normal normal-case tracking-normal text-indigo-400 mt-0.5">
+                        Historical baseline
+                      </div>
+                    </th>
                     {vendors.map((vendor, i) => {
                       const info = vendorLabels[vendor];
                       const meta = vendorMeta[vendor] || {};
                       return (
-                        <th key={i} className="p-4 border-b border-gray-200 text-right align-top max-w-[170px]">
+                        <th key={i} className="p-4 border-b border-slate-200 text-right align-top max-w-[170px] bg-slate-50">
                           <div className="ml-auto max-w-[170px]" title={info?.full ?? vendor}>
                             <div className="text-[11px] font-bold leading-snug normal-case tracking-normal text-gray-800 line-clamp-2 break-words">
                               {info?.company ?? vendor.split(" (")[0]}
@@ -578,52 +604,91 @@ function QuoteSenseContent() {
                   </tr>
                 </thead>
                 
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-slate-100">
                   {groupTableData(tableData).map((cat, ci) => (
                     <React.Fragment key={ci}>
                       {/* Level 1 — Service category */}
-                      <tr className="bg-blue-900/5">
-                        <td colSpan={vendors.length + 1} className="p-3 pl-4 text-sm font-black text-blue-900 uppercase tracking-wider border-y border-blue-100">
-                          📁 {cat.category}
+                      <tr className="bg-slate-900/[0.03]">
+                        <td colSpan={vendors.length + 2} className="p-3 pl-4 text-sm font-bold text-slate-800 uppercase tracking-wider border-y border-slate-200">
+                          {cat.category}
                         </td>
                       </tr>
 
                       {cat.subs.map((sub, si) => (
                         <React.Fragment key={si}>
                           {/* Level 2 — Sub-service */}
-                          <tr className="bg-gray-50/80">
-                            <td colSpan={vendors.length + 1} className="py-2 pl-7 pr-4 text-[11px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-100">
+                          <tr className="bg-slate-50/90">
+                            <td colSpan={vendors.length + 2} className="py-2 pl-7 pr-4 text-[11px] font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-100">
                               {sub.sub}
                             </td>
                           </tr>
 
-                          {/* Level 3 — Work items (vendor's original wording + room) */}
-                          {sub.rows.map((row, idx) => (
-                            <tr key={idx} className="hover:bg-gray-50/80 transition-colors group">
+                          {/* Level 3 — Work items */}
+                          {sub.rows.map((row, idx) => {
+                            const baseline = Number(row.moving_average ?? row.market_average) || 0;
+                            const weight = Number(row.moving_weight) || 0;
+                            return (
+                            <tr key={idx} className="hover:bg-slate-50/70 transition-colors group">
                               <td className="py-3 pl-11 pr-4 max-w-[320px]">
-                                <div className="text-sm font-semibold text-gray-900 leading-tight">
+                                <div className="text-sm font-medium text-slate-900 leading-tight">
                                   {row.item_name || row.work_item || row.sub_service}
                                 </div>
                                 {row.room && (
-                                  <div className="text-[10px] text-gray-400 mt-0.5 uppercase tracking-wide group-hover:text-gray-500">
+                                  <div className="text-[10px] text-slate-400 mt-0.5 uppercase tracking-wide">
                                     {row.room}
                                   </div>
                                 )}
                               </td>
+                              <td className="p-4 text-right align-top bg-indigo-50/20 border-r border-indigo-100/50">
+                                {baseline > 0 ? (
+                                  <>
+                                    <div className="text-sm font-semibold text-indigo-700 tabular-nums">
+                                      {formatInrFull(baseline)}
+                                    </div>
+                                    {weight > 0 && (
+                                      <div className="text-[10px] text-slate-400 mt-0.5" title="Quotes used to build this baseline">
+                                        n={weight}
+                                      </div>
+                                    )}
+                                  </>
+                                ) : (
+                                  <span className="text-sm text-slate-300">—</span>
+                                )}
+                              </td>
                               {vendors.map((vendor, vIdx) => {
                                 const value = row[vendor];
+                                const vs = priceVsBaseline(Number(value), baseline);
                                 return (
-                                  <td key={vIdx} className={`p-4 text-right ${value === 0 ? "opacity-60" : ""}`}>
+                                  <td key={vIdx} className={`p-4 text-right tabular-nums ${value === 0 ? "opacity-50" : ""}`}>
                                     {value === 0 ? (
-                                      <span className="text-[14px] font-bold text-red-400 italic">N/A</span>
+                                      <span className="text-sm font-medium text-rose-300 italic">N/A</span>
                                     ) : (
-                                      <span className="text-sm font-medium text-gray-700">₹{Number(value).toLocaleString()}</span>
+                                      <span
+                                        className={`text-sm font-medium ${
+                                          vs === "below"
+                                            ? "text-emerald-700"
+                                            : vs === "above"
+                                              ? "text-amber-700"
+                                              : "text-slate-700"
+                                        }`}
+                                        title={
+                                          baseline > 0
+                                            ? vs === "below"
+                                              ? "Below moving average"
+                                              : vs === "above"
+                                                ? "Above moving average"
+                                                : "Near moving average"
+                                            : undefined
+                                        }
+                                      >
+                                        {formatInrFull(Number(value))}
+                                      </span>
                                     )}
                                   </td>
                                 );
                               })}
                             </tr>
-                          ))}
+                          );})}
                         </React.Fragment>
                       ))}
                     </React.Fragment>
@@ -631,6 +696,11 @@ function QuoteSenseContent() {
                 </tbody>
               </table>
             </div>
+            <p className="text-[11px] text-slate-400 mt-3 px-1">
+              <span className="text-emerald-700 font-medium">Green</span> = below baseline ·{" "}
+              <span className="text-amber-700 font-medium">Amber</span> = above baseline · Moving avg
+              updates as more quotes are processed.
+            </p>
           </div>
         )}
 
@@ -641,8 +711,9 @@ function QuoteSenseContent() {
 
         {/* AI Recommendation Section */}
         {report && (
-          <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200">
-            <h2 className="text-2xl font-bold text-gray-800 mb-4">Expert Recommendation</h2>
+          <div className="qs-card p-8">
+            <h2 className="text-xl font-semibold text-slate-900 mb-1">Expert Recommendation</h2>
+            <p className="text-sm text-slate-500 mb-6">AI analysis based on totals, scope, and moving-average baselines.</p>
             <div className="mb-8">
               <RecommendationView text={report} />
             </div>

@@ -108,11 +108,11 @@ export default function VendorInsights({
       : 0;
 
   return (
-    <div className="bg-white p-6 md:p-8 rounded-xl shadow-sm border border-gray-200 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="qs-card p-6 md:p-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6">
         <div>
-          <h2 className="text-2xl font-bold text-gray-800">Who fits best, at a glance</h2>
-          <p className="text-sm text-gray-500 mt-1">
+          <h2 className="text-xl font-semibold text-slate-900">Who fits best, at a glance</h2>
+          <p className="text-sm text-slate-500 mt-1">
             Pick a service to see which quote costs the least for that work.
           </p>
         </div>

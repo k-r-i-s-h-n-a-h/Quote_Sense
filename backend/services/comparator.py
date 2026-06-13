@@ -84,6 +84,135 @@ def fetch_data(session_id):
     
     return df
 
+    return df
+
+
+def _moving_avg_key(service_category: str, sub_service: str) -> dict:
+    """Supabase row identity for a moving-average bucket (sub-service level)."""
+    return {
+        "service_category": service_category,
+        "sub_service": sub_service,
+        "item_key": sub_service,
+    }
+
+
+def _fetch_moving_average_row(key: dict):
+    """Return an existing market_moving_averages row, or None."""
+    try:
+        res = (
+            supabase.table("market_moving_averages")
+            .select("*")
+            .match(key)
+            .limit(1)
+            .execute()
+        )
+        return res.data[0] if res.data else None
+    except Exception as e:
+        print(f"⚠️ Could not fetch moving average for {key}: {e}")
+        return None
+
+
+def _session_already_applied(session_id: str, item_id: str) -> bool:
+    """True if this comparison session already updated this moving-avg bucket."""
+    if not session_id or not item_id:
+        return False
+    try:
+        res = (
+            supabase.table("market_moving_avg_sessions")
+            .select("id")
+            .eq("session_id", session_id)
+            .eq("item_id", item_id)
+            .limit(1)
+            .execute()
+        )
+        return bool(res.data)
+    except Exception as e:
+        print(f"⚠️ Could not check moving-avg session guard: {e}")
+        return False
+
+
+def _record_moving_avg_session(session_id: str, item_id: str, batch_avg: float, batch_weight: int):
+    try:
+        supabase.table("market_moving_avg_sessions").insert({
+            "session_id": session_id,
+            "item_id": item_id,
+            "batch_avg": round(batch_avg, 2),
+            "batch_weight": batch_weight,
+        }).execute()
+    except Exception as e:
+        print(f"⚠️ Could not record moving-avg session {session_id}: {e}")
+
+
+def _update_moving_average(
+    session_id: str,
+    service_category: str,
+    sub_service: str,
+    batch_prices: list[float],
+) -> tuple[float, int]:
+    """Merge this session's batch into the stored weighted moving average.
+
+    Formula (from manager's sheet):
+      new_avg = (prev_avg × prev_weight + batch_avg × batch_weight) / (prev_weight + batch_weight)
+      new_weight = prev_weight + batch_weight
+
+    ``batch_prices`` = vendor amounts > 0 for this sub-service in the current session.
+    """
+    batch_weight = len(batch_prices)
+    if batch_weight == 0:
+        existing = _fetch_moving_average_row(_moving_avg_key(service_category, sub_service))
+        if existing:
+            return float(existing["moving_average"]), int(existing["weight"])
+        return 0.0, 0
+
+    batch_avg = sum(batch_prices) / batch_weight
+    key = _moving_avg_key(service_category, sub_service)
+    existing = _fetch_moving_average_row(key)
+
+    if existing and _session_already_applied(session_id, existing["id"]):
+        return float(existing["moving_average"]), int(existing["weight"])
+
+    if existing is None:
+        # First real quotes for this sub-service → bootstrap baseline from this session.
+        # No manual seeding required: batch_avg and batch_weight come from actual vendor prices.
+        moving_avg = batch_avg
+        weight = batch_weight
+        print(
+            f"  📊 Moving avg bootstrap: {sub_service} → "
+            f"₹{moving_avg:,.0f} (weight {weight} from {batch_weight} quote(s) in this session)"
+        )
+    else:
+        prev_avg = float(existing["moving_average"])
+        prev_weight = int(existing["weight"])
+        moving_avg = ((prev_avg * prev_weight) + (batch_avg * batch_weight)) / (prev_weight + batch_weight)
+        weight = prev_weight + batch_weight
+        print(
+            f"  📊 Moving avg updated: {sub_service} → "
+            f"₹{moving_avg:,.0f} (weight {prev_weight} + {batch_weight} = {weight})"
+        )
+
+    payload = {
+        **key,
+        "moving_average": round(moving_avg, 2),
+        "weight": weight,
+        "last_session_id": session_id,
+    }
+
+    try:
+        if existing and existing.get("id"):
+            supabase.table("market_moving_averages").update(payload).eq("id", existing["id"]).execute()
+            item_id = existing["id"]
+        else:
+            res = supabase.table("market_moving_averages").insert(payload).execute()
+            item_id = res.data[0]["id"] if res.data else None
+
+        if item_id:
+            _record_moving_avg_session(session_id, item_id, batch_avg, batch_weight)
+    except Exception as e:
+        print(f"⚠️ Could not persist moving average for {key}: {e}")
+
+    return round(moving_avg, 2), weight
+
+
 def _build_fallback_report(chart_data):
     """A deterministic, no-AI recommendation built straight from the totals.
 
@@ -252,11 +381,27 @@ def run_comparison(session_id, on_matrix_ready=None):
         vendors = pivot_df.columns.tolist()
         table_data = [] # Renamed for React frontend!
 
+        # Weighted moving averages per sub-service, built from real quote amounts.
+        # First comparison for a sub-service bootstraps the row; later ones merge in.
+        moving_avg_cache: dict[tuple[str, str], tuple[float, int]] = {}
+        for category, sub_service_name in pivot_df.index.droplevel([2, 3]).unique():
+            sub_rows = pivot_df.xs(
+                (category, sub_service_name),
+                level=["service_category", "sub_service"],
+            )
+            if isinstance(sub_rows, pd.Series):
+                sub_rows = sub_rows.to_frame().T
+            vendor_sums = sub_rows.sum(axis=0)
+            batch_prices = [float(vendor_sums[v]) for v in vendors if float(vendor_sums[v]) > 0]
+            cache_key = (str(category), str(sub_service_name))
+            moving_avg_cache[cache_key] = _update_moving_average(
+                session_id, str(category), str(sub_service_name), batch_prices
+            )
+
         for index, row in pivot_df.iterrows():
             category, sub_service_name, item_label, room = index
-            # Calculate the Mean (Baseline) ONLY using vendors who actually provided the service (>0)
-            vendor_prices = [float(row[v]) for v in vendors if float(row[v]) > 0]
-            market_avg = sum(vendor_prices) / len(vendor_prices) if vendor_prices else 0.0
+            cache_key = (str(category), str(sub_service_name))
+            moving_avg, moving_weight = moving_avg_cache.get(cache_key, (0.0, 0))
 
             row_dict = {
                 "category": str(category),             # level 1: service category group
@@ -265,7 +410,10 @@ def run_comparison(session_id, on_matrix_ready=None):
                 "room": str(room),                     # location shown as secondary text
                 "work_item": str(item_label),          # kept for backward-compat
                 "taxonomy": str(sub_service_name),     # kept for backward-compat
-                "market_average": round(market_avg, 2),  # kept for AI; hidden in UI
+                "moving_average": moving_avg,
+                "moving_weight": moving_weight,
+                # backward-compat alias for older clients / AI prompt
+                "market_average": moving_avg,
                 "_cat_order": float(cat_order.get(category, 1e9)),
                 "_sub_order": float(sub_order.get((category, sub_service_name), 1e9)),
                 "_item_order": float(
@@ -313,7 +461,8 @@ def run_comparison(session_id, on_matrix_ready=None):
                 "item": r["item_name"],
                 "sub_service": r["sub_service"],
                 "category": r["category"],
-                "market_avg": r["market_average"],
+                "moving_avg": r["moving_average"],
+                "moving_weight": r["moving_weight"],
                 **{v: round(float(r.get(v, 0.0)), 2) for v in vendors},
             }
             for r in table_data
@@ -323,7 +472,8 @@ def run_comparison(session_id, on_matrix_ready=None):
         You are 'QuoteSense', an expert procurement analyst for TatvaOps.
         Analyze these quotes based strictly on the provided data.
         
-        Data Matrix (Includes the 'market_avg' mean for each line item):
+        Data Matrix (Includes the historical 'moving_avg' baseline and 'moving_weight'
+        — the number of past quotes used to build that baseline):
         {compact_matrix}
         Overall Totals: {chart_data}
         
@@ -338,7 +488,7 @@ def run_comparison(session_id, on_matrix_ready=None):
 
         COVER THESE POINTS (one bullet each):
         - **Lowest Total:** which quote is cheapest overall and by roughly how much.
-        - **Price vs Market:** who tends to price above or below the market average on common work.
+        - **Price vs Baseline:** who tends to price above or below the moving average baseline on common work.
         - **Scope Difference:** call out apples-to-oranges — a lower total may just mean fewer
           services/items, so name what is missing or extra.
         - **Strength:** which vendor is the better choice for a key service category and why.

@@ -468,7 +468,7 @@ function QuoteSenseContent() {
   };
 
   return (
-    <main className="min-h-screen bg-[#f8fafc] p-6 md:p-10 font-sans text-slate-800 pb-20">
+    <main className="bg-[#f8fafc] p-6 md:p-10 font-sans text-slate-800">
       <div className="max-w-5xl mx-auto space-y-8">
         
         <div className="text-center space-y-3 pt-2">

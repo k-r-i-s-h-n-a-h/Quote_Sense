@@ -7,6 +7,8 @@
   --muted: #64748b;
   --border: #e2e8f0;
   --accent: #2563eb;
+  --tatva-orange: #c04a00;
+  --tatva-orange-hover: #a84000;
 }
 
 @theme inline {

@@ -1,8 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
-import LoginModal from "./LoginModal";
-import { useAuth } from "@/lib/auth";
+import React from "react";
+import Link from "next/link";
 
 const FOOTER_LINKS = {
   services: [
@@ -20,7 +19,7 @@ const FOOTER_LINKS = {
     { label: "Vendor Verification", href: "https://tatvaops.com/vendor-verification" },
     { label: "Project Tracking", href: "https://tatvaops.com/project-tracking" },
     { label: "Dispute Resolution", href: "https://tatvaops.com/dispute-resolution" },
-    { label: "Sign In", href: "#sign-in", signIn: true },
+    { label: "Sign In", href: "/login" },
   ],
   vendors: [
     { label: "Join as Vendor", href: "https://tatvaops.com/vendor/join" },
@@ -53,21 +52,20 @@ function SocialIcon({ href, label, children }: { href: string; label: string; ch
   );
 }
 
-function FooterColumn({ title, links, onSignIn }: { title: string; links: { label: string; href: string; signIn?: boolean }[]; onSignIn?: () => void }) {
+function FooterColumn({ title, links }: { title: string; links: { label: string; href: string }[] }) {
   return (
     <div>
       <h3 className="text-[11px] font-bold text-slate-900 uppercase tracking-widest mb-4">{title}</h3>
       <ul className="space-y-2.5">
         {links.map((link) => (
           <li key={link.label}>
-            {link.signIn ? (
-              <button
-                type="button"
-                onClick={onSignIn}
-                className="text-sm text-slate-500 hover:text-[#c04a00] transition-colors text-left"
+            {link.href.startsWith("/") ? (
+              <Link
+                href={link.href}
+                className="text-sm text-slate-500 hover:text-[#c04a00] transition-colors"
               >
                 {link.label}
-              </button>
+              </Link>
             ) : (
               <a
                 href={link.href}
@@ -86,9 +84,6 @@ function FooterColumn({ title, links, onSignIn }: { title: string; links: { labe
 }
 
 export default function Footer() {
-  const { isAuthenticated } = useAuth();
-  const [loginOpen, setLoginOpen] = useState(false);
-
   const scrollToTop = () => window.scrollTo({ top: 0, behavior: "smooth" });
 
   return (
@@ -129,11 +124,7 @@ export default function Footer() {
             </div>
 
             <FooterColumn title="Services" links={FOOTER_LINKS.services} />
-            <FooterColumn
-              title="Platform"
-              links={FOOTER_LINKS.platform}
-              onSignIn={() => !isAuthenticated && setLoginOpen(true)}
-            />
+            <FooterColumn title="Platform" links={FOOTER_LINKS.platform} />
             <FooterColumn title="For Vendors" links={FOOTER_LINKS.vendors} />
             <FooterColumn title="Company" links={FOOTER_LINKS.company} />
           </div>
@@ -164,8 +155,6 @@ export default function Footer() {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
         </svg>
       </button>
-
-      <LoginModal open={loginOpen} onClose={() => setLoginOpen(false)} />
     </>
   );
 }

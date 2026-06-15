@@ -21,7 +21,11 @@ type AuthContextValue = {
   otpSent: boolean;
   otpError: string | null;
   sendOtp: (phoneNumber: string) => Promise<boolean>;
-  verifyOtp: (phoneNumber: string, otp: string) => Promise<boolean>;
+  verifyOtp: (
+    phoneNumber: string,
+    otp: string,
+    profile?: { name?: string; email?: string }
+  ) => Promise<boolean>;
   logout: () => void;
   refreshProfile: () => Promise<void>;
   clearOtpState: () => void;
@@ -130,7 +134,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const verifyOtp = useCallback(
-    async (phoneNumber: string, otp: string) => {
+    async (
+      phoneNumber: string,
+      otp: string,
+      profile?: { name?: string; email?: string }
+    ) => {
       setOtpError(null);
       try {
         const res = await fetch("/api/auth/verify-otp", {
@@ -142,6 +150,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (data.success && data.data?.user && data.data?.tokens) {
           persistSession(data.data.user, data.data.tokens);
           setOtpSent(false);
+
+          const userId = getUserId(data.data.user);
+          const accessToken =
+            data.data.tokens.accessToken || (data.data.tokens as { token?: string }).token;
+          const name = profile?.name?.trim();
+          const email = profile?.email?.trim();
+
+          if (userId && accessToken && (name || email)) {
+            try {
+              await fetch(`/api/auth/profile?userId=${userId}`, {
+                method: "PUT",
+                headers: {
+                  Authorization: `Bearer ${accessToken}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  ...(name ? { name } : {}),
+                  ...(email ? { email } : {}),
+                }),
+              });
+              await refreshProfile();
+            } catch {
+              /* session is valid; profile can be updated later */
+            }
+          }
+
           return true;
         }
         setOtpError(data.message || "Invalid OTP. Please try again.");
@@ -151,7 +185,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return false;
       }
     },
-    [persistSession]
+    [persistSession, refreshProfile]
   );
 
   const logout = useCallback(() => {

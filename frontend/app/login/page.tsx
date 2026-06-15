@@ -1,0 +1,138 @@
+"use client";
+
+import React, { useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import AuthPageLayout, { inputClass } from "@/components/AuthPageLayout";
+import { useAuth } from "@/lib/auth";
+
+export default function LoginPage() {
+  const router = useRouter();
+  const { sendOtp, verifyOtp, otpSent, otpError, clearOtpState, isAuthenticated, isLoading } =
+    useAuth();
+  const [phone, setPhone] = useState("");
+  const [otp, setOtp] = useState("");
+  const [loading, setLoading] = useState(false);
+  const phoneRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!isLoading && isAuthenticated) {
+      router.replace("/");
+    }
+  }, [isAuthenticated, isLoading, router]);
+
+  useEffect(() => {
+    phoneRef.current?.focus();
+  }, []);
+
+  if (isLoading || isAuthenticated) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-slate-200 border-t-[#c04a00] rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  const cleanedPhone = phone.replace(/\D/g, "");
+
+  const handleSendOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (cleanedPhone.length < 10) return;
+    setLoading(true);
+    const ok = await sendOtp(cleanedPhone);
+    setLoading(false);
+    if (ok) setOtp("");
+  };
+
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!otp.trim()) return;
+    setLoading(true);
+    const ok = await verifyOtp(cleanedPhone, otp.trim());
+    setLoading(false);
+    if (ok) router.replace("/");
+  };
+
+  return (
+    <AuthPageLayout
+      title="Sign in"
+      subtitle="Welcome back — enter your phone number to continue"
+      footer={
+        <p className="mt-6 text-sm text-slate-500 text-center">
+          Don&apos;t have an account?{" "}
+          <Link href="/register" className="font-medium text-[#c04a00] hover:underline">
+            Create one
+          </Link>
+        </p>
+      }
+    >
+      {!otpSent ? (
+        <form onSubmit={handleSendOtp} className="space-y-4">
+          <div>
+            <label htmlFor="phone" className="block text-sm font-medium text-slate-700 mb-1.5">
+              Phone number
+            </label>
+            <input
+              id="phone"
+              ref={phoneRef}
+              type="tel"
+              inputMode="numeric"
+              placeholder="Enter your phone number"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              className={inputClass}
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={cleanedPhone.length < 10 || loading}
+            className="w-full py-3.5 rounded-xl font-semibold text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-gradient-to-b from-slate-500 to-slate-700 hover:from-slate-600 hover:to-slate-800 shadow-sm"
+          >
+            {loading ? "Sending…" : "Send OTP"}
+          </button>
+        </form>
+      ) : (
+        <form onSubmit={handleVerifyOtp} className="space-y-4">
+          <p className="text-sm text-slate-500 text-center">
+            OTP sent to <span className="font-medium text-slate-700">+91 {cleanedPhone}</span>
+          </p>
+          <div>
+            <label htmlFor="otp" className="block text-sm font-medium text-slate-700 mb-1.5">
+              One-time password
+            </label>
+            <input
+              id="otp"
+              type="text"
+              inputMode="numeric"
+              maxLength={6}
+              placeholder="Enter 6-digit OTP"
+              value={otp}
+              onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
+              autoFocus
+              className={`${inputClass} text-center text-lg tracking-[0.3em]`}
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={otp.length < 4 || loading}
+            className="w-full py-3.5 rounded-xl font-semibold text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-gradient-to-b from-[#c04a00] to-[#9a3a00] hover:from-[#d45500] hover:to-[#a84000] shadow-sm"
+          >
+            {loading ? "Verifying…" : "Sign in"}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              clearOtpState();
+              setOtp("");
+            }}
+            className="w-full text-sm text-slate-500 hover:text-[#c04a00] transition-colors"
+          >
+            Change phone number
+          </button>
+        </form>
+      )}
+
+      {otpError && <p className="mt-3 text-sm text-red-600 text-center">{otpError}</p>}
+    </AuthPageLayout>
+  );
+}

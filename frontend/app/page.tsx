@@ -2,11 +2,12 @@
 
 import React, { useState, useEffect, useRef, useMemo, Suspense } from "react";
 import dynamic from "next/dynamic";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import CompareLoadingPanel from "../components/CompareLoadingPanel";
 import VendorInsights from "../components/VendorInsights";
 import RecommendationView from "../components/RecommendationView";
 import { buildVendorLabels, formatInrFull, priceVsBaseline } from "../lib/format";
+import { useAuth } from "@/lib/auth";
 
 const VendorChart = dynamic(() => import("../components/VendorChart"), {
   ssr: false,
@@ -61,6 +62,8 @@ export default function Home() {
 }
 
 function QuoteSenseContent() {
+  const router = useRouter();
+  const { isAuthenticated, isLoading } = useAuth();
   const searchParams = useSearchParams();
   const [files, setFiles] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
@@ -94,6 +97,20 @@ function QuoteSenseContent() {
 
   const getBackendUrl = () =>
     process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8001";
+
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      router.replace("/login");
+    }
+  }, [isLoading, isAuthenticated, router]);
+
+  if (isLoading || !isAuthenticated) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="w-8 h-8 border-2 border-slate-200 border-t-[#c04a00] rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   // --- REDIRECT LOGIC ---
   const handleGoBack = () => {

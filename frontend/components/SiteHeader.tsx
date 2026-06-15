@@ -2,15 +2,18 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import TatvaLogo from "./TatvaLogo";
-import LoginModal from "./LoginModal";
 import ProfileModal from "./ProfileModal";
 import { useAuth } from "@/lib/auth";
 
 export default function SiteHeader() {
+  const pathname = usePathname();
+  const router = useRouter();
   const { user, isAuthenticated, isLoading, logout } = useAuth();
-  const [loginOpen, setLoginOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+
+  const isAuthRoute = pathname === "/login" || pathname === "/register";
 
   const displayName = user?.name || user?.fullName || user?.phoneNumber || "Account";
 
@@ -46,26 +49,35 @@ export default function SiteHeader() {
                 </button>
                 <button
                   type="button"
-                  onClick={logout}
+                  onClick={() => {
+                    logout();
+                    router.push("/login");
+                  }}
                   className="text-sm text-slate-500 hover:text-red-600 px-2 py-1 transition-colors"
                 >
                   Sign out
                 </button>
               </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setLoginOpen(true)}
-                className="inline-flex items-center px-5 py-2 text-sm font-semibold text-white bg-[#c04a00] rounded-lg hover:bg-[#a84000] transition-colors shadow-sm"
-              >
-                Sign In
-              </button>
+            ) : isAuthRoute ? null : (
+              <div className="flex items-center gap-2">
+                <Link
+                  href="/login"
+                  className="inline-flex items-center px-4 py-2 text-sm font-medium text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+                >
+                  Sign in
+                </Link>
+                <Link
+                  href="/register"
+                  className="inline-flex items-center px-5 py-2 text-sm font-semibold text-white bg-[#c04a00] rounded-lg hover:bg-[#a84000] transition-colors shadow-sm"
+                >
+                  Register
+                </Link>
+              </div>
             )}
           </div>
         </div>
       </header>
 
-      <LoginModal open={loginOpen} onClose={() => setLoginOpen(false)} />
       <ProfileModal open={profileOpen} onClose={() => setProfileOpen(false)} />
     </>
   );

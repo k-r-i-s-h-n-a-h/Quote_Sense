@@ -1,0 +1,38 @@
+name: Deploy to Vercel (dev)
+
+on:
+  push:
+    branches: [dev]
+
+concurrency:
+  group: vercel-dev
+  cancel-in-progress: false
+
+env:
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID_DEV }}
+  VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      #- name: Normalize commit author to the Vercel account
+       # run: |
+       #   git config user.email "infrawithtatva@gmail.com"
+       #   git config user.name "infra-9507"
+       #   git commit --amend --no-edit --reset-author
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+
+      - name: Install Vercel CLI
+        working-directory: ./frontend
+        run: npm install --global vercel@latest
+
+      - name: Deploy to Vercel
+        working-directory: ./frontend
+        run: vercel deploy --prod --token=$VERCEL_TOKEN

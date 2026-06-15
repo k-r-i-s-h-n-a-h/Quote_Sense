@@ -245,7 +245,7 @@ source .venv/bin/activate
 
 # Start the FastAPI server using Uvicorn
 # Default: runs on http://localhost:8001
-uvicorn backend.main:app --port8001 --reload
+uvicorn main:app --port 8001 --reload
 
 # Custom port (if you need a different port):
 # uvicorn backend.main:app --reload --port 8001

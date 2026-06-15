@@ -1,5 +1,4 @@
-pydentic
-generativeai
+pydantic
 pymupdf
 python-dotenv
 supabase

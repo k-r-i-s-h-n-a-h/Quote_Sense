@@ -18,7 +18,8 @@ function ShellContent({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (isLoading) return;
     if (!isAuthenticated && isProtectedRoute) {
-      router.replace("/login");
+      const returnTo = `${window.location.pathname}${window.location.search}`;
+      router.replace(`/login?returnTo=${encodeURIComponent(returnTo)}`);
     }
   }, [isLoading, isAuthenticated, isProtectedRoute, router]);
 

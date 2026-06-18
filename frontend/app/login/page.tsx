@@ -1,15 +1,36 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import AuthPageLayout, { inputClass } from "@/components/AuthPageLayout";
 import { useAuth } from "@/lib/auth";
 
+function safeReturnTo(raw: string | null): string {
+  if (!raw || !raw.startsWith("/") || raw.startsWith("//")) return "/";
+  return raw;
+}
+
 export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex-1 flex items-center justify-center">
+          <div className="w-8 h-8 border-2 border-slate-200 border-t-[#c04a00] rounded-full animate-spin" />
+        </div>
+      }
+    >
+      <LoginContent />
+    </Suspense>
+  );
+}
+
+function LoginContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { sendOtp, verifyOtp, otpSent, otpError, clearOtpState, isAuthenticated, isLoading } =
     useAuth();
+  const returnTo = safeReturnTo(searchParams.get("returnTo"));
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
@@ -17,9 +38,9 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (!isLoading && isAuthenticated) {
-      router.replace("/");
+      router.replace(returnTo);
     }
-  }, [isAuthenticated, isLoading, router]);
+  }, [isAuthenticated, isLoading, router, returnTo]);
 
   useEffect(() => {
     phoneRef.current?.focus();
@@ -50,7 +71,7 @@ export default function LoginPage() {
     setLoading(true);
     const ok = await verifyOtp(cleanedPhone, otp.trim());
     setLoading(false);
-    if (ok) router.replace("/");
+    if (ok) router.replace(returnTo);
   };
 
   return (

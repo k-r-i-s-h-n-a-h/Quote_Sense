@@ -50,6 +50,71 @@ function getUserId(user: TatvaUser | null): string | null {
   return user._id || user.id || null;
 }
 
+/** Read user id from a Tatva JWT payload when PM does not send user_id. */
+function getUserIdFromJwt(token: string): string | null {
+  try {
+    const segment = token.split(".")[1];
+    if (!segment) return null;
+    const payload = JSON.parse(
+      atob(segment.replace(/-/g, "+").replace(/_/g, "/"))
+    ) as Record<string, unknown>;
+    const id = payload.sub ?? payload.userId ?? payload._id ?? payload.id;
+    return typeof id === "string" ? id : id != null ? String(id) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Remove jwt_auth / user_id from the URL; keep session_id for MongoDB auto-lane. */
+function stripRedirectAuthParams(sessionId: string | null) {
+  const cleanUrl = sessionId
+    ? `/?session_id=${encodeURIComponent(sessionId)}`
+    : "/";
+  window.history.replaceState({}, "", cleanUrl);
+}
+
+/**
+ * TatvaOps PM redirect SSO: /?session_id=...&jwt_auth=...&user_id=...
+ * Validates the token via profile API and persists the session locally.
+ */
+async function bootstrapFromRedirectParams(): Promise<TatvaUser | null> {
+  if (typeof window === "undefined") return null;
+
+  const params = new URLSearchParams(window.location.search);
+  const urlToken = params.get("jwt_auth") ?? params.get("token");
+  if (!urlToken) return null;
+
+  const urlUserId = params.get("user_id") ?? getUserIdFromJwt(urlToken);
+  if (!urlUserId) return null;
+
+  localStorage.setItem(TOKEN_KEY, urlToken);
+
+  try {
+    const res = await fetch(
+      `/api/auth/profile?userId=${encodeURIComponent(urlUserId)}`,
+      { headers: { Authorization: `Bearer ${urlToken}` } }
+    );
+    if (!res.ok) {
+      localStorage.removeItem(TOKEN_KEY);
+      return null;
+    }
+
+    const data = await res.json();
+    const profile: TatvaUser = data.data ?? data.user ?? data;
+    if (!profile || !(profile._id || profile.id || profile.phoneNumber)) {
+      localStorage.removeItem(TOKEN_KEY);
+      return null;
+    }
+
+    localStorage.setItem(USER_KEY, JSON.stringify({ user: profile }));
+    stripRedirectAuthParams(params.get("session_id"));
+    return profile;
+  } catch {
+    localStorage.removeItem(TOKEN_KEY);
+    return null;
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<TatvaUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -102,14 +167,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    const stored = readStoredUser();
-    const token = localStorage.getItem(TOKEN_KEY);
-    if (stored && token) {
-      setUser(stored);
-      refreshProfile().finally(() => setIsLoading(false));
-    } else {
-      setIsLoading(false);
+    let cancelled = false;
+
+    async function initAuth() {
+      try {
+        const fromRedirect = await bootstrapFromRedirectParams();
+        if (cancelled) return;
+
+        if (fromRedirect) {
+          setUser(fromRedirect);
+          return;
+        }
+
+        const stored = readStoredUser();
+        const token = localStorage.getItem(TOKEN_KEY);
+        if (stored && token) {
+          setUser(stored);
+          await refreshProfile();
+        }
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
     }
+
+    initAuth();
+    return () => {
+      cancelled = true;
+    };
   }, [refreshProfile]);
 
   const sendOtp = useCallback(async (phoneNumber: string) => {

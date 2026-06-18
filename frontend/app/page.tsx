@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useMemo, Suspense } from "react";
 import dynamic from "next/dynamic";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import CompareLoadingPanel from "../components/CompareLoadingPanel";
 import VendorInsights from "../components/VendorInsights";
 import RecommendationView from "../components/RecommendationView";
@@ -62,7 +62,6 @@ export default function Home() {
 }
 
 function QuoteSenseContent() {
-  const router = useRouter();
   const { isAuthenticated, isLoading } = useAuth();
   const searchParams = useSearchParams();
   const [files, setFiles] = useState<File[]>([]);
@@ -97,12 +96,6 @@ function QuoteSenseContent() {
 
   const getBackendUrl = () =>
     process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8001";
-
-  useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      router.replace("/login");
-    }
-  }, [isLoading, isAuthenticated, router]);
 
   if (isLoading || !isAuthenticated) {
     return (

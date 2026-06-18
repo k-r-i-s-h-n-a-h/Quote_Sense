@@ -50,42 +50,108 @@ function getUserId(user: TatvaUser | null): string | null {
   return user._id || user.id || null;
 }
 
-/** Read user id from a Tatva JWT payload when PM does not send user_id. */
-function getUserIdFromJwt(token: string): string | null {
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
   try {
     const segment = token.split(".")[1];
     if (!segment) return null;
-    const payload = JSON.parse(
+    return JSON.parse(
       atob(segment.replace(/-/g, "+").replace(/_/g, "/"))
     ) as Record<string, unknown>;
-    const id = payload.sub ?? payload.userId ?? payload._id ?? payload.id;
-    return typeof id === "string" ? id : id != null ? String(id) : null;
   } catch {
     return null;
   }
 }
 
-/** Remove jwt_auth / user_id from the URL; keep session_id for MongoDB auto-lane. */
-function stripRedirectAuthParams(sessionId: string | null) {
-  const cleanUrl = sessionId
-    ? `/?session_id=${encodeURIComponent(sessionId)}`
-    : "/";
-  window.history.replaceState({}, "", cleanUrl);
+/** Read user id from a Tatva JWT payload when PM does not send user_id. */
+function getUserIdFromJwt(token: string): string | null {
+  const payload = decodeJwtPayload(token);
+  if (!payload) return null;
+  const id = payload.sub ?? payload.userId ?? payload._id ?? payload.id;
+  return typeof id === "string" ? id : id != null ? String(id) : null;
 }
 
-/**
- * TatvaOps PM redirect SSO: /?session_id=...&jwt_auth=...&user_id=...
- * Validates the token via profile API and persists the session locally.
- */
-async function bootstrapFromRedirectParams(): Promise<TatvaUser | null> {
+function isValidUser(profile: TatvaUser | null | undefined): profile is TatvaUser {
+  return !!(
+    profile &&
+    (profile._id || profile.id || profile.phoneNumber || profile.email)
+  );
+}
+
+/** Handle Tatva API wrappers: { data: { user } }, { data }, { user }, or flat user. */
+function parseProfileFromResponse(data: Record<string, unknown>): TatvaUser | null {
+  const nested = data.data;
+  if (nested && typeof nested === "object") {
+    const obj = nested as Record<string, unknown>;
+    if (obj.user && typeof obj.user === "object") {
+      return obj.user as TatvaUser;
+    }
+    return nested as TatvaUser;
+  }
+  if (data.user && typeof data.user === "object") {
+    return data.user as TatvaUser;
+  }
+  return data as TatvaUser;
+}
+
+/** Build a minimal session user from a Tatva JWT when the profile API is unavailable. */
+function userFromJwt(token: string, userId: string): TatvaUser | null {
+  const payload = decodeJwtPayload(token);
+  if (!payload) return null;
+
+  const exp = payload.exp;
+  if (typeof exp === "number" && Date.now() / 1000 > exp) return null;
+
+  const email = typeof payload.email === "string" ? payload.email : undefined;
+  const name =
+    typeof payload.name === "string"
+      ? payload.name
+      : typeof payload.fullName === "string"
+        ? payload.fullName
+        : undefined;
+
+  return { _id: userId, email, name };
+}
+
+function cleanRedirectUrl(sessionId: string | null): string {
+  return sessionId ? `/?session_id=${encodeURIComponent(sessionId)}` : "/";
+}
+
+/** Collect SSO params from the current URL or nested inside login returnTo. */
+function collectRedirectParams(): URLSearchParams | null {
   if (typeof window === "undefined") return null;
 
-  const params = new URLSearchParams(window.location.search);
+  const current = new URLSearchParams(window.location.search);
+  if (current.get("jwt_auth") || current.get("token")) return current;
+
+  const returnTo = current.get("returnTo");
+  if (!returnTo) return null;
+
+  const queryStart = returnTo.indexOf("?");
+  if (queryStart < 0) return null;
+
+  const nested = new URLSearchParams(returnTo.slice(queryStart + 1));
+  if (nested.get("jwt_auth") || nested.get("token")) return nested;
+
+  return null;
+}
+
+type BootstrapResult = { user: TatvaUser; redirectTo: string };
+
+/**
+ * TatvaOps PM redirect SSO: session_id + jwt_auth + user_id.
+ * Tries profile API first, then falls back to trusting a valid JWT payload.
+ */
+async function bootstrapFromSearchParams(
+  params: URLSearchParams
+): Promise<BootstrapResult | null> {
   const urlToken = params.get("jwt_auth") ?? params.get("token");
   if (!urlToken) return null;
 
   const urlUserId = params.get("user_id") ?? getUserIdFromJwt(urlToken);
   if (!urlUserId) return null;
+
+  const sessionId = params.get("session_id");
+  const redirectTo = cleanRedirectUrl(sessionId);
 
   localStorage.setItem(TOKEN_KEY, urlToken);
 
@@ -94,25 +160,47 @@ async function bootstrapFromRedirectParams(): Promise<TatvaUser | null> {
       `/api/auth/profile?userId=${encodeURIComponent(urlUserId)}`,
       { headers: { Authorization: `Bearer ${urlToken}` } }
     );
-    if (!res.ok) {
-      localStorage.removeItem(TOKEN_KEY);
-      return null;
+
+    if (res.ok) {
+      const data = await res.json();
+      const profile = parseProfileFromResponse(data);
+      if (isValidUser(profile)) {
+        localStorage.setItem(USER_KEY, JSON.stringify({ user: profile }));
+        return { user: profile, redirectTo };
+      }
     }
 
-    const data = await res.json();
-    const profile: TatvaUser = data.data ?? data.user ?? data;
-    if (!profile || !(profile._id || profile.id || profile.phoneNumber)) {
-      localStorage.removeItem(TOKEN_KEY);
-      return null;
+    const fallbackUser = userFromJwt(urlToken, urlUserId);
+    if (isValidUser(fallbackUser)) {
+      localStorage.setItem(USER_KEY, JSON.stringify({ user: fallbackUser }));
+      return { user: fallbackUser, redirectTo };
     }
 
-    localStorage.setItem(USER_KEY, JSON.stringify({ user: profile }));
-    stripRedirectAuthParams(params.get("session_id"));
-    return profile;
+    localStorage.removeItem(TOKEN_KEY);
+    return null;
   } catch {
+    const fallbackUser = userFromJwt(urlToken, urlUserId);
+    if (isValidUser(fallbackUser)) {
+      localStorage.setItem(USER_KEY, JSON.stringify({ user: fallbackUser }));
+      return { user: fallbackUser, redirectTo };
+    }
     localStorage.removeItem(TOKEN_KEY);
     return null;
   }
+}
+
+async function bootstrapFromRedirectParams(): Promise<BootstrapResult | null> {
+  const params = collectRedirectParams();
+  if (!params) return null;
+  return bootstrapFromSearchParams(params);
+}
+
+function applyBootstrapRedirect(redirectTo: string) {
+  if (window.location.pathname === "/login") {
+    window.location.replace(redirectTo);
+    return;
+  }
+  window.history.replaceState({}, "", redirectTo);
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -156,8 +244,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
       if (!res.ok) return;
       const data = await res.json();
-      const profile: TatvaUser = data.data ?? data.user ?? data;
-      if (profile && (profile._id || profile.id || profile.phoneNumber)) {
+      const profile = parseProfileFromResponse(data);
+      if (isValidUser(profile)) {
         localStorage.setItem(USER_KEY, JSON.stringify({ user: profile }));
         setUser(profile);
       }
@@ -175,7 +263,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (cancelled) return;
 
         if (fromRedirect) {
-          setUser(fromRedirect);
+          setUser(fromRedirect.user);
+          applyBootstrapRedirect(fromRedirect.redirectTo);
           return;
         }
 

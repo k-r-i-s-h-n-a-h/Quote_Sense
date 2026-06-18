@@ -11,6 +11,16 @@ function safeReturnTo(raw: string | null): string {
   return raw;
 }
 
+/** Strip jwt_auth from returnTo; keep session_id for MongoDB auto-lane. */
+function cleanReturnTo(raw: string): string {
+  const queryStart = raw.indexOf("?");
+  if (queryStart < 0) return raw;
+  const params = new URLSearchParams(raw.slice(queryStart + 1));
+  const sessionId = params.get("session_id");
+  if (sessionId) return `/?session_id=${encodeURIComponent(sessionId)}`;
+  return raw.split("?")[0] || "/";
+}
+
 export default function LoginPage() {
   return (
     <Suspense
@@ -30,7 +40,7 @@ function LoginContent() {
   const searchParams = useSearchParams();
   const { sendOtp, verifyOtp, otpSent, otpError, clearOtpState, isAuthenticated, isLoading } =
     useAuth();
-  const returnTo = safeReturnTo(searchParams.get("returnTo"));
+  const returnTo = cleanReturnTo(safeReturnTo(searchParams.get("returnTo")));
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);

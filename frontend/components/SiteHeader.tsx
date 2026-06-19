@@ -26,13 +26,6 @@ export default function SiteHeader() {
           </Link>
 
           <div className="flex items-center gap-3">
-            <a
-              href="https://tatvaops.com/my-projects"
-              className="hidden sm:inline-flex items-center px-4 py-2 text-sm font-medium text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
-            >
-              My Projects
-            </a>
-
             {isLoading ? (
               <div className="w-24 h-9 bg-slate-100 rounded-lg animate-pulse" />
             ) : isAuthenticated ? (

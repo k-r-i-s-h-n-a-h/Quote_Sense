@@ -13,7 +13,8 @@ function ShellContent({ children }: { children: React.ReactNode }) {
 
   const isAuthRoute = pathname === "/login" || pathname === "/register";
   const showFooter = isAuthRoute && !isAuthenticated;
-  const isProtectedRoute = pathname === "/";
+  const isProtectedRoute =
+    pathname === "/" || pathname === "/compare" || pathname.startsWith("/project/");
 
   useEffect(() => {
     if (isLoading) return;

@@ -7,6 +7,7 @@ import os
 import shutil
 import uuid
 import asyncio
+from datetime import datetime
 from dotenv import load_dotenv
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -41,6 +42,49 @@ JOBS: dict = {}
 def _set_progress(session_id, **fields):
     job = JOBS.setdefault(session_id, {})
     job.update(fields)
+
+
+def _format_quote_date(raw_date) -> str:
+    """Normalize Tatva quoteDate (ISO) to DD/MM/YYYY like PDF extraction."""
+    if not raw_date:
+        return ""
+    raw = str(raw_date).strip()
+    if len(raw) >= 10 and raw[4] == "-" and raw[7] == "-":
+        try:
+            return datetime.strptime(raw[:10], "%Y-%m-%d").strftime("%d/%m/%Y")
+        except ValueError:
+            pass
+    return raw
+
+
+def _unwrap_mongodb_quote(quote_entry: dict) -> dict:
+    """Accept raw quote objects or Tatva API envelopes { data: {...} }."""
+    if not isinstance(quote_entry, dict):
+        return quote_entry
+    inner = quote_entry.get("data")
+    if isinstance(inner, dict) and (
+        "quoteNumber" in inner or "vendorDetail" in inner or "workSummary" in inner
+    ):
+        return inner
+    return quote_entry
+
+
+def _mongodb_quote_metadata(quote_data: dict) -> dict:
+    """Map TatvaOps MongoDB quote fields to Supabase quotes columns."""
+    client_detail = quote_data.get("clientDetail") or {}
+    quote_number = str(quote_data.get("quoteNumber") or "").lstrip("#").strip()
+    client_name = (
+        client_detail.get("clientName")
+        or client_detail.get("name")
+        or "Unknown"
+    )
+    raw_date = quote_data.get("quoteDate") or quote_data.get("createdAt") or ""
+    return {
+        "quote_number": quote_number,
+        "client_name": client_name,
+        "quote_date": _format_quote_date(raw_date),
+        "source_filename": quote_number or "DIRECT_SYNC",
+    }
 
 supabase: Client = create_client(
     os.getenv("SUPABASE_URL"),
@@ -442,10 +486,13 @@ async def sync_mongodb_quotes(payload: Any = Body(...), session_id: str = None):
 
         print(f"📦 Processing {len(quotes_list)} direct quotes for session: {session_id}")
 
-        for quote_data in quotes_list:
+        for quote_entry in quotes_list:
+            quote_data = _unwrap_mongodb_quote(quote_entry)
+
             # --- VENDOR & TOTAL EXTRACTION ---
             vendor_detail = quote_data.get("vendorDetail", {})
             vendor_name = vendor_detail.get("companyName", "Unknown Vendor")
+            meta = _mongodb_quote_metadata(quote_data)
             
             # Find the Grand Total inside pricingSummary
             grand_total = 0
@@ -457,10 +504,13 @@ async def sync_mongodb_quotes(payload: Any = Body(...), session_id: str = None):
             # --- STEP 1: PUSH TO 'quotes' TABLE ---
             quote_res = supabase.table("quotes").insert({
                 "vendor_name": vendor_name,
+                "client_name": meta["client_name"],
+                "quote_date": meta["quote_date"],
+                "quote_number": meta["quote_number"],
                 "grand_total": grand_total,
                 "session_id": session_id,
                 "source_type": "mongodb_integrated",
-                "source_filename": quote_data.get("quoteNumber", "DIRECT_SYNC")
+                "source_filename": meta["source_filename"],
             }).execute()
             
             if not quote_res.data:

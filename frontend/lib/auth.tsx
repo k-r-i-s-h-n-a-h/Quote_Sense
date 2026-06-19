@@ -113,7 +113,9 @@ function userFromJwt(token: string, userId: string): TatvaUser | null {
 }
 
 function cleanRedirectUrl(sessionId: string | null): string {
-  return sessionId ? `/?session_id=${encodeURIComponent(sessionId)}` : "/";
+  return sessionId
+    ? `/compare?session_id=${encodeURIComponent(sessionId)}`
+    : "/";
 }
 
 /** Collect SSO params from the current URL or nested inside login returnTo. */

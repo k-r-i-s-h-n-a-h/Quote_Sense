@@ -17,7 +17,9 @@ function cleanReturnTo(raw: string): string {
   if (queryStart < 0) return raw;
   const params = new URLSearchParams(raw.slice(queryStart + 1));
   const sessionId = params.get("session_id");
-  if (sessionId) return `/?session_id=${encodeURIComponent(sessionId)}`;
+  if (sessionId) {
+    return `/compare?session_id=${encodeURIComponent(sessionId)}`;
+  }
   return raw.split("?")[0] || "/";
 }
 

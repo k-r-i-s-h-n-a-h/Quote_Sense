@@ -243,6 +243,9 @@ function QuoteSenseContent() {
   useEffect(() => {
     if (lane !== "project" || !compareRunKey) return;
 
+    const projectId = projectIdParam;
+    if (!projectId) return;
+
     if (sessionIdFromUrl || activeJobId || projectCompareStartedRef.current) return;
 
     projectCompareStartedRef.current = true;
@@ -259,7 +262,7 @@ function QuoteSenseContent() {
 
       try {
         const quotesResult = await resolveQuotesForCompare(
-          projectIdParam,
+          projectId,
           selectedQuoteIds
         );
 

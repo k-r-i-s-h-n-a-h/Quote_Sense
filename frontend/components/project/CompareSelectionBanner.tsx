@@ -3,10 +3,11 @@
 import React from "react";
 import Link from "next/link";
 import {
-  DUMMY_PROJECT,
   formatInr,
   getQuoteSelectionSummary,
-} from "@/lib/dummy-project-data";
+  type ProjectData,
+} from "@/lib/project-types";
+import { readCachedProjectQuotePayloads } from "@/lib/compare-payload-cache";
 import type { CompareLane } from "@/lib/compare-lane";
 
 type CompareSelectionBannerProps = {
@@ -14,15 +15,82 @@ type CompareSelectionBannerProps = {
   projectId?: string | null;
 };
 
+function projectFromCache(
+  projectId: string,
+  quoteIds: string[]
+): ProjectData | null {
+  const entry = readCachedProjectQuotePayloads(projectId);
+  if (!entry?.meta) return null;
+
+  const vendorsMap = new Map<
+    string,
+    { id: string; companyName: string; contactName: string; email: string; quotes: ProjectData["vendors"][0]["quotes"] }
+  >();
+
+  for (const raw of entry.quotes) {
+    const id = String(raw._id || raw.id || "");
+    if (!quoteIds.includes(id)) continue;
+
+    const vendorDetail = (raw.vendorDetail || {}) as Record<string, unknown>;
+    const vendorId = String(raw.vendorId || vendorDetail._id || "vendor");
+    const pricing = Array.isArray(raw.pricingSummary) ? raw.pricingSummary : [];
+    let amount = 0;
+    for (const row of pricing) {
+      const rec = row as Record<string, unknown>;
+      if (String(rec.label || "").toLowerCase().includes("grand total")) {
+        amount = Number(rec.value) || 0;
+      }
+    }
+
+    const quote = {
+      id,
+      quoteNumber: String(raw.quoteNumber || "—"),
+      label: String(raw.draftName || raw.quoteNumber || "Quote"),
+      amount,
+      date: "—",
+      status: "submitted" as const,
+      lineItems: 0,
+    };
+
+    const existing = vendorsMap.get(vendorId);
+    if (existing) {
+      existing.quotes.push(quote);
+    } else {
+      vendorsMap.set(vendorId, {
+        id: vendorId,
+        companyName: String(vendorDetail.companyName || "Vendor"),
+        contactName: String(vendorDetail.fullName || vendorDetail.vendorName || ""),
+        email: String(vendorDetail.email || vendorDetail.companyEmail || ""),
+        quotes: [quote],
+      });
+    }
+  }
+
+  const vendors = Array.from(vendorsMap.values());
+  if (vendors.length === 0) return null;
+
+  return {
+    id: projectId,
+    title: entry.meta.title,
+    projectCode: entry.meta.projectCode,
+    clientName: "—",
+    status: "quotes_received",
+    brief: "",
+    service: { id: "general", name: "Project", icon: "📋" },
+    vendors,
+  };
+}
+
 export function CompareSelectionBanner({
   quoteIds,
   projectId,
 }: CompareSelectionBannerProps) {
   const project =
-    projectId && projectId !== DUMMY_PROJECT.id
-      ? DUMMY_PROJECT
-      : DUMMY_PROJECT;
-  const summary = getQuoteSelectionSummary(project, quoteIds);
+    projectId && quoteIds.length > 0
+      ? projectFromCache(projectId, quoteIds)
+      : null;
+
+  const summary = project ? getQuoteSelectionSummary(project, quoteIds) : [];
 
   if (summary.length === 0) return null;
 
@@ -36,9 +104,11 @@ export function CompareSelectionBanner({
           <h2 className="text-lg font-bold text-slate-900 mt-1">
             {summary.length} quotes · {new Set(summary.map((s) => s.vendor.id)).size} vendors
           </h2>
-          <p className="text-xs text-slate-500 mt-1">
-            Project: {project.title} ({project.projectCode})
-          </p>
+          {project && (
+            <p className="text-xs text-slate-500 mt-1">
+              Project: {project.title} ({project.projectCode})
+            </p>
+          )}
         </div>
         <Link
           href={projectId ? `/project/${projectId}` : "/"}
@@ -63,10 +133,6 @@ export function CompareSelectionBanner({
           </div>
         ))}
       </div>
-
-      <p className="text-xs text-slate-500 mt-4 pt-3 border-t border-orange-100/80">
-        Comparison preview — full engine connects when TatvaOps API is wired.
-      </p>
     </div>
   );
 }
@@ -115,7 +181,7 @@ export function IntegratedLoadingBanner({ message }: { message: string }) {
       <p className="text-[10px] font-semibold uppercase tracking-wider text-[#c04a00] mb-1">
         TatvaOps · QuoteSense
       </p>
-      <h1 className="text-lg font-bold text-slate-900">Loading your comparison</h1>
+      <h1 className="text-lg font-bold text-slate-900">Building your comparison</h1>
       <p className="text-sm text-slate-500 mt-1">{message}</p>
     </div>
   );

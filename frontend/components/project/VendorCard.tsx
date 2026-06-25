@@ -1,12 +1,14 @@
 "use client";
 
 import React from "react";
-import type { ProjectVendor } from "@/lib/dummy-project-data";
+import type { ProjectVendor } from "@/lib/project-types";
+import { MAX_COMPARE_QUOTES, MIN_COMPARE_QUOTES } from "@/lib/compare-limits";
 import { QuoteRow } from "./QuoteRow";
 
 type VendorCardProps = {
   vendor: ProjectVendor;
   selectedQuoteIds: Set<string>;
+  selectionFull: boolean;
   onToggleQuote: (quoteId: string) => void;
   onCompareVendorQuotes: (vendorId: string) => void;
 };
@@ -14,11 +16,14 @@ type VendorCardProps = {
 export function VendorCard({
   vendor,
   selectedQuoteIds,
+  selectionFull,
   onToggleQuote,
   onCompareVendorQuotes,
 }: VendorCardProps) {
   const vendorSelectedCount = vendor.quotes.filter((q) => selectedQuoteIds.has(q.id)).length;
-  const canCompareAll = vendor.quotes.length >= 2;
+  const canCompare = vendor.quotes.length >= MIN_COMPARE_QUOTES;
+  const compareCount = Math.min(vendor.quotes.length, MAX_COMPARE_QUOTES);
+  const hasMoreThanMax = vendor.quotes.length > MAX_COMPARE_QUOTES;
 
   return (
     <section className="qs-card overflow-hidden">
@@ -36,19 +41,29 @@ export function VendorCard({
             </p>
             <p className="text-[11px] text-slate-400 mt-1">
               {vendor.quotes.length} quote{vendor.quotes.length !== 1 ? "s" : ""} submitted
+              {hasMoreThanMax && (
+                <span className="text-amber-600"> · max {MAX_COMPARE_QUOTES} for compare</span>
+              )}
               {vendorSelectedCount > 0 && (
                 <span className="text-[#c04a00] font-medium"> · {vendorSelectedCount} selected</span>
               )}
             </p>
           </div>
         </div>
-        {canCompareAll && (
+        {canCompare && (
           <button
             type="button"
             onClick={() => onCompareVendorQuotes(vendor.id)}
             className="shrink-0 text-xs font-medium text-[#c04a00] hover:text-[#a84000] px-3 py-1.5 rounded-lg border border-[#c04a00]/25 hover:bg-orange-50 transition-colors"
+            title={
+              hasMoreThanMax
+                ? `Only ${MAX_COMPARE_QUOTES} quotes can be compared at a time`
+                : undefined
+            }
           >
-            Compare all ({vendor.quotes.length})
+            {hasMoreThanMax
+              ? `Compare ${MAX_COMPARE_QUOTES} quotes`
+              : `Compare all (${compareCount})`}
           </button>
         )}
       </div>
@@ -60,6 +75,7 @@ export function VendorCard({
             quote={quote}
             vendorName={vendor.companyName}
             selected={selectedQuoteIds.has(quote.id)}
+            disabled={selectionFull && !selectedQuoteIds.has(quote.id)}
             onToggle={() => onToggleQuote(quote.id)}
           />
         ))}

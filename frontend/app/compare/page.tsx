@@ -9,10 +9,19 @@ import RecommendationView from "../../components/RecommendationView";
 import { buildVendorLabels, formatInrFull, priceVsBaseline } from "../../lib/format";
 import { downloadComparisonPdf } from "../../lib/download-comparison-pdf";
 import { getCompareLane, showPdfUpload } from "../../lib/compare-lane";
+import {
+  resolveQuotesForCompare,
+  startMongoCompareJob,
+} from "../../lib/compare-sync";
+import {
+  MAX_COMPARE_QUOTES,
+  MIN_COMPARE_QUOTES,
+  clampQuoteIds,
+  isValidCompareCount,
+} from "../../lib/compare-limits";
 import { useAuth } from "@/lib/auth";
 import {
   ComparePageNav,
-  CompareSelectionBanner,
   IntegratedLoadingBanner,
 } from "../../components/project/CompareSelectionBanner";
 
@@ -95,26 +104,37 @@ function QuoteSenseContent() {
   const [isChatting, setIsChatting] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const loadingRef = useRef(false);
+  const pollingActiveRef = useRef(false);
   const partialAppliedRef = useRef(false);
+  const projectCompareStartedRef = useRef(false);
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
 
   const selectedQuoteIds = useMemo(() => {
     const raw = searchParams.get("quotes");
     if (!raw) return [];
-    return raw.split(",").filter(Boolean);
+    return clampQuoteIds(raw.split(",").filter(Boolean));
   }, [searchParams]);
+
+  const selectedQuoteIdsKey = selectedQuoteIds.join(",");
 
   const projectIdParam = searchParams.get("projectId");
   const sessionIdFromUrl = searchParams.get("session_id");
   const sourceParam = searchParams.get("source");
+
+  const compareRunKey = useMemo(() => {
+    if (!projectIdParam || !isValidCompareCount(selectedQuoteIds.length)) return "";
+    return `${projectIdParam}:${selectedQuoteIdsKey}`;
+  }, [projectIdParam, selectedQuoteIdsKey, selectedQuoteIds.length]);
 
   const lane = useMemo(
     () =>
       getCompareLane({
         sessionIdFromUrl,
         sourceParam,
+        projectId: projectIdParam,
         selectedQuoteIds,
       }),
-    [sessionIdFromUrl, sourceParam, selectedQuoteIds]
+    [sessionIdFromUrl, sourceParam, projectIdParam, selectedQuoteIds]
   );
 
   const isIntegratedLane = lane === "integrated";
@@ -176,9 +196,14 @@ function QuoteSenseContent() {
   }, [loading]);
 
   useEffect(() => {
-    const autoSessionId = searchParams.get('session_id');
-    
-    if (autoSessionId && !sessionId) { 
+    const autoSessionId = searchParams.get("session_id");
+    const isProjectCompare =
+      Boolean(projectIdParam) && selectedQuoteIds.length >= 2;
+
+    // Project lane owns session_id polling — do not call get-comparison here.
+    if (isProjectCompare) return;
+
+    if (autoSessionId && !sessionId && !activeJobId) {
       const fetchAutoData = async () => {
         setLoading(true);
         setLoadingMessage("Loading your synced comparison…");
@@ -193,21 +218,132 @@ function QuoteSenseContent() {
           setLoading(false);
         }
       };
-      
+
       fetchAutoData();
     }
-  }, [searchParams, sessionId]);
+  }, [
+    searchParams,
+    sessionId,
+    activeJobId,
+    projectIdParam,
+    selectedQuoteIds.length,
+  ]);
+
+  // Resume an in-flight project job after refresh (session_id already in URL).
+  useEffect(() => {
+    if (lane !== "project" || !compareRunKey) return;
+    if (!sessionIdFromUrl || activeJobId) return;
+
+    setActiveJobId(sessionIdFromUrl);
+    setSessionId(sessionIdFromUrl);
+    projectCompareStartedRef.current = true;
+  }, [lane, compareRunKey, sessionIdFromUrl, activeJobId]);
+
+  // Project lane: resolve payloads → start async MongoDB compare job.
+  useEffect(() => {
+    if (lane !== "project" || !compareRunKey) return;
+
+    if (sessionIdFromUrl || activeJobId || projectCompareStartedRef.current) return;
+
+    projectCompareStartedRef.current = true;
+
+    (async () => {
+      setLoading(true);
+      setLoadingMessage("Building comparison matrix…");
+      setReport("");
+      setChartData([]);
+      setTableData([]);
+      setVendors([]);
+      setVendorMeta({});
+      partialAppliedRef.current = false;
+
+      try {
+        const quotesResult = await resolveQuotesForCompare(
+          projectIdParam,
+          selectedQuoteIds
+        );
+
+        if (!quotesResult.ok) {
+          setReport(`❌ ${quotesResult.message}`);
+          setLoading(false);
+          return;
+        }
+
+        setLoadingMessage(
+          `Sending ${quotesResult.quotes.length} quotes for analysis…`
+        );
+        setLoadingProgress({
+          processed: 0,
+          total: quotesResult.quotes.length,
+        });
+
+        const job = await startMongoCompareJob(quotesResult.quotes);
+
+        if (!job.ok) {
+          setReport(`❌ ${job.message}`);
+          setLoading(false);
+          return;
+        }
+
+        setSessionId(job.session_id);
+        setActiveJobId(job.session_id);
+
+        // Update URL for refresh/share without re-running this effect.
+        if (typeof window !== "undefined") {
+          const params = new URLSearchParams(window.location.search);
+          params.set("session_id", job.session_id);
+          window.history.replaceState(null, "", `/compare?${params.toString()}`);
+        }
+      } catch (err) {
+        setReport(`❌ ${err instanceof Error ? err.message : "Comparison failed."}`);
+        setLoading(false);
+      }
+    })();
+  }, [lane, compareRunKey, activeJobId, sessionIdFromUrl]);
+
+  // Poll progress for the active comparison job (separate effect — not cancelled on URL tweak).
+  useEffect(() => {
+    if (!activeJobId) return;
+
+    let cancelled = false;
+    const sid = activeJobId;
+    const backendUrl = getBackendUrl();
+
+    (async () => {
+      setLoading(true);
+      pollingActiveRef.current = true;
+
+      try {
+        await pollProgress(sid, backendUrl);
+      } catch (err) {
+        if (!cancelled) {
+          setReport(`❌ ${err instanceof Error ? err.message : "Comparison failed."}`);
+        }
+      } finally {
+        pollingActiveRef.current = false;
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      pollingActiveRef.current = false;
+    };
+  }, [activeJobId]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const newFiles = Array.from(e.target.files);
-      
+
       setFiles((prevFiles) => {
         const combinedFiles = [...prevFiles, ...newFiles];
         const uniqueFiles = combinedFiles.filter((file, index, self) =>
           index === self.findIndex((f) => f.name === file.name && f.size === file.size)
         );
-        return uniqueFiles;
+        if (uniqueFiles.length > MAX_COMPARE_QUOTES) {
+          alert(`You can compare at most ${MAX_COMPARE_QUOTES} PDF quotes at a time.`);
+        }
+        return uniqueFiles.slice(0, MAX_COMPARE_QUOTES);
       });
 
       e.target.value = "";
@@ -239,7 +375,7 @@ function QuoteSenseContent() {
     const startedAt = Date.now();
 
     while (Date.now() - startedAt < MAX_MS) {
-      if (!loadingRef.current) return; // user reset/navigated away
+      if (!pollingActiveRef.current) return;
 
       let data: any;
       try {
@@ -283,8 +419,10 @@ function QuoteSenseContent() {
   };
 
   const handleUpload = async () => {
-    if (files.length < 2) {
-      alert("Please upload at least 2 vendor quotes to run a comparison.");
+    if (!isValidCompareCount(files.length)) {
+      alert(
+        `Please upload ${MIN_COMPARE_QUOTES}–${MAX_COMPARE_QUOTES} vendor PDFs to run a comparison.`
+      );
       return;
     }
 
@@ -385,12 +523,24 @@ function QuoteSenseContent() {
 
         <ComparePageNav projectId={projectIdParam} lane={lane} />
 
-        {selectedQuoteIds.length >= 2 && lane === "project" && (
-          <CompareSelectionBanner
-            quoteIds={selectedQuoteIds}
-            projectId={projectIdParam}
-          />
+        {lane === "project" && loading && !tableData.length && (
+          <>
+            <IntegratedLoadingBanner message={loadingMessage} />
+            <CompareLoadingPanel
+              message={loadingMessage}
+              processed={loadingProgress.processed}
+              total={loadingProgress.total}
+            />
+          </>
         )}
+
+        {(lane === "project" || lane === "integrated") &&
+          tableData.length > 0 &&
+          loading && (
+            <p className="text-xs text-slate-500 text-center -mt-4">
+              Matrix ready — finishing recommendation…
+            </p>
+          )}
 
         {isIntegratedLane && loading && !tableData.length && (
           <>
@@ -450,9 +600,9 @@ function QuoteSenseContent() {
 
           <button
             onClick={handleUpload}
-            disabled={loading || files.length < 2}
+            disabled={loading || !isValidCompareCount(files.length)}
             className={`mt-6 w-full py-3 rounded-lg font-bold text-white transition-colors flex items-center justify-center gap-2 ${
-              loading || files.length < 2
+              loading || !isValidCompareCount(files.length)
                 ? "bg-gray-400 cursor-not-allowed"
                 : "bg-blue-600 hover:bg-blue-700"
             }`}

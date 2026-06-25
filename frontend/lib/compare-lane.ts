@@ -5,9 +5,20 @@ export type CompareLane = "integrated" | "project" | "standalone";
 export function getCompareLane(params: {
   sessionIdFromUrl?: string | null;
   sourceParam?: string | null;
+  projectId?: string | null;
   selectedQuoteIds?: string[];
 }): CompareLane {
-  const { sessionIdFromUrl, sourceParam, selectedQuoteIds = [] } = params;
+  const {
+    sessionIdFromUrl,
+    sourceParam,
+    projectId,
+    selectedQuoteIds = [],
+  } = params;
+
+  // Project compare keeps this lane even after session_id is added to the URL.
+  if (projectId && selectedQuoteIds.length >= 2) {
+    return "project";
+  }
 
   if (sessionIdFromUrl || sourceParam === "integrated") {
     return "integrated";

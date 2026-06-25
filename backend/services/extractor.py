@@ -1,30 +1,18 @@
 import sys
 import os
 import json
-import time 
-from dotenv import load_dotenv
-from supabase import Client, create_client
-
-# 1. NEW GOOGLE SDK IMPORTS
-from google import genai
-from google.genai import types
+import time
 
 # import schema and taxonomy
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 from backend.models.schema import ExtractedQuote
 from backend.models.taxanomy import TATVAOPS_TAXONOMY
 
-load_dotenv()
-
-# 2. NEW GEMINI CLIENT INITIALIZATION
-gemini_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-
-supabase: Client = create_client(
-    os.getenv("SUPABASE_URL"),
-    os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-)
+from services.env_config import get_gemini_client, get_supabase_client
 
 def process_quote_with_gemini(pdf_path, temperature=0.0, extra_instruction=""):
+    from google.genai import types
+
     print(f"  -> Sending {os.path.basename(pdf_path)} to Tatva Intelligence...")
 
     # Send the PDF inline instead of via the Files API. This avoids a separate
@@ -61,7 +49,7 @@ def process_quote_with_gemini(pdf_path, temperature=0.0, extra_instruction=""):
     {extra_instruction}
     """
 
-    response = gemini_client.models.generate_content(
+    response = get_gemini_client().models.generate_content(
         model='gemini-3.5-flash',
         contents=[
             types.Part.from_bytes(data=pdf_bytes, mime_type='application/pdf'),
@@ -90,14 +78,14 @@ def push_to_supabase(structured_data, filename, session_id):
 
     print(f"  -> Pushing metadata for {quote_payload['vendor_name']}...")
     try:
-        quote_res = supabase.table("quotes").insert(quote_payload).execute()
+        quote_res = get_supabase_client().table("quotes").insert(quote_payload).execute()
     except Exception as e:
         # The 'quote_number' column may not exist yet — fall back without it so the
         # pipeline keeps working. Add the column in Supabase to enable it (see notes).
         if "quote_number" in str(e):
             print("  -> 'quote_number' column missing in Supabase; inserting without it.")
             quote_payload.pop("quote_number", None)
-            quote_res = supabase.table("quotes").insert(quote_payload).execute()
+            quote_res = get_supabase_client().table("quotes").insert(quote_payload).execute()
         else:
             raise
     new_quote_id = quote_res.data[0]['id']
@@ -121,7 +109,7 @@ def push_to_supabase(structured_data, filename, session_id):
     print(f"  -> Pushing {len(items_payload)} line items...")
     if items_payload:
         try:
-            supabase.table("quote_items").insert(items_payload).execute()
+            get_supabase_client().table("quote_items").insert(items_payload).execute()
         except Exception as e:
             # 'item_name' column may not exist yet — retry without it so the
             # pipeline keeps working. Add the column to enable it (see notes).
@@ -129,7 +117,7 @@ def push_to_supabase(structured_data, filename, session_id):
                 print("  -> 'item_name' column missing in Supabase; inserting without it.")
                 for it in items_payload:
                     it.pop("item_name", None)
-                supabase.table("quote_items").insert(items_payload).execute()
+                get_supabase_client().table("quote_items").insert(items_payload).execute()
             else:
                 raise
 

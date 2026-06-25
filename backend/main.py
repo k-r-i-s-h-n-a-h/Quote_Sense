@@ -7,16 +7,46 @@ import os
 import shutil
 import uuid
 import asyncio
+import json
+import time
 from datetime import datetime
 from dotenv import load_dotenv
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-load_dotenv(os.path.join(BASE_DIR, ".env"))
+load_dotenv(os.path.join(BASE_DIR, ".env"), override=True)
+
+DEBUG_LOG_PATH = os.path.join(BASE_DIR, "..", ".cursor", "debug-b7c34a.log")
+
+
+def _agent_debug_log(location, message, data=None, hypothesis_id=None, run_id="pre-fix"):
+    # region agent log
+    try:
+        os.makedirs(os.path.dirname(DEBUG_LOG_PATH), exist_ok=True)
+        with open(DEBUG_LOG_PATH, "a") as f:
+            f.write(json.dumps({
+                "sessionId": "b7c34a",
+                "timestamp": int(time.time() * 1000),
+                "location": location,
+                "message": message,
+                "data": data or {},
+                "hypothesisId": hypothesis_id,
+                "runId": run_id,
+            }) + "\n")
+    except Exception:
+        pass
+    # endregion
 
 # Import your extractor and comparator functions!
 from services.extractor import process_single_pdf
-from services.comparator import run_comparison, handle_chat_query
-from supabase import create_client, Client 
+from services.comparator import (
+    run_comparison,
+    handle_chat_query,
+    mongodb_quotes_to_dataframe,
+)
+from services.env_config import env_diagnostics, get_supabase_client
+
+MIN_COMPARE_QUOTES = 2
+MAX_COMPARE_QUOTES = 3
 
 app = FastAPI(title="QuoteSense API")
 
@@ -86,24 +116,68 @@ def _mongodb_quote_metadata(quote_data: dict) -> dict:
         "source_filename": quote_number or "DIRECT_SYNC",
     }
 
-supabase: Client = create_client(
-    os.getenv("SUPABASE_URL"),
-    os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-)
-
 @app.get("/")
 def read_root():
     return {"status": "QuoteSense Backend is running perfectly! 🚀"}
 
+
 @app.get("/api/health")
 def health():
+    diag = env_diagnostics()
     return {
-        "ok": True,
-        "supabase_configured": bool(
-            os.getenv("SUPABASE_URL") and os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+        "ok": diag["gemini_configured"] and diag["supabase_configured"],
+        "supabase_configured": diag["supabase_configured"],
+        "gemini_configured": diag["gemini_configured"],
+        "env_file": {
+            "readable_bytes": diag.get("readable_bytes"),
+            "corrupted": diag.get("corrupted", False),
+        },
+        "missing_keys": diag.get("missing", []),
+        "hint": (
+            "Edit backend/.env with your real GEMINI_API_KEY, SUPABASE_URL, "
+            "and SUPABASE_SERVICE_ROLE_KEY."
+            if diag.get("missing")
+            else None
         ),
-        "gemini_configured": bool(os.getenv("GEMINI_API_KEY")),
     }
+
+
+@app.on_event("startup")
+async def _startup_diagnostics():
+    """Probe local environment once at boot — writes to debug log for diagnosis."""
+    diag = env_diagnostics()
+    supabase_ok = False
+    sessions_ok = False
+    supabase_err = None
+    sessions_err = None
+
+    if diag["supabase_configured"]:
+        try:
+            get_supabase_client().table("market_moving_averages").select("id").limit(1).execute()
+            supabase_ok = True
+        except Exception as e:
+            supabase_err = str(e)
+
+        try:
+            get_supabase_client().table("market_moving_avg_sessions").select("id").limit(1).execute()
+            sessions_ok = True
+        except Exception as e:
+            sessions_err = str(e)
+
+    _agent_debug_log(
+        "main.py:startup",
+        "backend startup diagnostics",
+        {
+            **diag,
+            "market_moving_averages_ok": supabase_ok,
+            "market_moving_avg_sessions_ok": sessions_ok,
+            "market_moving_averages_err": supabase_err,
+            "market_moving_avg_sessions_err": sessions_err,
+            "python_ok": True,
+        },
+        hypothesis_id="E",
+    )
+
 
 async def _run_compare_pipeline(session_id, saved_files):
     """Background worker: extract every PDF in parallel, then compare.
@@ -202,6 +276,17 @@ async def handle_customer_upload(
     if not session_id:
         session_id = f"session_{uuid.uuid4().hex[:8]}"
 
+    if len(files) < MIN_COMPARE_QUOTES:
+        return {
+            "status": "error",
+            "message": f"At least {MIN_COMPARE_QUOTES} quotes are required to compare.",
+        }
+    if len(files) > MAX_COMPARE_QUOTES:
+        return {
+            "status": "error",
+            "message": f"You can compare at most {MAX_COMPARE_QUOTES} quotes at a time.",
+        }
+
     print(f"\n📥 Received {len(files)} quotes for Session: {session_id}")
 
     saved_files = []
@@ -298,7 +383,7 @@ async def sync_mongodb_quotes(payload: Any=Body(...), session_id: str = None): #
                     grand_total = item.get("value", 0)
 
             # Push to Supabase 'quotes' table
-            quote_res = supabase.table("quotes").insert({
+            quote_res = get_supabase_client().table("quotes").insert({
                 "vendor_name": vendor_detail.get("companyName", "Unknown Vendor"),
                 "grand_total": grand_total,
                 "session_id": session_id,
@@ -338,7 +423,7 @@ async def sync_mongodb_quotes(payload: Any=Body(...), session_id: str = None): #
                         })
 
             if items_to_insert:
-                supabase.table("quote_items").insert(items_to_insert).execute()
+                get_supabase_client().table("quote_items").insert(items_to_insert).execute()
 
         # 3. THE TRIGGER: Call the same comparison engine used for PDFs
         comparison_result = await run_in_threadpool(run_comparison, session_id)
@@ -401,7 +486,7 @@ async def sync_mongodb_quotes(payload: Any = Body(...), session_id: str = None):
                     grand_total = item.get("value", 0)
 
             # --- STEP 1: PUSH TO 'quotes' TABLE ---
-            quote_res = supabase.table("quotes").insert({
+            quote_res = get_supabase_client().table("quotes").insert({
                 "vendor_name": vendor_detail.get("companyName", "Unknown Vendor"),
                 "grand_total": grand_total,
                 "session_id": session_id,
@@ -446,7 +531,7 @@ async def sync_mongodb_quotes(payload: Any = Body(...), session_id: str = None):
                         })
 
             if items_to_insert:
-                supabase.table("quote_items").insert(items_to_insert).execute()
+                get_supabase_client().table("quote_items").insert(items_to_insert).execute()
 
         # --- STEP 3: THE TRIGGER ---
         # Now that ALL 3 vendors are in Supabase, run comparison once
@@ -467,105 +552,191 @@ async def sync_mongodb_quotes(payload: Any = Body(...), session_id: str = None):
         return {"status": "error", "message": str(e)} 
 '''
 
+def _parse_quotes_payload(payload: Any) -> list:
+    """Normalize Tatva/MongoDB quote payloads to a list of quote dicts."""
+    if isinstance(payload, list):
+        return payload
+    if isinstance(payload, dict) and "quotes" in payload:
+        return payload["quotes"]
+    if isinstance(payload, dict):
+        return [payload]
+    return []
+
+
+def _ingest_quotes_to_supabase(quotes_list: list, session_id: str) -> int:
+    """Push quote headers + line items to Supabase. Returns quotes ingested."""
+    ingested = 0
+    for quote_entry in quotes_list:
+        quote_data = _unwrap_mongodb_quote(quote_entry)
+        vendor_detail = quote_data.get("vendorDetail", {})
+        vendor_name = vendor_detail.get("companyName", "Unknown Vendor")
+        meta = _mongodb_quote_metadata(quote_data)
+
+        grand_total = 0
+        for item in quote_data.get("pricingSummary", []):
+            if "grand total" in str(item.get("label", "")).lower():
+                grand_total = item.get("value", 0)
+
+        quote_res = get_supabase_client().table("quotes").insert({
+            "vendor_name": vendor_name,
+            "client_name": meta["client_name"],
+            "quote_date": meta["quote_date"],
+            "quote_number": meta["quote_number"],
+            "grand_total": grand_total,
+            "session_id": session_id,
+            "source_type": "mongodb_integrated",
+            "source_filename": meta["source_filename"],
+        }).execute()
+
+        if not quote_res.data:
+            continue
+
+        quote_id = quote_res.data[0]["id"]
+        ingested += 1
+
+        items_to_insert = []
+        for section in quote_data.get("workSummary", []):
+            for service_obj in section.get("services", []):
+                category_name = service_obj.get("serviceId", {}).get("name", "General")
+                for work_item in service_obj.get("workItems", []):
+                    sub_service_name = work_item.get("subService", {}).get("name", "General Service")
+                    pricing_list = work_item.get("pricingInput", [])
+                    pricing = pricing_list[0] if pricing_list else {}
+                    items_to_insert.append({
+                        "quote_id": quote_id,
+                        "service_category": category_name,
+                        "sub_service": sub_service_name,
+                        "work_title": work_item.get("workTitle", ""),
+                        "description": work_item.get("description", "").replace("&nbsp;", " "),
+                        "quantity": pricing.get("quantity", 0),
+                        "pricing_method": work_item.get("pricingMethod", {}).get("name", "Unit"),
+                        "rate": pricing.get("rate", 0),
+                        "amount": pricing.get("grandTotal", 0),
+                    })
+
+        if items_to_insert:
+            get_supabase_client().table("quote_items").insert(items_to_insert).execute()
+
+    return ingested
+
+
+async def _run_mongodb_sync_pipeline(session_id: str, quotes_list: list):
+    """Background worker: compare in-memory from payloads, persist to Supabase after."""
+    total = len(quotes_list)
+    try:
+        _set_progress(
+            session_id,
+            status="processing",
+            stage="comparing",
+            processed=0,
+            total=total,
+            message=f"Building comparison matrix for {total} quotes…",
+            result=None,
+            error=None,
+            partial=None,
+        )
+
+        def _publish_matrix(matrix):
+            _set_progress(
+                session_id,
+                stage="recommending",
+                partial=matrix,
+                message="Matrix ready — writing Tatva Intelligence recommendation…",
+            )
+
+        def _compare_from_payload():
+            df = mongodb_quotes_to_dataframe(quotes_list)
+            return run_comparison(
+                session_id,
+                _publish_matrix,
+                df=df,
+                fast_moving_avg=True,
+            )
+
+        comparison_result = await run_in_threadpool(_compare_from_payload)
+
+        if comparison_result.get("error"):
+            _set_progress(
+                session_id,
+                status="error",
+                message=comparison_result["error"],
+                error=comparison_result["error"],
+            )
+            return
+
+        _set_progress(
+            session_id,
+            status="done",
+            stage="done",
+            processed=total,
+            message="Analysis complete.",
+            result={
+                "status": "success",
+                "session_id": session_id,
+                "report": comparison_result.get("report", ""),
+                "chartData": comparison_result.get("chartData", []),
+                "tableData": comparison_result.get("tableData", []),
+                "vendors": comparison_result.get("vendors", []),
+                "vendorMeta": comparison_result.get("vendorMeta", {}),
+            },
+        )
+
+        # Persist to Supabase in the background for chat / history (non-blocking).
+        async def _persist():
+            try:
+                await run_in_threadpool(_ingest_quotes_to_supabase, quotes_list, session_id)
+            except Exception as persist_err:
+                print(f"⚠️ Background Supabase persist failed for {session_id}: {persist_err}")
+
+        asyncio.create_task(_persist())
+
+    except Exception as e:
+        print(f"❌ MongoDB sync pipeline crash for {session_id}: {e}")
+        _set_progress(session_id, status="error", message=str(e), error=str(e))
+
+
 @app.post("/api/sync-mongodb-quotes")
 async def sync_mongodb_quotes(payload: Any = Body(...), session_id: str = None):
     """
-    RECEIVES: Direct JSON list [...] from Postman/Other Webpage
+    RECEIVES: Tatva/MongoDB quote JSON (list or single object).
+    Returns immediately with session_id; poll /api/progress/{session_id}.
     """
-    try:
-        # 1. DIRECT ARRAY CHECK
-        # If you are sending [...] directly, payload will be a list
-        if isinstance(payload, list):
-            quotes_list = payload
-        elif isinstance(payload, dict) and "quotes" in payload:
-            # Fallback if someone wraps it in {"quotes": [...]}
-            quotes_list = payload["quotes"]
-        else:
-            # If it's a single object, wrap it in a list
-            quotes_list = [payload]
-
-        print(f"📦 Processing {len(quotes_list)} direct quotes for session: {session_id}")
-
-        for quote_entry in quotes_list:
-            quote_data = _unwrap_mongodb_quote(quote_entry)
-
-            # --- VENDOR & TOTAL EXTRACTION ---
-            vendor_detail = quote_data.get("vendorDetail", {})
-            vendor_name = vendor_detail.get("companyName", "Unknown Vendor")
-            meta = _mongodb_quote_metadata(quote_data)
-            
-            # Find the Grand Total inside pricingSummary
-            grand_total = 0
-            pricing_summary = quote_data.get("pricingSummary", [])
-            for item in pricing_summary:
-                if "grand total" in str(item.get("label", "")).lower():
-                    grand_total = item.get("value", 0)
-
-            # --- STEP 1: PUSH TO 'quotes' TABLE ---
-            quote_res = supabase.table("quotes").insert({
-                "vendor_name": vendor_name,
-                "client_name": meta["client_name"],
-                "quote_date": meta["quote_date"],
-                "quote_number": meta["quote_number"],
-                "grand_total": grand_total,
-                "session_id": session_id,
-                "source_type": "mongodb_integrated",
-                "source_filename": meta["source_filename"],
-            }).execute()
-            
-            if not quote_res.data:
-                continue
-                
-            quote_id = quote_res.data[0]['id']
-            
-            # --- STEP 2: PUSH TO 'quote_items' TABLE ---
-            items_to_insert = []
-            work_summary = quote_data.get("workSummary", [])
-            
-            for section in work_summary:
-                for service_obj in section.get("services", []):
-                    # Get Category Name
-                    category_name = service_obj.get("serviceId", {}).get("name", "General")
-                    
-                    for work_item in service_obj.get("workItems", []):
-                        # Get Sub Service Name
-                        sub_service_name = work_item.get("subService", {}).get("name", "General Service")
-                        
-                        # Get Pricing Details from pricingInput list
-                        pricing_list = work_item.get("pricingInput", [])
-                        pricing = pricing_list[0] if pricing_list else {}
-                        
-                        items_to_insert.append({
-                            "quote_id": quote_id,
-                            "service_category": category_name,
-                            "sub_service": sub_service_name,
-                            "work_title": work_item.get("workTitle", ""),
-                            "description": work_item.get("description", "").replace("&nbsp;", " "),
-                            "quantity": pricing.get("quantity", 0),
-                            "pricing_method": work_item.get("pricingMethod", {}).get("name", "Unit"),
-                            "rate": pricing.get("rate", 0),
-                            "amount": pricing.get("grandTotal", 0)
-                        })
-
-            if items_to_insert:
-                supabase.table("quote_items").insert(items_to_insert).execute()
-
-        # --- STEP 3: WAIT & TRIGGER ---
-        await asyncio.sleep(1.5)
-        comparison_result = await run_in_threadpool(run_comparison, session_id)
-        
+    quotes_list = _parse_quotes_payload(payload)
+    if len(quotes_list) < MIN_COMPARE_QUOTES:
         return {
-            "status": "success",
-            "session_id": session_id,
-            "report": comparison_result.get("report"),
-            "chartData": comparison_result.get("chartData"),
-            "tableData": comparison_result.get("tableData"),
-            "vendors": comparison_result.get("vendors")
+            "status": "error",
+            "message": f"At least {MIN_COMPARE_QUOTES} quotes are required to compare.",
+        }
+    if len(quotes_list) > MAX_COMPARE_QUOTES:
+        return {
+            "status": "error",
+            "message": f"You can compare at most {MAX_COMPARE_QUOTES} quotes at a time.",
         }
 
-    except Exception as e:
-        print(f"❌ Mapping Error: {str(e)}")
-        return {"status": "error", "message": str(e)}
+    if not session_id:
+        session_id = f"session_{uuid.uuid4().hex[:8]}"
+
+    print(f"📦 Queuing {len(quotes_list)} MongoDB/Tatva quotes for session: {session_id}")
+
+    _set_progress(
+        session_id,
+        status="processing",
+        stage="queued",
+        processed=0,
+        total=len(quotes_list),
+        message="Queued — syncing quote payloads…",
+        result=None,
+        error=None,
+        partial=None,
+    )
+
+    asyncio.create_task(_run_mongodb_sync_pipeline(session_id, quotes_list))
+
+    return {
+        "status": "processing",
+        "session_id": session_id,
+        "message": f"Received {len(quotes_list)} quotes. Comparison started.",
+    }
 
 
 @app.get("/api/get-comparison")

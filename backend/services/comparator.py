@@ -2,9 +2,6 @@ import sys
 import os
 import math
 import concurrent.futures
-import pandas as pd
-from dotenv import load_dotenv
-from supabase import create_client, Client
 import traceback
 import json
 
@@ -13,18 +10,80 @@ import json
 # data-driven fallback so the run always finishes with a report.
 RECOMMENDATION_TIMEOUT_SEC = 45
 
-from google import genai
-from google.genai import types
+
+class _PandasLazy:
+    """Defer pandas import so uvicorn starts instantly (pandas can take 30s+ on first load)."""
+    _mod = None
+
+    def __getattr__(self, name):
+        if self._mod is None:
+            import pandas as _mod
+            self._mod = _mod
+        return getattr(self._mod, name)
+
+
+pd = _PandasLazy()
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
-load_dotenv()
 
-gemini_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+from services.env_config import get_gemini_client, get_supabase_client
 
-supabase: Client = create_client(
-    os.getenv("SUPABASE_URL"),
-    os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+DEBUG_LOG_PATH = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "../../.cursor/debug-b7c34a.log")
 )
+_SESSIONS_TABLE_AVAILABLE: bool | None = None
+
+
+def _agent_debug_log(location, message, data=None, hypothesis_id=None, run_id="pre-fix"):
+    # region agent log
+    try:
+        import time
+        import json as _json
+        os.makedirs(os.path.dirname(DEBUG_LOG_PATH), exist_ok=True)
+        with open(DEBUG_LOG_PATH, "a") as f:
+            f.write(_json.dumps({
+                "sessionId": "b7c34a",
+                "timestamp": int(time.time() * 1000),
+                "location": location,
+                "message": message,
+                "data": data or {},
+                "hypothesisId": hypothesis_id,
+                "runId": run_id,
+            }) + "\n")
+    except Exception:
+        pass
+    # endregion
+
+
+def _sessions_table_available() -> bool:
+    """Return False once if market_moving_avg_sessions is missing in Supabase."""
+    global _SESSIONS_TABLE_AVAILABLE
+    if _SESSIONS_TABLE_AVAILABLE is not None:
+        return _SESSIONS_TABLE_AVAILABLE
+    try:
+        from services.env_config import env_diagnostics
+        if not env_diagnostics()["supabase_configured"]:
+            _SESSIONS_TABLE_AVAILABLE = False
+            return False
+        get_supabase_client().table("market_moving_avg_sessions").select("id").limit(1).execute()
+        _SESSIONS_TABLE_AVAILABLE = True
+    except Exception as e:
+        err = str(e)
+        if "market_moving_avg_sessions" in err or "PGRST205" in err:
+            _SESSIONS_TABLE_AVAILABLE = False
+            print(
+                "ℹ️ market_moving_avg_sessions table not found — session dedup disabled. "
+                "Run supabase/migrations/001_market_moving_avg_sessions.sql in Supabase SQL editor."
+            )
+            _agent_debug_log(
+                "comparator.py:_sessions_table_available",
+                "sessions table missing",
+                {"error": err},
+                hypothesis_id="A",
+            )
+        else:
+            _SESSIONS_TABLE_AVAILABLE = True
+    return _SESSIONS_TABLE_AVAILABLE
 
 
 def sanitize_for_json(obj):
@@ -51,7 +110,7 @@ def sanitize_for_json(obj):
 def fetch_data(session_id):
     print(f"📥 Fetching data for Session: {session_id}...")
     # select("*") so optional columns (e.g. quote_number) don't error if absent.
-    quotes_response = supabase.table("quotes").select("*").eq("session_id", session_id).execute()
+    quotes_response = get_supabase_client().table("quotes").select("*").eq("session_id", session_id).execute()
     
     if not quotes_response.data:
         raise ValueError("No quotes found in the database for this session!")
@@ -63,14 +122,14 @@ def fetch_data(session_id):
     # which mirrors the quote's original top-to-bottom flow.
     try:
         items_response = (
-            supabase.table("quote_items")
+            get_supabase_client().table("quote_items")
             .select("*")
             .in_("quote_id", quote_ids)
             .order("id")
             .execute()
         )
     except Exception:
-        items_response = supabase.table("quote_items").select("*").in_("quote_id", quote_ids).execute()
+        items_response = get_supabase_client().table("quote_items").select("*").in_("quote_id", quote_ids).execute()
     
     if not items_response.data:
         raise ValueError("I found the quotes, but there are no line items attached to them! The PDF extraction likely failed.")
@@ -109,7 +168,7 @@ def _fetch_moving_average_row(key: dict):
     """Return an existing market_moving_averages row, or None."""
     try:
         res = (
-            supabase.table("market_moving_averages")
+            get_supabase_client().table("market_moving_averages")
             .select("*")
             .match(key)
             .limit(1)
@@ -123,11 +182,11 @@ def _fetch_moving_average_row(key: dict):
 
 def _session_already_applied(session_id: str, item_id: str) -> bool:
     """True if this comparison session already updated this moving-avg bucket."""
-    if not session_id or not item_id:
+    if not session_id or not item_id or not _sessions_table_available():
         return False
     try:
         res = (
-            supabase.table("market_moving_avg_sessions")
+            get_supabase_client().table("market_moving_avg_sessions")
             .select("id")
             .eq("session_id", session_id)
             .eq("item_id", item_id)
@@ -141,8 +200,10 @@ def _session_already_applied(session_id: str, item_id: str) -> bool:
 
 
 def _record_moving_avg_session(session_id: str, item_id: str, batch_avg: float, batch_weight: int):
+    if not _sessions_table_available():
+        return
     try:
-        supabase.table("market_moving_avg_sessions").insert({
+        get_supabase_client().table("market_moving_avg_sessions").insert({
             "session_id": session_id,
             "item_id": item_id,
             "batch_avg": round(batch_avg, 2),
@@ -210,10 +271,10 @@ def _update_moving_average(
 
     try:
         if existing and existing.get("id"):
-            supabase.table("market_moving_averages").update(payload).eq("id", existing["id"]).execute()
+            get_supabase_client().table("market_moving_averages").update(payload).eq("id", existing["id"]).execute()
             item_id = existing["id"]
         else:
-            res = supabase.table("market_moving_averages").insert(payload).execute()
+            res = get_supabase_client().table("market_moving_averages").insert(payload).execute()
             item_id = res.data[0]["id"] if res.data else None
 
         if item_id:
@@ -268,8 +329,10 @@ def _generate_recommendation(summary_prompt, chart_data):
     """
     ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
     try:
+        from google.genai import types
+
         future = ex.submit(
-            lambda: gemini_client.models.generate_content(
+            lambda: get_gemini_client().models.generate_content(
                 model='gemini-2.5-flash',
                 contents=summary_prompt,
                 config=types.GenerateContentConfig(temperature=0.2),
@@ -290,16 +353,17 @@ def _generate_recommendation(summary_prompt, chart_data):
         ex.shutdown(wait=False)
 
 
-def run_comparison(session_id, on_matrix_ready=None):
+def run_comparison(session_id, on_matrix_ready=None, df=None, fast_moving_avg=False):
     """Build the comparison matrix, then generate the recommendation.
 
-    If ``on_matrix_ready`` is provided, it's invoked with the matrix payload
-    (chart + table + vendors, no report) the moment the fast Pandas step finishes
-    — before the slower Gemini recommendation call. This lets the frontend render
-    results immediately while the recommendation is still being written.
+    If ``df`` is provided (MongoDB/Tatva payload lane), skip the Supabase fetch.
+    ``fast_moving_avg`` uses in-session averages only — no per-row Supabase writes.
     """
     try:
-        df = fetch_data(session_id)
+        if df is None:
+            df = fetch_data(session_id)
+        else:
+            df = df.copy()
         print("🧮 Running Pandas matrix analysis for detailed frontend checklist...")
 
         # Sum of the extracted line items per vendor (used as a fallback for the chart)
@@ -397,13 +461,20 @@ def run_comparison(session_id, on_matrix_ready=None):
             line_key = _line_item_key(str(item_label), str(room))
             # Per line item: each vendor's price for THIS row only (>0).
             batch_prices = [float(row[v]) for v in vendors if float(row[v]) > 0]
-            moving_avg, moving_weight = _update_moving_average(
-                session_id,
-                str(category),
-                str(sub_service_name),
-                line_key,
-                batch_prices,
-            )
+            if fast_moving_avg:
+                batch_weight = len(batch_prices)
+                moving_avg = (
+                    round(sum(batch_prices) / batch_weight, 2) if batch_weight else 0.0
+                )
+                moving_weight = batch_weight
+            else:
+                moving_avg, moving_weight = _update_moving_average(
+                    session_id,
+                    str(category),
+                    str(sub_service_name),
+                    line_key,
+                    batch_prices,
+                )
 
             row_dict = {
                 "category": str(category),             # level 1: service category group
@@ -508,6 +579,73 @@ def run_comparison(session_id, on_matrix_ready=None):
         error_details = traceback.format_exc()
         print(f"❌ Backend Crash Details:\n{error_details}")
         return {"error": f"Error during comparison: {str(e)}"}
+
+
+def _unwrap_quote_payload(quote_entry: dict) -> dict:
+    if not isinstance(quote_entry, dict):
+        return quote_entry
+    inner = quote_entry.get("data")
+    if isinstance(inner, dict) and (
+        "quoteNumber" in inner or "vendorDetail" in inner or "workSummary" in inner
+    ):
+        return inner
+    return quote_entry
+
+
+def mongodb_quotes_to_dataframe(quotes_list: list):
+    """Build a comparison DataFrame directly from Tatva/MongoDB quote JSON."""
+    rows = []
+    for quote_entry in quotes_list:
+        quote_data = _unwrap_quote_payload(quote_entry)
+        vendor_detail = quote_data.get("vendorDetail") or {}
+        company = str(vendor_detail.get("companyName") or "Unknown Vendor")
+        quote_number = str(quote_data.get("quoteNumber") or "").lstrip("#").strip()
+        source_filename = quote_number or "DIRECT_SYNC"
+        client_detail = quote_data.get("clientDetail") or {}
+        quote_date = str(quote_data.get("quoteDate") or quote_data.get("createdAt") or "")
+
+        grand_total = 0.0
+        for item in quote_data.get("pricingSummary") or []:
+            if "grand total" in str(item.get("label", "")).lower():
+                grand_total = float(item.get("value") or 0)
+
+        vendor_key = f"{company} ({source_filename})"
+
+        for section in quote_data.get("workSummary") or []:
+            for service_obj in section.get("services") or []:
+                category_name = (
+                    (service_obj.get("serviceId") or {}).get("name") or "General"
+                )
+                for work_item in service_obj.get("workItems") or []:
+                    sub_service_name = (
+                        (work_item.get("subService") or {}).get("name")
+                        or work_item.get("workTitle")
+                        or "General Service"
+                    )
+                    pricing_list = work_item.get("pricingInput") or []
+                    pricing = pricing_list[0] if pricing_list else {}
+                    amount = float(pricing.get("grandTotal") or pricing.get("amount") or 0)
+                    rows.append({
+                        "vendor_name": vendor_key,
+                        "company": company,
+                        "source_filename": source_filename,
+                        "quote_number": quote_number,
+                        "quote_date": quote_date[:10] if len(quote_date) >= 10 else quote_date,
+                        "grand_total": grand_total,
+                        "client_name": client_detail.get("clientName") or "",
+                        "service_category": category_name,
+                        "sub_service": sub_service_name,
+                        "work_title": work_item.get("workTitle") or "",
+                        "item_name": work_item.get("workTitle") or "",
+                        "description": str(work_item.get("description") or "").replace("&nbsp;", " "),
+                        "quantity": pricing.get("quantity") or 0,
+                        "rate": pricing.get("rate") or 0,
+                        "amount": amount,
+                    })
+
+    if not rows:
+        raise ValueError("No line items found in quote payloads.")
+    return pd.DataFrame(rows)
     
 def handle_chat_query(session_id, user_message):
     print(f"💬 Processing chat query for Session: {session_id}...")
@@ -536,7 +674,9 @@ def handle_chat_query(session_id, user_message):
         3. Do not guess. If the data doesn't contain the answer, politely say you don't have that detail.
         """
 
-        chat_response = gemini_client.models.generate_content(
+        from google.genai import types
+
+        chat_response = get_gemini_client().models.generate_content(
             model='gemini-2.5-flash',
             contents=prompt,
             config=types.GenerateContentConfig(temperature=0.2)

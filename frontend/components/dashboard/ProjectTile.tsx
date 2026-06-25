@@ -2,7 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
-import type { ProjectSummary } from "@/lib/dummy-project-data";
+import type { ProjectSummary } from "@/lib/project-types";
 
 const STATUS_STYLE: Record<ProjectSummary["status"], string> = {
   in_progress: "bg-blue-50 text-blue-700",

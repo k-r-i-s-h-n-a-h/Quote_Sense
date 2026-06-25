@@ -274,7 +274,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const token = localStorage.getItem(TOKEN_KEY);
         if (stored && token) {
           setUser(stored);
-          await refreshProfile();
+          refreshProfile().catch(() => {});
         }
       } finally {
         if (!cancelled) setIsLoading(false);
@@ -402,4 +402,13 @@ export function useAuth() {
 export function getAuthToken(): string | null {
   if (typeof window === "undefined") return null;
   return localStorage.getItem(TOKEN_KEY);
+}
+
+/** Resolve Tatva user id from stored profile or JWT (SSO / OTP). */
+export function getAuthUserId(user: TatvaUser | null): string | null {
+  const fromUser = getUserId(user);
+  if (fromUser) return fromUser;
+  const token = getAuthToken();
+  if (!token) return null;
+  return getUserIdFromJwt(token);
 }

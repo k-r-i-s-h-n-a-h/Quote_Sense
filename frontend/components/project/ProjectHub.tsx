@@ -11,6 +11,7 @@ import {
   cacheSelectedComparePayloads,
   readCachedProjectQuotePayloads,
 } from "@/lib/compare-payload-cache";
+import { projectHref } from "@/lib/project-api";
 import {
   MAX_COMPARE_QUOTES,
   MIN_COMPARE_QUOTES,
@@ -60,24 +61,24 @@ export default function ProjectHub({ project }: ProjectHubProps) {
       const limited = clampQuoteIds(quoteIds);
       if (!isValidCompareCount(limited.length)) return;
 
-      const cached = readCachedProjectQuotePayloads(project.id);
+      const cached = readCachedProjectQuotePayloads(project.projectCode);
       if (cached) {
         const wanted = new Set(limited.map(String));
         const selected = cached.quotes.filter((q) =>
           wanted.has(String(q._id || q.id))
         );
         if (isValidCompareCount(selected.length)) {
-          cacheSelectedComparePayloads(project.id, selected, cached.meta);
+          cacheSelectedComparePayloads(project.projectCode, selected, cached.meta);
         }
       }
 
       const params = new URLSearchParams({
         quotes: limited.join(","),
-        projectId: project.id,
+        projectId: project.projectCode,
       });
       router.push(`/compare?${params.toString()}`);
     },
-    [project.id, router]
+    [project.id, project.projectCode, router]
   );
 
   const handleCompare = useCallback(() => {

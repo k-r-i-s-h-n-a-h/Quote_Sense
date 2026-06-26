@@ -13,6 +13,9 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const projectId = req.nextUrl.searchParams.get("project_id");
+  const authHeader = req.headers.get("authorization");
+
   let body: unknown;
   try {
     body = await req.json();
@@ -23,12 +26,20 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const backendParams = new URLSearchParams({ session_id: sessionId });
+  if (projectId) {
+    backendParams.set("project_id", projectId);
+  }
+
   try {
     const res = await fetch(
-      `${BACKEND}/api/sync-mongodb-quotes?session_id=${encodeURIComponent(sessionId)}`,
+      `${BACKEND}/api/sync-mongodb-quotes?${backendParams.toString()}`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(authHeader ? { Authorization: authHeader } : {}),
+        },
         body: JSON.stringify(body),
       }
     );

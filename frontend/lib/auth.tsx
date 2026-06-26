@@ -9,6 +9,7 @@ import React, {
   useState,
 } from "react";
 import type { TatvaUser, VerifyOtpResponse } from "./tatva-api";
+import { buildPmRedirectPath } from "./project-resolve";
 
 const TOKEN_KEY = "token";
 const REFRESH_KEY = "refreshToken";
@@ -112,10 +113,10 @@ function userFromJwt(token: string, userId: string): TatvaUser | null {
   return { _id: userId, email, name };
 }
 
-function cleanRedirectUrl(sessionId: string | null): string {
-  return sessionId
-    ? `/compare?session_id=${encodeURIComponent(sessionId)}`
-    : "/";
+function buildSsoRedirectUrl(params: URLSearchParams): string {
+  const pathname =
+    typeof window !== "undefined" ? window.location.pathname : undefined;
+  return buildPmRedirectPath(params, pathname);
 }
 
 /** Collect SSO params from the current URL or nested inside login returnTo. */
@@ -152,8 +153,7 @@ async function bootstrapFromSearchParams(
   const urlUserId = params.get("user_id") ?? getUserIdFromJwt(urlToken);
   if (!urlUserId) return null;
 
-  const sessionId = params.get("session_id");
-  const redirectTo = cleanRedirectUrl(sessionId);
+  const redirectTo = buildSsoRedirectUrl(params);
 
   localStorage.setItem(TOKEN_KEY, urlToken);
 
@@ -198,11 +198,27 @@ async function bootstrapFromRedirectParams(): Promise<BootstrapResult | null> {
 }
 
 function applyBootstrapRedirect(redirectTo: string) {
-  if (window.location.pathname === "/login") {
+  if (typeof window === "undefined") return;
+
+  const path = window.location.pathname;
+
+  if (path === "/login") {
     window.location.replace(redirectTo);
     return;
   }
-  window.history.replaceState({}, "", redirectTo);
+
+  if (path.startsWith("/project/") && redirectTo.startsWith("/project/")) {
+    window.history.replaceState({}, "", redirectTo);
+    return;
+  }
+
+  if (`${path}${window.location.search}` !== redirectTo) {
+    if (redirectTo.startsWith("/project/")) {
+      window.location.replace(redirectTo);
+      return;
+    }
+    window.history.replaceState({}, "", redirectTo);
+  }
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {

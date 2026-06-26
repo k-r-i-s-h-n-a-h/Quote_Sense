@@ -94,6 +94,9 @@ export function CompareSelectionBanner({
 
   if (summary.length === 0) return null;
 
+  const backRef = project?.projectCode || projectId;
+  const backHref = backRef ? `/project/${encodeURIComponent(backRef)}` : "/";
+
   return (
     <div className="qs-card p-5 border-[#c04a00]/20 bg-orange-50/30">
       <div className="flex items-start justify-between gap-4 mb-4">
@@ -111,7 +114,7 @@ export function CompareSelectionBanner({
           )}
         </div>
         <Link
-          href={projectId ? `/project/${projectId}` : "/"}
+          href={backHref}
           className="shrink-0 text-xs font-medium text-slate-600 hover:text-[#c04a00] px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:border-[#c04a00]/30 transition-colors"
         >
           ← Back to project
@@ -157,7 +160,9 @@ export function ComparePageNav({
     );
   }
 
-  const backHref = projectId ? `/project/${projectId}` : "/";
+  const backHref = projectId
+    ? `/project/${encodeURIComponent(projectId)}`
+    : "/";
   const backLabel = projectId ? "Back to project" : "All projects";
 
   return (

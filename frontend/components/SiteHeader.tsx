@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import TatvaLogo from "./TatvaLogo";
 import ProfileModal from "./ProfileModal";
+import TatvaEcosystemMenu from "./TatvaEcosystemMenu";
 import { useAuth } from "@/lib/auth";
 
 export default function SiteHeader() {
@@ -26,6 +27,7 @@ export default function SiteHeader() {
           </Link>
 
           <div className="flex items-center gap-3">
+            <TatvaEcosystemMenu />
             {isLoading ? (
               <div className="w-24 h-9 bg-slate-100 rounded-lg animate-pulse" />
             ) : isAuthenticated ? (
@@ -33,12 +35,12 @@ export default function SiteHeader() {
                 <button
                   type="button"
                   onClick={() => setProfileOpen(true)}
-                  className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 rounded-lg transition-colors"
+                  aria-label={`Profile — ${displayName}`}
+                  className="inline-flex items-center justify-center w-9 h-9 rounded-full hover:bg-slate-50 transition-colors"
                 >
-                  <span className="w-7 h-7 rounded-full bg-gradient-to-br from-slate-400 to-slate-600 flex items-center justify-center text-white text-xs font-bold">
+                  <span className="w-8 h-8 rounded-full bg-gradient-to-br from-slate-400 to-slate-600 flex items-center justify-center text-white text-sm font-bold">
                     {displayName.charAt(0).toUpperCase()}
                   </span>
-                  <span className="hidden md:inline max-w-[120px] truncate">{displayName}</span>
                 </button>
                 <button
                   type="button"

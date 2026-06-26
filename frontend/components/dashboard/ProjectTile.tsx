@@ -3,6 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import type { ProjectSummary } from "@/lib/project-types";
+import { projectHref } from "@/lib/project-api";
 
 const STATUS_STYLE: Record<ProjectSummary["status"], string> = {
   in_progress: "bg-blue-50 text-blue-700",
@@ -17,7 +18,7 @@ type ProjectTileProps = {
 export function ProjectTile({ project }: ProjectTileProps) {
   return (
     <Link
-      href={`/project/${project.id}`}
+      href={projectHref(project)}
       className="group qs-card p-5 flex flex-col min-h-[180px] hover:border-[#c04a00]/30 hover:shadow-md hover:shadow-orange-100/50 transition-all duration-200"
     >
       <div className="flex items-start justify-between gap-2 mb-3">

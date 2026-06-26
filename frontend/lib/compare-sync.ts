@@ -13,7 +13,8 @@ import {
   isValidCompareCount,
 } from "./compare-limits";
 import { unwrapApiList } from "./project-mappers";
-import { getAuthToken } from "./auth";
+import { getAuthToken, getAuthUserId } from "./auth";
+import { resolveProjectRefForCompare } from "./project-api";
 
 type RawQuote = Record<string, unknown>;
 
@@ -25,8 +26,12 @@ function backendUrl(): string {
   return process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8001";
 }
 
-function syncMongoUrl(sessionId: string): string {
-  return `/api/compare/sync-mongodb?session_id=${encodeURIComponent(sessionId)}`;
+function syncMongoUrl(sessionId: string, projectMongoId?: string): string {
+  const params = new URLSearchParams({ session_id: sessionId });
+  if (projectMongoId) {
+    params.set("project_id", projectMongoId);
+  }
+  return `/api/compare/sync-mongodb?${params.toString()}`;
 }
 
 export function newComparisonSessionId(): string {
@@ -52,19 +57,39 @@ export function filterQuotesByIds(
   return out;
 }
 
-/** Prefer selected cache → full project cache → single API fetch. */
+/** Prefer selected cache → full project cache → Tatva API fetch. */
 export async function resolveQuotesForCompare(
-  projectId: string,
-  quoteIds: string[]
-): Promise<{ ok: true; quotes: RawQuote[] } | { ok: false; message: string }> {
-  const cached = getCachedQuotesByIds(projectId, quoteIds);
+  projectRef: string,
+  quoteIds: string[],
+  userId?: string | null
+): Promise<
+  | { ok: true; quotes: RawQuote[]; mongoId: string }
+  | { ok: false; message: string }
+> {
+  const resolved = await resolveProjectRefForCompare(
+    projectRef,
+    userId ?? getAuthUserId(null)
+  );
+  if (!resolved) {
+    return {
+      ok: false,
+      message: "Project not found. Open the project from your dashboard first.",
+    };
+  }
+
+  const { mongoId, publicRef } = resolved;
+  const cacheKey = publicRef;
+
+  const cached =
+    getCachedQuotesByIds(cacheKey, quoteIds) ||
+    getCachedQuotesByIds(mongoId, quoteIds);
   if (cached && isValidCompareCount(cached.length)) {
-    return { ok: true, quotes: cached };
+    return { ok: true, quotes: cached, mongoId };
   }
 
   const token = getAuthToken();
   const res = await fetch(
-    `/api/projects/${encodeURIComponent(projectId)}/quotes`,
+    `/api/projects/${encodeURIComponent(mongoId)}/quotes`,
     { headers: token ? { Authorization: `Bearer ${token}` } : {} }
   );
 
@@ -92,14 +117,19 @@ export async function resolveQuotesForCompare(
     };
   }
 
-  cacheSelectedComparePayloads(projectId, selected);
-  return { ok: true, quotes: selected };
+  cacheSelectedComparePayloads(cacheKey, selected, {
+    title: "",
+    projectCode: publicRef,
+    mongoId,
+  });
+  return { ok: true, quotes: selected, mongoId };
 }
 
 /** Kick off async MongoDB lane — poll /api/progress/{session_id} for results. */
 export async function startMongoCompareJob(
   quotes: RawQuote[],
-  sessionId?: string
+  sessionId?: string,
+  projectMongoId?: string
 ): Promise<StartCompareJobResult> {
   if (!isValidCompareCount(quotes.length)) {
     return {
@@ -109,11 +139,15 @@ export async function startMongoCompareJob(
   }
 
   const sid = sessionId || newComparisonSessionId();
+  const token = getAuthToken();
 
   try {
-    const res = await fetch(syncMongoUrl(sid), {
+    const res = await fetch(syncMongoUrl(sid, projectMongoId), {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
       body: JSON.stringify(quotes),
     });
 

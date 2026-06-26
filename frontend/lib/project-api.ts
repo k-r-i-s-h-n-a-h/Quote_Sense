@@ -6,8 +6,16 @@ import {
 import type { ProjectData, ProjectSummary } from "./project-types";
 import { getAuthToken, getAuthUserId } from "./auth";
 import { cacheProjectQuotePayloads } from "./compare-payload-cache";
+import {
+  findProjectRawByRef,
+  isMongoObjectId,
+  resolveProjectFromRaw,
+  resolveProjectRef,
+  type ResolvedProjectRef,
+} from "./project-resolve";
 
-export { getAuthUserId };
+export { getAuthUserId, resolveProjectRef };
+export type { ResolvedProjectRef };
 
 function authHeaders(): HeadersInit {
   const token = getAuthToken();
@@ -51,28 +59,38 @@ export type FetchProjectDetailResult =
   | { ok: false; message: string; status: number };
 
 export async function fetchProjectWithQuotes(
-  projectId: string,
+  projectRef: string,
   userId?: string | null
 ): Promise<FetchProjectDetailResult> {
+  const headers = authHeaders();
+  const resolved = await resolveProjectRef(projectRef, userId, headers);
+  if (!resolved) {
+    return {
+      ok: false,
+      message: "Project not found. Check the project code or sign in again.",
+      status: 404,
+    };
+  }
+
+  const { mongoId, publicRef } = resolved;
   let projectRaw: Record<string, unknown> | null = null;
 
   if (userId) {
     const listRes = await fetch(
       `/api/projects?userId=${encodeURIComponent(userId)}`,
-      { headers: authHeaders() }
+      { headers }
     );
     if (listRes.ok) {
       const listData = await parseJson(listRes);
       projectRaw =
-        unwrapApiList(listData).find(
-          (p) => String(p._id || p.id) === projectId
-        ) ?? null;
+        findProjectRawByRef(unwrapApiList(listData) as Record<string, unknown>[], projectRef) ??
+        null;
     }
   }
 
   const quotesRes = await fetch(
-    `/api/projects/${encodeURIComponent(projectId)}/quotes`,
-    { headers: authHeaders() }
+    `/api/projects/${encodeURIComponent(mongoId)}/quotes`,
+    { headers }
   );
   const quotesData = await parseJson(quotesRes);
 
@@ -84,10 +102,31 @@ export async function fetchProjectWithQuotes(
   }
 
   const rawQuotes = unwrapApiList(quotesData);
-  const project = buildProjectWithQuotes(projectRaw, projectId, quotesData);
-  cacheProjectQuotePayloads(projectId, rawQuotes, {
+  const project = buildProjectWithQuotes(projectRaw, mongoId, quotesData);
+  project.id = mongoId;
+  project.projectCode = publicRef;
+
+  cacheProjectQuotePayloads(publicRef, rawQuotes, {
     title: project.title,
-    projectCode: project.projectCode,
+    projectCode: publicRef,
+    mongoId,
   });
+
   return { ok: true, project };
+}
+
+/** Resolve public code in compare URLs to mongo id for Tatva API calls. */
+export async function resolveProjectRefForCompare(
+  projectRef: string,
+  userId?: string | null
+): Promise<ResolvedProjectRef | null> {
+  return resolveProjectRef(projectRef, userId, authHeaders());
+}
+
+export function projectHref(project: { projectCode: string; id: string }): string {
+  return `/project/${encodeURIComponent(project.projectCode || project.id)}`;
+}
+
+export function isPublicProjectRef(ref: string): boolean {
+  return !isMongoObjectId(ref);
 }

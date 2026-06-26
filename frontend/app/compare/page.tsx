@@ -20,6 +20,7 @@ import {
   isValidCompareCount,
 } from "../../lib/compare-limits";
 import { useAuth } from "@/lib/auth";
+import { getAuthUserId } from "@/lib/project-api";
 import {
   ComparePageNav,
   IntegratedLoadingBanner,
@@ -79,7 +80,7 @@ export default function Home() {
 
 function QuoteSenseContent() {
   const router = useRouter();
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
   const searchParams = useSearchParams();
   const [files, setFiles] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
@@ -263,7 +264,8 @@ function QuoteSenseContent() {
       try {
         const quotesResult = await resolveQuotesForCompare(
           projectId,
-          selectedQuoteIds
+          selectedQuoteIds,
+          getAuthUserId(user)
         );
 
         if (!quotesResult.ok) {
@@ -280,7 +282,11 @@ function QuoteSenseContent() {
           total: quotesResult.quotes.length,
         });
 
-        const job = await startMongoCompareJob(quotesResult.quotes);
+        const job = await startMongoCompareJob(
+          quotesResult.quotes,
+          undefined,
+          quotesResult.mongoId
+        );
 
         if (!job.ok) {
           setReport(`❌ ${job.message}`);
@@ -302,7 +308,7 @@ function QuoteSenseContent() {
         setLoading(false);
       }
     })();
-  }, [lane, compareRunKey, activeJobId, sessionIdFromUrl]);
+  }, [lane, compareRunKey, activeJobId, sessionIdFromUrl, projectIdParam, selectedQuoteIds, user]);
 
   // Poll progress for the active comparison job (separate effect — not cancelled on URL tweak).
   useEffect(() => {

@@ -11,16 +11,24 @@ function safeReturnTo(raw: string | null): string {
   return raw;
 }
 
-/** Strip jwt_auth from returnTo; keep session_id for MongoDB auto-lane. */
+/** Preserve PM deep-links; strip jwt from returnTo. */
 function cleanReturnTo(raw: string): string {
   const queryStart = raw.indexOf("?");
-  if (queryStart < 0) return raw;
+  if (queryStart < 0) return raw.split("?")[0] || raw;
+
+  const path = raw.slice(0, queryStart) || "/";
   const params = new URLSearchParams(raw.slice(queryStart + 1));
+
+  if (path.startsWith("/project/")) {
+    return path;
+  }
+
   const sessionId = params.get("session_id");
   if (sessionId) {
     return `/compare?session_id=${encodeURIComponent(sessionId)}`;
   }
-  return raw.split("?")[0] || "/";
+
+  return path;
 }
 
 export default function LoginPage() {

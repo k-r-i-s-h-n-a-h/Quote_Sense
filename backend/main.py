@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, Form, Body
+from fastapi import FastAPI, UploadFile, File, Form, Body, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
@@ -44,6 +44,7 @@ from services.comparator import (
     mongodb_quotes_to_dataframe,
 )
 from services.env_config import env_diagnostics, get_supabase_client
+from services.tatva_fetch import fetch_project_quotes, filter_quotes_by_ids
 
 MIN_COMPARE_QUOTES = 2
 MAX_COMPARE_QUOTES = 3
@@ -554,12 +555,27 @@ async def sync_mongodb_quotes(payload: Any = Body(...), session_id: str = None):
 
 def _parse_quotes_payload(payload: Any) -> list:
     """Normalize Tatva/MongoDB quote payloads to a list of quote dicts."""
+    if payload is None:
+        return []
     if isinstance(payload, list):
-        return payload
-    if isinstance(payload, dict) and "quotes" in payload:
-        return payload["quotes"]
+        return [q for q in payload if isinstance(q, dict) and q]
     if isinstance(payload, dict):
-        return [payload]
+        if not payload:
+            return []
+        if "quote_ids" in payload and len(payload) <= 2:
+            return []
+        if "quotes" in payload and isinstance(payload["quotes"], list):
+            return [q for q in payload["quotes"] if isinstance(q, dict) and q]
+        if any(k in payload for k in ("quoteNumber", "vendorDetail", "workSummary")):
+            return [payload]
+    return []
+
+
+def _quote_ids_from_payload(payload: Any) -> list:
+    if isinstance(payload, dict):
+        raw = payload.get("quote_ids") or payload.get("quoteIds")
+        if isinstance(raw, list):
+            return [str(x).strip() for x in raw if str(x).strip()]
     return []
 
 
@@ -696,13 +712,50 @@ async def _run_mongodb_sync_pipeline(session_id: str, quotes_list: list):
 
 
 @app.post("/api/sync-mongodb-quotes")
-async def sync_mongodb_quotes(payload: Any = Body(...), session_id: str = None):
+async def sync_mongodb_quotes(
+    request: Request,
+    payload: Any = Body(default=None),
+    session_id: str = None,
+    project_id: str = None,
+    authorization: Optional[str] = Header(None),
+):
     """
-    RECEIVES: Tatva/MongoDB quote JSON (list or single object).
+    RECEIVES: Tatva/MongoDB quote JSON (list or single object), OR
+    project_id + Authorization to fetch quotes from Tatva API (optional quote_ids in body).
     Returns immediately with session_id; poll /api/progress/{session_id}.
     """
     quotes_list = _parse_quotes_payload(payload)
+    quote_ids = _quote_ids_from_payload(payload)
+
+    query_project_id = project_id or request.query_params.get("project_id")
+    auth_header = authorization or request.headers.get("authorization")
+
+    if len(quotes_list) < MIN_COMPARE_QUOTES and query_project_id and auth_header:
+        fetched = await run_in_threadpool(
+            fetch_project_quotes, query_project_id, auth_header
+        )
+        quotes_list = fetched
+        if quote_ids:
+            quotes_list = filter_quotes_by_ids(quotes_list, quote_ids)
+
     if len(quotes_list) < MIN_COMPARE_QUOTES:
+        if query_project_id and not auth_header:
+            return {
+                "status": "error",
+                "message": (
+                    "Authorization header required when fetching quotes by project_id. "
+                    "Or POST full quote payloads in the body."
+                ),
+            }
+        if query_project_id and auth_header:
+            return {
+                "status": "error",
+                "message": (
+                    f"Could not load enough quotes for project {query_project_id}. "
+                    f"Provide quote_ids in the body to select {MIN_COMPARE_QUOTES}–{MAX_COMPARE_QUOTES} quotes, "
+                    "or redirect users to QuoteSense /project/{code} to pick quotes in the UI."
+                ),
+            }
         return {
             "status": "error",
             "message": f"At least {MIN_COMPARE_QUOTES} quotes are required to compare.",

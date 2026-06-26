@@ -2,7 +2,7 @@
 
 import React, { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
-import { notFound, useParams } from "next/navigation";
+import { notFound, useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { fetchProjectWithQuotes, getAuthUserId } from "@/lib/project-api";
 import type { ProjectData } from "@/lib/project-types";
@@ -24,6 +24,7 @@ export default function ProjectDetailPage() {
 
 function ProjectDetailContent() {
   const params = useParams();
+  const router = useRouter();
   const { user } = useAuth();
   const projectId = typeof params.projectId === "string" ? params.projectId : "";
   const userId = getAuthUserId(user);
@@ -56,6 +57,17 @@ function ProjectDetailContent() {
       cancelled = true;
     };
   }, [projectId, userId]);
+
+  // Canonical URL uses public project code (0F44A3), not Mongo _id.
+  useEffect(() => {
+    if (!project?.projectCode || typeof window === "undefined") return;
+    const canonical = project.projectCode;
+    if (canonical.toUpperCase() === projectId.toUpperCase()) return;
+    const qs = window.location.search;
+    router.replace(`/project/${encodeURIComponent(canonical)}${qs}`, {
+      scroll: false,
+    });
+  }, [project, projectId, router]);
 
   if (loading) {
     return (

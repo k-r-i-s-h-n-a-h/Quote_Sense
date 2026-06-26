@@ -11,6 +11,7 @@ type RawQuote = Record<string, unknown>;
 export type CompareProjectMeta = {
   title: string;
   projectCode: string;
+  mongoId?: string;
 };
 
 type CacheEntry = {
@@ -38,16 +39,18 @@ export function cacheProjectQuotePayloads(
 }
 
 export function readCachedProjectQuotePayloads(
-  projectId: string
+  projectRef: string
 ): CacheEntry | null {
-  if (typeof window === "undefined" || !projectId) return null;
+  if (typeof window === "undefined" || !projectRef) return null;
   try {
-    const raw = sessionStorage.getItem(KEY(projectId));
+    const raw =
+      sessionStorage.getItem(KEY(projectRef)) ||
+      sessionStorage.getItem(KEY(projectRef.toUpperCase()));
     if (!raw) return null;
     const entry = JSON.parse(raw) as CacheEntry;
     if (!entry?.quotes?.length) return null;
     if (Date.now() - (entry.cachedAt || 0) > TTL_MS) {
-      sessionStorage.removeItem(KEY(projectId));
+      sessionStorage.removeItem(KEY(projectRef));
       return null;
     }
     return entry;

@@ -394,13 +394,9 @@ def run_comparison(session_id, on_matrix_ready=None, df=None, fast_moving_avg=Fa
             }
 
         # 2. Prepare Tabular Data & THE NOTEBOOK MEAN CALCULATION
-        # Three-level hierarchy that mirrors the quote flow:
-        #   service_category  ->  sub_service (normalized taxonomy)  ->  item_name (room)
-        # The row label is the vendor's ORIGINAL item wording (item_name), with the
-        # room shown as secondary. We "stop the diffusion" (clubbing) at this level.
-        # Some optional columns (item_name, work_title) may be missing entirely if
-        # the Supabase schema lacks them. Create them before normalizing so we never
-        # call .fillna on a plain string (which raises AttributeError).
+        # Three-level hierarchy:
+        #   service_category -> sub_service -> line items (item_name + room).
+        # Line items stay visible; the UI sums amounts on the sub_service header row.
         for col in ('work_title', 'item_name', 'sub_service', 'service_category'):
             if col not in df.columns:
                 df[col] = ''
@@ -416,7 +412,6 @@ def run_comparison(session_id, on_matrix_ready=None, df=None, fast_moving_avg=Fa
             lambda v: v if not _is_blank(v) else 'General'
         )
 
-        # Row label = original item name; fall back to room, then sub-service.
         def _item_label(r):
             if not _is_blank(r['item_name']):
                 return r['item_name']
@@ -426,10 +421,8 @@ def run_comparison(session_id, on_matrix_ready=None, df=None, fast_moving_avg=Fa
 
         df['item_label'] = df.apply(_item_label, axis=1)
         df['room'] = df['work_title'].apply(lambda v: v if not _is_blank(v) else '')
-        # Backward-compat alias used by some callers.
         df['work_item'] = df['item_label']
 
-        # First-appearance ordering so rows follow the quote's natural top-to-bottom flow.
         df = df.reset_index(drop=True)
         df['__seq'] = range(len(df))
         cat_order = df.groupby('service_category')['__seq'].min().to_dict()
@@ -454,12 +447,11 @@ def run_comparison(session_id, on_matrix_ready=None, df=None, fast_moving_avg=Fa
         ).fillna(0.0)
 
         vendors = pivot_df.columns.tolist()
-        table_data = [] # Renamed for React frontend!
+        table_data = []
 
         for index, row in pivot_df.iterrows():
             category, sub_service_name, item_label, room = index
             line_key = _line_item_key(str(item_label), str(room))
-            # Per line item: each vendor's price for THIS row only (>0).
             batch_prices = [float(row[v]) for v in vendors if float(row[v]) > 0]
             if fast_moving_avg:
                 batch_weight = len(batch_prices)
@@ -477,16 +469,15 @@ def run_comparison(session_id, on_matrix_ready=None, df=None, fast_moving_avg=Fa
                 )
 
             row_dict = {
-                "category": str(category),             # level 1: service category group
-                "sub_service": str(sub_service_name),  # level 2: normalized TatvaOps sub-service
-                "item_name": str(item_label),          # level 3: vendor's original item wording
-                "room": str(room),                     # location shown as secondary text
-                "work_item": str(item_label),          # kept for backward-compat
-                "taxonomy": str(sub_service_name),     # kept for backward-compat
-                "moving_average": moving_avg,
+                "category": str(category),
+                "sub_service": str(sub_service_name),
+                "item_name": str(item_label),
+                "room": str(room),
+                "work_item": str(item_label),
+                "taxonomy": str(sub_service_name),
+                "moving_average": round(moving_avg),
                 "moving_weight": moving_weight,
-                # backward-compat alias for older clients / AI prompt
-                "market_average": moving_avg,
+                "market_average": round(moving_avg),
                 "_cat_order": float(cat_order.get(category, 1e9)),
                 "_sub_order": float(sub_order.get((category, sub_service_name), 1e9)),
                 "_item_order": float(
@@ -494,10 +485,10 @@ def run_comparison(session_id, on_matrix_ready=None, df=None, fast_moving_avg=Fa
                 ),
             }
             for v in vendors:
-                row_dict[v] = float(row[v])
+                amt = float(row[v])
+                row_dict[v] = round(amt) if amt > 0 else 0
             table_data.append(row_dict)
 
-        # Sort to follow the quote flow: category, then sub-service, then item.
         table_data.sort(key=lambda r: (r["_cat_order"], r["_sub_order"], r["_item_order"]))
         for r in table_data:
             r.pop("_cat_order", None)
@@ -536,7 +527,7 @@ def run_comparison(session_id, on_matrix_ready=None, df=None, fast_moving_avg=Fa
                 "category": r["category"],
                 "moving_avg": r["moving_average"],
                 "moving_weight": r["moving_weight"],
-                **{v: round(float(r.get(v, 0.0)), 2) for v in vendors},
+                **{v: int(r.get(v, 0) or 0) for v in vendors},
             }
             for r in table_data
         ]
@@ -556,8 +547,8 @@ def run_comparison(session_id, on_matrix_ready=None, df=None, fast_moving_avg=Fa
         - Output 4 to 6 bullet points, each on its own line starting with "- ".
         - Begin every bullet with a short bold label using double asterisks, then a colon,
           then one concise sentence. Example: "- **Best Overall Value:** Vendor X ...".
-        - Keep each bullet to a single, plain, professional sentence anyone can understand.
-        - Do NOT write any intro or closing paragraph; output only the bullets.
+        - Do NOT show arithmetic breakdowns (e.g. do not write amounts as "X + Y" or "(A + B)").
+        - Quote whole rupee totals only — no decimal paise.
 
         COVER THESE POINTS (one bullet each):
         - **Lowest Total:** which quote is cheapest overall and by roughly how much.

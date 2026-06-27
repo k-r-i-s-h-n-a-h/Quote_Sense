@@ -3,10 +3,17 @@
 import React, { useState, useEffect, useRef, useMemo, Suspense } from "react";
 import dynamic from "next/dynamic";
 import { useSearchParams, useRouter } from "next/navigation";
-import CompareLoadingPanel from "../../components/CompareLoadingPanel";
+import CompareLoadingPanel, {
+  type CompareProgressStage,
+} from "../../components/CompareLoadingPanel";
 import VendorInsights from "../../components/VendorInsights";
 import RecommendationView from "../../components/RecommendationView";
 import { buildVendorLabels, formatInrFull, priceVsBaseline } from "../../lib/format";
+import {
+  groupTableData,
+  sumSubServiceRow,
+  lineItemDescription,
+} from "../../lib/compare-matrix";
 import { downloadComparisonPdf } from "../../lib/download-comparison-pdf";
 import { getCompareLane, showPdfUpload } from "../../lib/compare-lane";
 import {
@@ -23,8 +30,9 @@ import { useAuth } from "@/lib/auth";
 import { getAuthUserId } from "@/lib/project-api";
 import {
   ComparePageNav,
-  IntegratedLoadingBanner,
+  CompareLoadingBanner,
 } from "../../components/project/CompareSelectionBanner";
+import { pollCompareProgress } from "../../lib/compare-progress";
 
 const VendorChart = dynamic(() => import("../../components/VendorChart"), {
   ssr: false,
@@ -35,39 +43,6 @@ const VendorChart = dynamic(() => import("../../components/VendorChart"), {
   ),
 });
 
-type SubGroup = { sub: string; rows: any[] };
-type CatGroup = { category: string; subs: SubGroup[] };
-
-/**
- * Group flat tableData rows into the quote-flow hierarchy:
- *   category -> sub_service -> work-item rows.
- * Backend already pre-sorts rows in quote order, so we just preserve
- * the first-seen order of each category and sub-service.
- */
-function groupTableData(rows: any[]): CatGroup[] {
-  const cats: CatGroup[] = [];
-  const catIdx = new Map<string, number>();
-  const subIdx = new Map<string, number>();
-
-  for (const item of rows) {
-    const category = item.category || "Other";
-    const sub = item.sub_service || "General";
-
-    if (!catIdx.has(category)) {
-      catIdx.set(category, cats.length);
-      cats.push({ category, subs: [] });
-    }
-    const cat = cats[catIdx.get(category)!];
-
-    const subKey = `${category}||${sub}`;
-    if (!subIdx.has(subKey)) {
-      subIdx.set(subKey, cat.subs.length);
-      cat.subs.push({ sub, rows: [] });
-    }
-    cat.subs[subIdx.get(subKey)!].rows.push(item);
-  }
-  return cats;
-}
 
 // Main export wrapped in Suspense to fix the Next.js/useSearchParams error
 export default function Home() {
@@ -89,6 +64,7 @@ function QuoteSenseContent() {
     processed: 0,
     total: 0,
   });
+  const [progressStage, setProgressStage] = useState<CompareProgressStage>("");
   
   const [report, setReport] = useState("");
   const [chartData, setChartData] = useState<any[]>([]);
@@ -149,16 +125,19 @@ function QuoteSenseContent() {
   const getBackendUrl = () =>
     process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8001";
 
-  if (isLoading || !isAuthenticated) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="w-8 h-8 border-2 border-slate-200 border-t-[#c04a00] rounded-full animate-spin" />
-      </div>
-    );
-  }
-
   const handleGoBack = () => {
+    if (projectIdParam) {
+      router.push(`/project/${encodeURIComponent(projectIdParam)}`);
+      return;
+    }
     router.push("/");
+  };
+
+  const handleNewComparison = () => {
+    pollingActiveRef.current = false;
+    resetSelection();
+    setLoading(false);
+    router.push("/compare");
   };
 
   const processComparisonData = (data: any) => {
@@ -204,7 +183,10 @@ function QuoteSenseContent() {
     // Project lane owns session_id polling — do not call get-comparison here.
     if (isProjectCompare) return;
 
-    if (autoSessionId && !sessionId && !activeJobId) {
+    if (!autoSessionId || sessionId || activeJobId) return;
+
+    // Integrated MongoDB lane: one-shot fetch of stored comparison.
+    if (sourceParam === "integrated") {
       const fetchAutoData = async () => {
         setLoading(true);
         setLoadingMessage("Loading your synced comparison…");
@@ -221,13 +203,22 @@ function QuoteSenseContent() {
       };
 
       fetchAutoData();
+      return;
     }
+
+    // Standalone PDF / async job: resume progress polling (e.g. after refresh).
+    setSessionId(autoSessionId);
+    setActiveJobId(autoSessionId);
+    setLoading(true);
+    pollingActiveRef.current = true;
+    partialAppliedRef.current = false;
   }, [
     searchParams,
     sessionId,
     activeJobId,
     projectIdParam,
     selectedQuoteIds.length,
+    sourceParam,
   ]);
 
   // Resume an in-flight project job after refresh (session_id already in URL).
@@ -323,7 +314,7 @@ function QuoteSenseContent() {
       pollingActiveRef.current = true;
 
       try {
-        await pollProgress(sid, backendUrl);
+        await runPollForSession(sid, backendUrl);
       } catch (err) {
         if (!cancelled) {
           setReport(`❌ ${err instanceof Error ? err.message : "Comparison failed."}`);
@@ -367,6 +358,7 @@ function QuoteSenseContent() {
     setVendors([]);   
     setVendorMeta({});
     setSessionId("");
+    setActiveJobId(null);
     setChatHistory([]);
   };
 
@@ -375,62 +367,59 @@ function QuoteSenseContent() {
     downloadComparisonPdf(tableData, vendors, vendorLabels, vendorMeta);
   };
 
-  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+  const handleProgressTick = (data: {
+    message?: string;
+    processed?: number;
+    total?: number;
+    stage?: string;
+    partial?: Record<string, unknown>;
+  }) => {
+    if (data.stage) setProgressStage(data.stage as CompareProgressStage);
+    if (data.message) setLoadingMessage(data.message);
+    if (typeof data.processed === "number") {
+      setLoadingProgress({ processed: data.processed, total: data.total || 0 });
+    }
+    if (data.partial && !partialAppliedRef.current) {
+      applyPartialData(data.partial);
+      partialAppliedRef.current = true;
+      setLoadingMessage(
+        data.message || "Matrix ready — finishing recommendation…"
+      );
+    }
+  };
 
-  // Poll the backend for live progress until the job finishes, errors, or times out.
-  const pollProgress = async (sid: string, backendUrl: string) => {
-    const MAX_MS = 600000; // 10 minutes safety cap
-    const startedAt = Date.now();
-    let polls = 0;
+  const runPollForSession = async (sid: string, backendUrl: string) => {
+    const result = await pollCompareProgress({
+      sessionId: sid,
+      backendUrl,
+      shouldContinue: () => pollingActiveRef.current,
+      hasPartialApplied: () => partialAppliedRef.current,
+      onTick: handleProgressTick,
+    });
 
-    while (Date.now() - startedAt < MAX_MS) {
-      if (!pollingActiveRef.current) return;
+    if (result.outcome === "done") {
+      processComparisonData(result.result);
+      return;
+    }
+    if (result.outcome === "error" || result.outcome === "unknown") {
+      setReport(`❌ ${result.message}`);
+      return;
+    }
+    if (result.outcome === "cancelled") return;
 
-      let data: any;
-      try {
-        // Once we've applied the matrix, tell the backend so it stops re-sending
-        // the (large) partial payload on every poll.
-        const hasPartialParam = partialAppliedRef.current ? "?has_partial=true" : "";
-        const res = await fetch(`${backendUrl}/api/progress/${sid}${hasPartialParam}`);
-        data = await res.json();
-      } catch {
-        await sleep(polls < 4 ? 400 : 1000); // transient network blip — keep trying
-        polls += 1;
-        continue;
-      }
-
-      if (data.message) setLoadingMessage(data.message);
-      if (typeof data.processed === "number") {
-        setLoadingProgress({ processed: data.processed, total: data.total || 0 });
-      }
-
-      // Show chart + table the moment the matrix is ready (recommendation still cooking).
-      if (data.partial && !partialAppliedRef.current) {
-        applyPartialData(data.partial);
-        partialAppliedRef.current = true;
-        setLoadingMessage(
-          data.message || "Matrix ready — finishing recommendation…"
-        );
-      }
-
-      if (data.status === "done") {
-        processComparisonData(data.result);
-        return;
-      }
-      if (data.status === "error") {
-        setReport(`❌ ${data.error || data.message || "Comparison failed on the backend."}`);
-        return;
-      }
-
-      polls += 1;
-      // Poll faster while extracting; slow down once matrix is on screen.
-      const delay = partialAppliedRef.current ? 1200 : polls < 6 ? 500 : 900;
-      await sleep(delay);
+    // Timeout — if matrix already visible, keep it and explain; don't wipe results.
+    if (partialAppliedRef.current) {
+      setReport(
+        "⏳ Analysis is still running on the backend. Your comparison matrix is shown above — " +
+          "refresh this page in a minute or click Compare again with the same files to fetch the final report."
+      );
+      setLoading(false);
+      return;
     }
 
     setReport(
-      "🕒 The comparison is taking unusually long. It may still be running on the backend — " +
-        "please try again in a moment."
+      "🕒 PDF extraction is taking longer than usual (large quotes can take 15+ minutes). " +
+        "Keep the backend running and try Compare again — or use fewer/smaller PDFs."
     );
   };
 
@@ -452,12 +441,14 @@ function QuoteSenseContent() {
     setLoadingMessage("Uploading quotes…");
     setLoadingProgress({ processed: 0, total: files.length });
     partialAppliedRef.current = false;
+    setProgressStage("queued");
     pollingActiveRef.current = true;
 
     const formData = new FormData();
     files.forEach((file) => formData.append("files", file));
 
     const backendUrl = getBackendUrl();
+    let jobStarted = false;
 
     try {
       try {
@@ -474,7 +465,6 @@ function QuoteSenseContent() {
         return;
       }
 
-      // 1. Kick off the background job — returns a session_id almost instantly.
       const response = await fetch(`${backendUrl}/api/compare-quotes`, {
         method: "POST",
         body: formData,
@@ -488,9 +478,14 @@ function QuoteSenseContent() {
 
       setSessionId(startData.session_id);
       setLoadingMessage(startData.message || "Processing started…");
+      setActiveJobId(startData.session_id);
+      jobStarted = true;
 
-      // 2. Poll for live progress until the result is ready.
-      await pollProgress(startData.session_id, backendUrl);
+      if (typeof window !== "undefined") {
+        const params = new URLSearchParams(window.location.search);
+        params.set("session_id", startData.session_id);
+        window.history.replaceState(null, "", `/compare?${params.toString()}`);
+      }
     } catch (error: any) {
       if (error.message === "Failed to fetch") {
         setReport(
@@ -501,8 +496,10 @@ function QuoteSenseContent() {
       }
       console.error("Full Error Details:", error);
     } finally {
-      pollingActiveRef.current = false;
-      setLoading(false);
+      if (!jobStarted) {
+        pollingActiveRef.current = false;
+        setLoading(false);
+      }
     }
   };
 
@@ -532,19 +529,32 @@ function QuoteSenseContent() {
     }
   };
 
+  if (isLoading || !isAuthenticated) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="w-8 h-8 border-2 border-slate-200 border-t-[#c04a00] rounded-full animate-spin" />
+      </div>
+    );
+  }
+
   return (
     <main className="bg-[#f8fafc] p-6 md:p-10 font-sans text-slate-800">
       <div className="max-w-5xl mx-auto space-y-8">
 
-        <ComparePageNav projectId={projectIdParam} lane={lane} />
+        <ComparePageNav
+          projectId={projectIdParam}
+          hasResults={tableData.length > 0}
+          onNewComparison={handleNewComparison}
+        />
 
         {lane === "project" && loading && !tableData.length && (
           <>
-            <IntegratedLoadingBanner message={loadingMessage} />
+            <CompareLoadingBanner message={loadingMessage} />
             <CompareLoadingPanel
               message={loadingMessage}
               processed={loadingProgress.processed}
               total={loadingProgress.total}
+              stage={progressStage}
             />
           </>
         )}
@@ -553,26 +563,24 @@ function QuoteSenseContent() {
           tableData.length > 0 &&
           loading && (
             <p className="text-xs text-slate-500 text-center -mt-4">
-              Matrix ready — finishing recommendation…
+              Almost done — preparing your summary…
             </p>
           )}
 
         {isIntegratedLane && loading && !tableData.length && (
           <>
-            <IntegratedLoadingBanner message={loadingMessage} />
+            <CompareLoadingBanner message={loadingMessage} />
             <CompareLoadingPanel
               message={loadingMessage}
               processed={loadingProgress.processed}
               total={loadingProgress.total}
+              stage={progressStage}
             />
           </>
         )}
 
         {canShowPdfUpload && !sessionId && !tableData.length && (
           <div className="text-center space-y-3 pt-2">
-            <div className="inline-flex items-center gap-2 rounded-full bg-orange-50 border border-orange-100 px-3 py-1 text-xs font-semibold text-[#c04a00] tracking-wide uppercase">
-              TatvaOps · QuoteSense
-            </div>
             <h1 className="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight">
               Compare vendor quotes
             </h1>
@@ -630,9 +638,17 @@ function QuoteSenseContent() {
               message={loadingMessage}
               processed={loadingProgress.processed}
               total={loadingProgress.total}
+              stage={progressStage}
+              isPdfLane
             />
           )}
         </div>
+        )}
+
+        {loading && tableData.length > 0 && canShowPdfUpload && (
+          <p className="text-sm text-center text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg py-2.5 px-4">
+            ✓ Comparison matrix is ready below — finishing the AI recommendation…
+          </p>
         )}
 
         {/* Visual Chart Section */}
@@ -650,7 +666,7 @@ function QuoteSenseContent() {
               <div>
                 <h2 className="text-xl font-semibold text-slate-900">Comparison Matrix</h2>
                 <p className="text-sm text-slate-500 mt-1">
-                  Line-by-line pricing with a historical moving average baseline.
+                  Line items with sub-service totals per vendor.
                 </p>
               </div>
               <button
@@ -709,90 +725,147 @@ function QuoteSenseContent() {
                 <tbody className="divide-y divide-slate-100">
                   {groupTableData(tableData).map((cat, ci) => (
                     <React.Fragment key={ci}>
-                      {/* Level 1 — Service category */}
                       <tr className="bg-slate-900/[0.03]">
                         <td colSpan={vendors.length + 2} className="p-3 pl-4 text-sm font-bold text-slate-800 uppercase tracking-wider border-y border-slate-200">
                           {cat.category}
                         </td>
                       </tr>
 
-                      {cat.subs.map((sub, si) => (
-                        <React.Fragment key={si}>
-                          {/* Level 2 — Sub-service */}
-                          <tr className="bg-slate-50/90">
-                            <td colSpan={vendors.length + 2} className="py-2 pl-7 pr-4 text-[11px] font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-100">
-                              {sub.sub}
-                            </td>
-                          </tr>
+                      {cat.subs.map((sub, si) => {
+                        const subTotals = sumSubServiceRow(sub.rows, vendors);
+                        const subBaseline = subTotals.moving_average;
+                        const isLastInCategory = si === cat.subs.length - 1;
 
-                          {/* Level 3 — Work items */}
-                          {sub.rows.map((row, idx) => {
-                            const baseline = Number(row.moving_average ?? row.market_average) || 0;
-                            const weight = Number(row.moving_weight) || 0;
-                            return (
-                            <tr key={idx} className="hover:bg-slate-50/70 transition-colors group">
-                              <td className="py-3 pl-11 pr-4 max-w-[320px]">
-                                <div className="text-sm font-medium text-slate-900 leading-tight">
-                                  {row.item_name || row.work_item || row.sub_service}
+                        return (
+                          <React.Fragment key={si}>
+                            {si > 0 && (
+                              <tr aria-hidden="true">
+                                <td
+                                  colSpan={vendors.length + 2}
+                                  className="h-3 p-0 bg-[#f8fafc] border-0"
+                                />
+                              </tr>
+                            )}
+
+                            <tr className="bg-slate-200/70 border-y-2 border-slate-300">
+                              <td className="py-3 pl-5 pr-4 border-l-4 border-[#c04a00]">
+                                <div className="text-xs font-extrabold text-slate-800 uppercase tracking-wide">
+                                  {sub.sub}
                                 </div>
-                                {row.room && (
-                                  <div className="text-[10px] text-slate-400 mt-0.5 uppercase tracking-wide">
-                                    {row.room}
-                                  </div>
-                                )}
                               </td>
-                              <td className="p-4 text-right align-top bg-indigo-50/20 border-r border-indigo-100/50">
-                                {baseline > 0 ? (
-                                  <>
-                                    <div className="text-sm font-semibold text-indigo-700 tabular-nums">
-                                      {formatInrFull(baseline)}
-                                    </div>
-                                    {weight > 0 && (
-                                      <div className="text-[10px] text-slate-400 mt-0.5" title="Quotes used to build this baseline">
-                                        n={weight}
-                                      </div>
-                                    )}
-                                  </>
+                              <td className="px-3 py-3 text-right align-middle bg-indigo-100/50 border-r border-slate-300">
+                                {subBaseline > 0 ? (
+                                  <div className="text-base font-extrabold text-indigo-900 tabular-nums">
+                                    {formatInrFull(subBaseline)}
+                                  </div>
                                 ) : (
-                                  <span className="text-sm text-slate-300">—</span>
+                                  <span className="text-sm text-slate-400">—</span>
                                 )}
                               </td>
                               {vendors.map((vendor, vIdx) => {
-                                const value = row[vendor];
-                                const vs = priceVsBaseline(Number(value), baseline);
+                                const value = Number(subTotals[vendor]) || 0;
+                                const vs = priceVsBaseline(value, subBaseline);
                                 return (
-                                  <td key={vIdx} className={`p-4 text-right tabular-nums ${value === 0 ? "opacity-50" : ""}`}>
+                                  <td
+                                    key={vIdx}
+                                    className={`px-3 py-3 text-right tabular-nums align-middle ${
+                                      value === 0 ? "opacity-50" : ""
+                                    }`}
+                                  >
                                     {value === 0 ? (
-                                      <span className="text-sm font-medium text-rose-300 italic">N/A</span>
+                                      <span className="text-sm font-semibold text-rose-400 italic">N/A</span>
                                     ) : (
                                       <span
-                                        className={`text-sm font-medium ${
+                                        className={`text-base font-extrabold ${
                                           vs === "below"
-                                            ? "text-emerald-700"
+                                            ? "text-emerald-800"
                                             : vs === "above"
-                                              ? "text-amber-700"
-                                              : "text-slate-700"
+                                              ? "text-amber-800"
+                                              : "text-slate-900"
                                         }`}
-                                        title={
-                                          baseline > 0
-                                            ? vs === "below"
-                                              ? "Below moving average"
-                                              : vs === "above"
-                                                ? "Above moving average"
-                                                : "Near moving average"
-                                            : undefined
-                                        }
                                       >
-                                        {formatInrFull(Number(value))}
+                                        {formatInrFull(value)}
                                       </span>
                                     )}
                                   </td>
                                 );
                               })}
                             </tr>
-                          );})}
-                        </React.Fragment>
-                      ))}
+
+                            {sub.rows.map((row, idx) => {
+                              const baseline = Number(row.moving_average ?? row.market_average) || 0;
+                              const weight = Number(row.moving_weight) || 0;
+                              const { title, room } = lineItemDescription(row);
+                              const isLastLineItem = idx === sub.rows.length - 1;
+                              return (
+                                <tr
+                                  key={idx}
+                                  className={`hover:bg-slate-50/70 transition-colors group bg-white ${
+                                    isLastLineItem && !isLastInCategory
+                                      ? "border-b-2 border-slate-200"
+                                      : ""
+                                  }`}
+                                >
+                                  <td className="py-2.5 pl-12 pr-4 max-w-[320px] border-l-4 border-transparent">
+                                    <div className="text-sm font-medium text-slate-800 leading-tight">
+                                      {title}
+                                    </div>
+                                    {room && (
+                                      <div className="text-[10px] text-slate-400 mt-0.5 uppercase tracking-wide">
+                                        {room}
+                                      </div>
+                                    )}
+                                  </td>
+                                  <td className="px-4 py-2.5 text-right align-top bg-indigo-50/15 border-r border-indigo-100/40">
+                                    {baseline > 0 ? (
+                                      <>
+                                        <div className="text-sm font-medium text-indigo-700 tabular-nums">
+                                          {formatInrFull(baseline)}
+                                        </div>
+                                        {weight > 0 && (
+                                          <div className="text-[10px] text-slate-400 mt-0.5" title="Quotes used to build this baseline">
+                                            n={weight}
+                                          </div>
+                                        )}
+                                      </>
+                                    ) : (
+                                      <span className="text-sm text-slate-300">—</span>
+                                    )}
+                                  </td>
+                                  {vendors.map((vendor, vIdx) => {
+                                    const value = row[vendor];
+                                    const vs = priceVsBaseline(Number(value), baseline);
+                                    return (
+                                      <td
+                                        key={vIdx}
+                                        className={`px-4 py-2.5 text-right tabular-nums ${
+                                          value === 0 ? "opacity-50" : ""
+                                        }`}
+                                      >
+                                        {value === 0 ? (
+                                          <span className="text-sm font-medium text-rose-300 italic">N/A</span>
+                                        ) : (
+                                          <span
+                                            className={`text-sm font-medium ${
+                                              vs === "below"
+                                                ? "text-emerald-700"
+                                                : vs === "above"
+                                                  ? "text-amber-700"
+                                                  : "text-slate-700"
+                                            }`}
+                                          >
+                                            {formatInrFull(Number(value))}
+                                          </span>
+                                        )}
+                                      </td>
+                                    );
+                                  })}
+                                </tr>
+                              );
+                            })}
+                          </React.Fragment>
+                        );
+                      })}
                     </React.Fragment>
                   ))}
                 </tbody>
@@ -820,23 +893,21 @@ function QuoteSenseContent() {
               <RecommendationView text={report} />
             </div>
             
-            {!isIntegratedLane && (
             <div className="pt-6 border-t border-gray-100 flex flex-col sm:flex-row gap-4">
-              <button 
+              <button
                 onClick={handleGoBack}
                 className="flex-1 bg-blue-900 text-white py-3 rounded-lg font-bold hover:bg-black transition-all flex items-center justify-center gap-2 shadow-md"
               >
-                ⬅️ All projects
+                {projectIdParam ? "← Back to project" : "← All projects"}
               </button>
-              
-              <button 
-                onClick={resetSelection}
-                className="px-8 py-3 text-gray-500 hover:text-red-600 font-semibold transition-colors border border-transparent hover:border-gray-200 rounded-lg"
+
+              <button
+                onClick={handleNewComparison}
+                className="px-8 py-3 text-gray-600 hover:text-[#c04a00] font-semibold transition-colors border border-slate-200 hover:border-[#c04a00]/30 rounded-lg bg-white"
               >
-                Compare New Quotes
+                New comparison
               </button>
             </div>
-            )}
           </div>
         )}
       </div>

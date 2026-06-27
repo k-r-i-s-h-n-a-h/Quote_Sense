@@ -215,7 +215,9 @@ export function getChartYAxisConfig(totals: number[]): {
 }
 
 export function formatInrFull(value: number): string {
-  return `₹${Number(value).toLocaleString("en-IN")}`;
+  const n = Math.round(Number(value));
+  if (!Number.isFinite(n)) return "₹0";
+  return `₹${n.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
 }
 
 /** Compare a vendor price to the moving-average baseline. */

@@ -1,11 +1,11 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import Link from "next/link";
 import { useAuth } from "@/lib/auth";
 import { fetchUserProjects, getAuthUserId } from "@/lib/project-api";
 import type { ProjectSummary } from "@/lib/project-types";
 import { ProjectTile } from "./ProjectTile";
+import StandalonePdfSection from "./StandalonePdfSection";
 
 export default function ProjectDashboard() {
   const { user } = useAuth();
@@ -44,8 +44,10 @@ export default function ProjectDashboard() {
     };
   }, [userId]);
 
+  const showProminentPdf = !loading && !error && projects.length === 0;
+
   return (
-    <div className="min-h-screen bg-[#f8fafc]">
+    <div className="bg-[#f8fafc] pb-12">
       <div className="bg-white border-b border-slate-100">
         <div className="max-w-5xl mx-auto px-4 md:px-6 py-8">
           <p className="text-sm text-slate-500">Welcome back,</p>
@@ -82,8 +84,11 @@ export default function ProjectDashboard() {
         )}
 
         {!loading && !error && projects.length === 0 && (
-          <div className="rounded-xl border border-dashed border-slate-200 bg-white px-6 py-12 text-center text-sm text-slate-500">
+          <div className="rounded-xl border border-dashed border-slate-200 bg-white px-6 py-10 text-center text-sm text-slate-500">
             No projects found for your account yet.
+            <p className="text-xs text-slate-400 mt-2">
+              You can still compare vendor quote PDFs using the tool below.
+            </p>
           </div>
         )}
 
@@ -93,6 +98,10 @@ export default function ProjectDashboard() {
               <ProjectTile key={project.id} project={project} />
             ))}
           </div>
+        )}
+
+        {!loading && (
+          <StandalonePdfSection prominent={showProminentPdf} />
         )}
       </div>
     </div>

@@ -198,6 +198,11 @@ async def _run_compare_pipeline(session_id, saved_files):
         )
 
         async def _extract_one(file_path):
+            basename = os.path.basename(file_path)
+            _set_progress(
+                session_id,
+                message=f"Reading {basename} with Tatva Intelligence…",
+            )
             await run_in_threadpool(process_single_pdf, file_path, session_id)
             job = JOBS.get(session_id, {})
             done = job.get("processed", 0) + 1

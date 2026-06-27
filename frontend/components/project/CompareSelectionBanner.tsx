@@ -8,7 +8,6 @@ import {
   type ProjectData,
 } from "@/lib/project-types";
 import { readCachedProjectQuotePayloads } from "@/lib/compare-payload-cache";
-import type { CompareLane } from "@/lib/compare-lane";
 
 type CompareSelectionBannerProps = {
   quoteIds: string[];
@@ -142,52 +141,47 @@ export function CompareSelectionBanner({
 
 export function ComparePageNav({
   projectId,
-  lane = "standalone",
+  hasResults = false,
+  onNewComparison,
 }: {
   projectId?: string | null;
-  lane?: CompareLane;
+  hasResults?: boolean;
+  onNewComparison?: () => void;
 }) {
-  if (lane === "integrated") {
-    return (
-      <div className="flex items-center justify-between mb-6">
-        <p className="text-sm text-slate-600">
-          Synced comparison from <span className="font-medium text-slate-800">TatvaOps</span>
-        </p>
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-[#c04a00]">
-          Integrated lane
-        </span>
-      </div>
-    );
-  }
-
   const backHref = projectId
     ? `/project/${encodeURIComponent(projectId)}`
     : "/";
   const backLabel = projectId ? "Back to project" : "All projects";
 
   return (
-    <div className="flex items-center justify-between mb-6">
+    <div className="flex items-center justify-between gap-4 mb-6">
       <Link
         href={backHref}
         className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-[#c04a00] transition-colors"
       >
         <span aria-hidden>←</span> {backLabel}
       </Link>
-      <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-        Quote comparison
-      </span>
+      {hasResults && onNewComparison && (
+        <button
+          type="button"
+          onClick={onNewComparison}
+          className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#c04a00] hover:text-[#a84000] px-3 py-1.5 rounded-lg border border-[#c04a00]/25 bg-white hover:bg-orange-50/50 transition-colors"
+        >
+          New comparison
+        </button>
+      )}
     </div>
   );
 }
 
-export function IntegratedLoadingBanner({ message }: { message: string }) {
+export function CompareLoadingBanner({ message }: { message: string }) {
   return (
-    <div className="qs-card p-6 border-[#c04a00]/15 bg-orange-50/40">
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-[#c04a00] mb-1">
-        TatvaOps · QuoteSense
-      </p>
+    <div className="qs-card p-6">
       <h1 className="text-lg font-bold text-slate-900">Building your comparison</h1>
       <p className="text-sm text-slate-500 mt-1">{message}</p>
     </div>
   );
 }
+
+/** @deprecated Use CompareLoadingBanner */
+export const IntegratedLoadingBanner = CompareLoadingBanner;

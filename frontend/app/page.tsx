@@ -4,7 +4,6 @@ import React, { Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import ProjectDashboard from "@/components/dashboard/ProjectDashboard";
-import StandalonePdfSection from "@/components/dashboard/StandalonePdfSection";
 
 export default function Home() {
   return (
@@ -49,10 +48,5 @@ function HomeContent() {
     );
   }
 
-  return (
-    <>
-      <ProjectDashboard />
-      <StandalonePdfSection />
-    </>
-  );
+  return <ProjectDashboard />;
 }

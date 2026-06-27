@@ -227,7 +227,9 @@ async def _run_compare_pipeline(session_id, saved_files):
             )
 
         comparison_result = await run_in_threadpool(
-            run_comparison, session_id, _publish_matrix
+            lambda: run_comparison(
+                session_id, _publish_matrix, fast_moving_avg=True
+            )
         )
 
         if comparison_result.get("error"):

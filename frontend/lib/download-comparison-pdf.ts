@@ -60,13 +60,14 @@ function truncate(text: string, maxLen: number): string {
 function vendorHeaderCell(
   vendor: string,
   vendorLabels: Record<string, VendorLabel>,
-  vendorMeta: Record<string, VendorMeta>
+  vendorMeta: Record<string, VendorMeta>,
+  compact = false
 ): string {
   const info = vendorLabels[vendor];
   const meta = vendorMeta[vendor] || {};
-  const company = truncate(info?.company ?? vendor.split(" (")[0], 32);
+  const company = truncate(info?.company ?? vendor.split(" (")[0], compact ? 22 : 32);
   const lines = [company];
-  if (info?.variant) lines.push(truncate(info.variant, 28));
+  if (info?.variant) lines.push(truncate(info.variant, compact ? 20 : 28));
   const qno = info?.quoteNumber ? `#${info.quoteNumber}` : "";
   const qdate = info?.quoteDate || meta.quote_date || "";
   if (qno || qdate) lines.push([qno, qdate].filter(Boolean).join(" · "));
@@ -77,8 +78,8 @@ function buildColumnStyles(
   vendors: string[],
   tableWidth: number
 ): Record<number, { cellWidth: number; halign?: "right" | "left" }> {
-  const descWidth = Math.min(68, tableWidth * 0.26);
-  const avgWidth = 24;
+  const descWidth = Math.min(54, tableWidth * 0.32);
+  const avgWidth = 22;
   const vendorWidth = (tableWidth - descWidth - avgWidth) / Math.max(vendors.length, 1);
 
   const styles: Record<number, { cellWidth: number; halign?: "right" | "left" }> = {
@@ -98,7 +99,7 @@ export function downloadComparisonPdf(
   vendorLabels: Record<string, VendorLabel>,
   vendorMeta: Record<string, VendorMeta> = {}
 ): void {
-  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const pageWidth = doc.internal.pageSize.getWidth();
   const margin = 12;
   const tableWidth = pageWidth - margin * 2;
@@ -120,7 +121,7 @@ export function downloadComparisonPdf(
   doc.setTextColor(0, 0, 0);
 
   const vendorHeaders = vendors.map((v) =>
-    vendorHeaderCell(v, vendorLabels, vendorMeta)
+    vendorHeaderCell(v, vendorLabels, vendorMeta, true)
   );
   const head = [["Service Description", "Moving Avg", ...vendorHeaders]];
 

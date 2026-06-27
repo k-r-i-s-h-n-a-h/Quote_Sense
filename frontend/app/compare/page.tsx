@@ -379,9 +379,9 @@ function QuoteSenseContent() {
 
   // Poll the backend for live progress until the job finishes, errors, or times out.
   const pollProgress = async (sid: string, backendUrl: string) => {
-    const POLL_MS = 1500;
     const MAX_MS = 600000; // 10 minutes safety cap
     const startedAt = Date.now();
+    let polls = 0;
 
     while (Date.now() - startedAt < MAX_MS) {
       if (!pollingActiveRef.current) return;
@@ -394,7 +394,8 @@ function QuoteSenseContent() {
         const res = await fetch(`${backendUrl}/api/progress/${sid}${hasPartialParam}`);
         data = await res.json();
       } catch {
-        await sleep(POLL_MS); // transient network blip — keep trying
+        await sleep(polls < 4 ? 400 : 1000); // transient network blip — keep trying
+        polls += 1;
         continue;
       }
 
@@ -407,6 +408,9 @@ function QuoteSenseContent() {
       if (data.partial && !partialAppliedRef.current) {
         applyPartialData(data.partial);
         partialAppliedRef.current = true;
+        setLoadingMessage(
+          data.message || "Matrix ready — finishing recommendation…"
+        );
       }
 
       if (data.status === "done") {
@@ -418,7 +422,10 @@ function QuoteSenseContent() {
         return;
       }
 
-      await sleep(POLL_MS);
+      polls += 1;
+      // Poll faster while extracting; slow down once matrix is on screen.
+      const delay = partialAppliedRef.current ? 1200 : polls < 6 ? 500 : 900;
+      await sleep(delay);
     }
 
     setReport(
@@ -445,6 +452,7 @@ function QuoteSenseContent() {
     setLoadingMessage("Uploading quotes…");
     setLoadingProgress({ processed: 0, total: files.length });
     partialAppliedRef.current = false;
+    pollingActiveRef.current = true;
 
     const formData = new FormData();
     files.forEach((file) => formData.append("files", file));
@@ -453,13 +461,9 @@ function QuoteSenseContent() {
 
     try {
       try {
-        // A reachability probe only: any HTTP response (even 404) proves the
-        // server is up. We only treat network errors / timeouts as "down" so an
-        // older deploy missing /api/health doesn't block the whole UI.
-        // Render's free tier cold-starts can take 30-60s, so allow a generous
-        // timeout instead of aborting after a few seconds.
+        // Quick reachability probe — 8s is enough locally; Render cold-starts may need longer.
         await fetch(`${backendUrl}/api/health`, {
-          signal: AbortSignal.timeout(60000),
+          signal: AbortSignal.timeout(8000),
         });
       } catch {
         setReport(
@@ -482,6 +486,7 @@ function QuoteSenseContent() {
         return;
       }
 
+      setSessionId(startData.session_id);
       setLoadingMessage(startData.message || "Processing started…");
 
       // 2. Poll for live progress until the result is ready.
@@ -496,6 +501,7 @@ function QuoteSenseContent() {
       }
       console.error("Full Error Details:", error);
     } finally {
+      pollingActiveRef.current = false;
       setLoading(false);
     }
   };

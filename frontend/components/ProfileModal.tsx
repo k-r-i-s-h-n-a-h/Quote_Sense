@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
-import { getAuthToken, useAuth } from "@/lib/auth";
+import React, { useEffect, useRef, useState } from "react";
+import { getAuthToken, getAuthUserId, useAuth } from "@/lib/auth";
 
 type ProfileModalProps = {
   open: boolean;
@@ -20,19 +20,32 @@ export default function ProfileModal({ open, onClose }: ProfileModalProps) {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ name: "", username: "", email: "" });
   const [error, setError] = useState<string | null>(null);
+  const wasOpenRef = useRef(false);
 
+  const syncFormFromUser = (u: NonNullable<typeof user>) => {
+    setForm({
+      name: u.name || u.fullName || "",
+      username: u.username || "",
+      email: u.email || "",
+    });
+  };
+
+  // Reset only when the modal opens — not on every profile refresh (fixes edit mode in prod).
   useEffect(() => {
-    if (open && user) {
-      setForm({
-        name: user.name || user.fullName || "",
-        username: user.username || "",
-        email: user.email || "",
-      });
+    if (open && !wasOpenRef.current && user) {
       setEditing(false);
       setError(null);
-      refreshProfile();
+      syncFormFromUser(user);
+      void refreshProfile();
     }
+    wasOpenRef.current = open;
   }, [open, user, refreshProfile]);
+
+  // Keep form in sync after background refresh while still in view mode.
+  useEffect(() => {
+    if (!open || editing || !user) return;
+    syncFormFromUser(user);
+  }, [open, editing, user]);
 
   useEffect(() => {
     if (!open) return;
@@ -50,31 +63,43 @@ export default function ProfileModal({ open, onClose }: ProfileModalProps) {
   if (!open || !user) return null;
 
   const displayName = user.name || user.fullName || "User";
-  const userId = user._id || user.id;
+  const userId = getAuthUserId(user);
 
   const handleSave = async () => {
-    if (!userId) return;
+    if (!userId) {
+      setError("Could not resolve your account ID. Sign out and sign in again.");
+      return;
+    }
     const token = getAuthToken();
-    if (!token) return;
+    if (!token) {
+      setError("Session expired. Please sign in again.");
+      return;
+    }
 
     setSaving(true);
     setError(null);
     try {
-      const res = await fetch(`/api/auth/profile?userId=${userId}`, {
+      const trimmedName = form.name.trim();
+      const res = await fetch(`/api/auth/profile?userId=${encodeURIComponent(userId)}`, {
         method: "PUT",
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          name: form.name,
-          username: form.username,
-          email: form.email,
+          name: trimmedName,
+          fullName: trimmedName,
+          username: form.username.trim(),
+          email: form.email.trim(),
         }),
       });
       const data = await res.json();
       if (!res.ok || data.success === false) {
-        setError(data.message || "Failed to update profile.");
+        setError(
+          data.message ||
+            data.error ||
+            `Failed to update profile (${res.status}).`
+        );
         return;
       }
       await refreshProfile();

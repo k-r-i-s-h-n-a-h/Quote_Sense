@@ -33,9 +33,9 @@ export async function GET(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   try {
     const userId = req.nextUrl.searchParams.get("userId");
-    const token = req.headers.get("authorization");
+    const authHeader = req.headers.get("authorization");
 
-    if (!userId || !token) {
+    if (!userId || !authHeader) {
       return NextResponse.json(
         { success: false, message: "Missing user ID or authorization." },
         { status: 401 }
@@ -43,19 +43,42 @@ export async function PUT(req: NextRequest) {
     }
 
     const body = await req.json();
-    const res = await fetch(`${TATVA_USERS_API}/users/${userId}`, {
+    const payload = {
+      ...body,
+      ...(body.name && !body.fullName ? { fullName: body.name } : {}),
+      ...(body.fullName && !body.name ? { name: body.fullName } : {}),
+    };
+
+    const res = await fetch(`${TATVA_USERS_API}/users/${encodeURIComponent(userId)}`, {
       method: "PUT",
       headers: {
-        Authorization: token,
+        Authorization: authHeader.startsWith("Bearer ")
+          ? authHeader
+          : `Bearer ${authHeader}`,
         "Content-Type": "application/json",
         Accept: "application/json",
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(payload),
     });
 
-    const data = await res.json();
+    let data: Record<string, unknown>;
+    try {
+      data = await res.json();
+    } catch {
+      data = { success: false, message: `Profile update failed (${res.status}).` };
+    }
+
+    if (!res.ok && !data.message) {
+      data.message =
+        typeof data.error === "string"
+          ? data.error
+          : `Profile update failed (${res.status}).`;
+      data.success = false;
+    }
+
     return NextResponse.json(data, { status: res.status });
-  } catch {
+  } catch (err) {
+    console.error("Profile PUT error:", err);
     return NextResponse.json(
       { success: false, message: "Unable to update profile." },
       { status: 500 }

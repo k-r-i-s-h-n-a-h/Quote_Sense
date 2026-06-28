@@ -148,7 +148,7 @@ export function downloadComparisonPdf(
     | string
     | {
         content: string;
-        colSpan: number;
+        colSpan?: number;
         styles?: Record<string, unknown>;
       };
 

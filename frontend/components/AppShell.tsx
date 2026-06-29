@@ -26,9 +26,12 @@ function ShellContent({ children }: { children: React.ReactNode }) {
 
   if (isLoading || (!isAuthenticated && isProtectedRoute)) {
     return (
-      <div className="flex flex-col min-h-screen">
-        <div className="flex-1 flex items-center justify-center">
+      <div className="flex flex-col min-h-screen bg-[#f8fafc]">
+        <div className="flex-1 flex flex-col items-center justify-center gap-3">
           <div className="w-8 h-8 border-2 border-slate-200 border-t-[#c04a00] rounded-full animate-spin" />
+          <p className="text-sm text-slate-500">
+            {isLoading ? "Loading QuoteSense…" : "Redirecting to login…"}
+          </p>
         </div>
       </div>
     );

@@ -28,6 +28,7 @@ export type TatvaService = {
   id: string;
   name: string;
   icon: string;
+  envKey?: string;
 };
 
 export type ProjectData = {
@@ -51,14 +52,67 @@ export type ProjectSummary = Pick<
 };
 
 export const TATVA_SERVICES: TatvaService[] = [
-  { id: "interior", name: "Interior Design", icon: "🛋️" },
-  { id: "construction", name: "Residential Construction", icon: "🏗️" },
-  { id: "solar", name: "Solar", icon: "☀️" },
-  { id: "painting", name: "Painting", icon: "🎨" },
-  { id: "plumbing", name: "Plumbing", icon: "🔧" },
-  { id: "electrical", name: "Electrical", icon: "⚡" },
-  { id: "landscaping", name: "Landscaping", icon: "🌿" },
-  { id: "hvac", name: "HVAC", icon: "❄️" },
+  {
+    id: "interior",
+    name: "Interior Design",
+    icon: "🛋️",
+    envKey: "NEXT_PUBLIC_SERVICE_INTERIORS",
+  },
+  {
+    id: "construction",
+    name: "Residential Construction",
+    icon: "🏗️",
+    envKey: "NEXT_PUBLIC_SERVICE_CONSTRUCTION",
+  },
+  { id: "solar", name: "Solar", icon: "☀️", envKey: "NEXT_PUBLIC_SERVICE_SOLAR" },
+  {
+    id: "painting",
+    name: "Painting",
+    icon: "🎨",
+    envKey: "NEXT_PUBLIC_SERVICE_PAINTING",
+  },
+  {
+    id: "plumbing",
+    name: "Plumbing",
+    icon: "🔧",
+    envKey: "NEXT_PUBLIC_SERVICE_PLUMBING",
+  },
+  {
+    id: "electrical",
+    name: "Electrical",
+    icon: "⚡",
+    envKey: "NEXT_PUBLIC_SERVICE_ELECTRICAL",
+  },
+  {
+    id: "event_management",
+    name: "Event Management",
+    icon: "🎪",
+    envKey: "NEXT_PUBLIC_SERVICE_EVENT_MANAGEMENT",
+  },
+  {
+    id: "property_development",
+    name: "Property Development",
+    icon: "🏢",
+    envKey: "NEXT_PUBLIC_SERVICE_PROPERTY_DEVELOPMENT",
+  },
+  {
+    id: "home_automation",
+    name: "Home Automation",
+    icon: "🏠",
+    envKey: "NEXT_PUBLIC_SERVICE_HOME_AUTOMATION",
+  },
+  {
+    id: "farm_infrastructure",
+    name: "Farm Infrastructure",
+    icon: "🌾",
+    envKey: "NEXT_PUBLIC_SERVICE_FARM_INFRASTRUCTURE",
+  },
+  {
+    id: "irrigation_automation",
+    name: "Irrigation Automation",
+    icon: "💧",
+    envKey: "NEXT_PUBLIC_SERVICE_IRRIGATION_AUTOMATION",
+  }
 ];
 
 export const QUOTE_TIER_LABELS: Record<QuoteTier, string> = {

@@ -8,7 +8,7 @@ import CompareLoadingPanel, {
 } from "../../components/CompareLoadingPanel";
 import VendorInsights from "../../components/VendorInsights";
 import RecommendationView from "../../components/RecommendationView";
-import { buildVendorLabels, formatInrFull, priceVsBaseline } from "../../lib/format";
+import { buildVendorLabels, formatInrFull, formatQuoteCountLabel, priceVsBaseline } from "../../lib/format";
 import {
   groupTableData,
   sumSubServiceRow,
@@ -362,9 +362,9 @@ function QuoteSenseContent() {
     setChatHistory([]);
   };
 
-  const handleDownloadPdf = () => {
+  const handleDownloadPdf = async () => {
     if (tableData.length === 0 || vendors.length === 0) return;
-    downloadComparisonPdf(tableData, vendors, vendorLabels, vendorMeta);
+    await downloadComparisonPdf(tableData, vendors, vendorLabels, vendorMeta);
   };
 
   const handleProgressTick = (data: {
@@ -824,7 +824,7 @@ function QuoteSenseContent() {
                                         </div>
                                         {weight > 0 && (
                                           <div className="text-[10px] text-slate-400 mt-0.5" title="Quotes used to build this baseline">
-                                            n={weight}
+                                            {formatQuoteCountLabel(weight)}
                                           </div>
                                         )}
                                       </>

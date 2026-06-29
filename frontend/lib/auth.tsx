@@ -160,7 +160,10 @@ async function bootstrapFromSearchParams(
   try {
     const res = await fetch(
       `/api/auth/profile?userId=${encodeURIComponent(urlUserId)}`,
-      { headers: { Authorization: `Bearer ${urlToken}` } }
+      {
+        headers: { Authorization: `Bearer ${urlToken}` },
+        signal: AbortSignal.timeout(12_000),
+      }
     );
 
     if (res.ok) {
@@ -259,6 +262,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const res = await fetch(`/api/auth/profile?userId=${userId}`, {
         headers: { Authorization: `Bearer ${token}` },
+        signal: AbortSignal.timeout(12_000),
       });
       if (!res.ok) return;
       const data = await res.json();

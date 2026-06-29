@@ -3,10 +3,11 @@
 import React, { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { type ProjectData } from "@/lib/project-types";
 import {
-  TATVA_SERVICES,
-  type ProjectData,
-} from "@/lib/project-types";
+  buildTatvaServiceUrl,
+  getTatvaServicesForNav,
+} from "@/lib/tatva-services";
 import {
   cacheSelectedComparePayloads,
   readCachedProjectQuotePayloads,
@@ -167,18 +168,39 @@ export default function ProjectHub({ project }: ProjectHubProps) {
           TatvaOps services
         </p>
         <div className="flex flex-wrap gap-1.5">
-          {TATVA_SERVICES.map((svc) => (
-            <span
-              key={svc.id}
-              className={`text-[11px] px-2.5 py-1 rounded-md border ${
-                svc.id === project.service.id
-                  ? "border-[#c04a00]/30 bg-orange-50 text-[#c04a00] font-medium"
+          {getTatvaServicesForNav().map((svc) => {
+            const isActive = svc.id === project.service.id;
+            const className = `text-[11px] px-2.5 py-1 rounded-md border transition-colors ${
+              isActive
+                ? "border-[#c04a00]/30 bg-orange-50 text-[#c04a00] font-medium"
+                : svc.href
+                  ? "border-slate-100 bg-white text-slate-500 hover:border-[#c04a00]/20 hover:text-[#c04a00]"
                   : "border-slate-100 bg-white text-slate-400"
-              }`}
-            >
-              {svc.icon} {svc.name}
-            </span>
-          ))}
+            }`;
+            const label = (
+              <>
+                {svc.icon} {svc.name}
+              </>
+            );
+            if (svc.href) {
+              return (
+                <a
+                  key={svc.id}
+                  href={buildTatvaServiceUrl(svc.href)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={className}
+                >
+                  {label}
+                </a>
+              );
+            }
+            return (
+              <span key={svc.id} className={className}>
+                {label}
+              </span>
+            );
+          })}
         </div>
       </div>
 

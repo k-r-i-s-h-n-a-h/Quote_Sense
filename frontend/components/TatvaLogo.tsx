@@ -15,7 +15,7 @@ export default function TatvaLogo({ size = "md", className = "" }: TatvaLogoProp
   const { w, h } = sizes[size];
   return (
     <Image
-      src="https://tatvaops.com/logo.png"
+      src="/tatva_assets.jpg"
       alt="Tatva Ops"
       width={w}
       height={h}

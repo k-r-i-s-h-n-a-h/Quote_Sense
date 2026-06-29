@@ -35,6 +35,7 @@ if [[ "${USE_WEBPACK:-}" == "1" ]]; then
   echo "Launching Next.js (webpack) at http://127.0.0.1:3000 …"
 else
   echo "Launching Next.js (Turbopack) at http://127.0.0.1:3000 …"
+  echo "  (First compile on iCloud Desktop can take 1–2 min — wait for Ready below.)"
 fi
 
 exec "$NEXT_BIN" "${DEV_FLAGS[@]}"

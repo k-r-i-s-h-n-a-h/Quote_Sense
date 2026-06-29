@@ -230,3 +230,10 @@ export function priceVsBaseline(
   if (Math.abs(diffPct) < 2) return "neutral";
   return diffPct < 0 ? "below" : "above";
 }
+
+/** Moving-average sample size, e.g. "(1 quote)" or "(2 quotes)". */
+export function formatQuoteCountLabel(count: number): string {
+  const n = Math.round(Number(count));
+  if (!Number.isFinite(n) || n <= 0) return "";
+  return `(${n} ${n === 1 ? "quote" : "quotes"})`;
+}

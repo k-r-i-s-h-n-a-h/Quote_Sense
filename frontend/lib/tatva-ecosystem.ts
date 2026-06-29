@@ -18,7 +18,7 @@ export type TatvaApp = {
 
 export const CURRENT_APP_ID: TatvaAppId = "compare";
 
-export const CURRENT_APP_LABEL = "Compare";
+export const CURRENT_APP_LABEL = "Connect";
 
 function envUrl(key: string, fallback = ""): string {
   return process.env[key]?.trim() || fallback;
@@ -36,8 +36,8 @@ export function getTatvaEcosystemApps(): TatvaApp[] {
     },
     {
       id: "compare",
-      name: "Compare",
-      description: "Quotes & pricing",
+      name: "Connect",
+      description: "Projects & vendors",
       href: envUrl("NEXT_PUBLIC_COMPARE_URL", "/"),
       nameClassName:
         "bg-gradient-to-r from-orange-500 to-violet-500 bg-clip-text text-transparent",

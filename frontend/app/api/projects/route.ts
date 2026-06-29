@@ -24,7 +24,8 @@ export async function GET(req: NextRequest) {
 
     const data = await res.json();
     return NextResponse.json(data, { status: res.status });
-  } catch {
+  } catch (err) {
+    console.error("GET /api/projects failed:", err);
     return NextResponse.json(
       { success: false, message: "Unable to fetch projects." },
       { status: 500 }

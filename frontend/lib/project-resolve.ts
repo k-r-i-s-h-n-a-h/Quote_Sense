@@ -109,24 +109,9 @@ export async function resolveProjectRef(
   return null;
 }
 
-/** Build PM SSO redirect target — prefer /project/{publicCode}. */
-export function buildPmRedirectPath(
-  params: URLSearchParams,
-  pathname?: string
-): string {
-  const fromPath = pathname?.match(/^\/project\/([^/?#]+)/)?.[1];
-  const projectRef =
-    fromPath ||
-    params.get("project_code") ||
-    params.get("projectCode") ||
-    params.get("project_id") ||
-    params.get("id");
-
+/** Build PM SSO redirect target — projects list, or compare when session_id is present. */
+export function buildPmRedirectPath(params: URLSearchParams): string {
   const sessionId = params.get("session_id");
-
-  if (projectRef && !sessionId) {
-    return `/project/${encodeURIComponent(projectRef)}`;
-  }
 
   if (sessionId) {
     return `/compare?session_id=${encodeURIComponent(sessionId)}`;

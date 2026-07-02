@@ -45,6 +45,7 @@ from services.comparator import (
 )
 from services.env_config import env_diagnostics, get_supabase_client
 from services.tatva_fetch import fetch_project_quotes, filter_quotes_by_ids
+from services.market_rate import DEFAULT_SERVICE_TYPE, recommend_rate
 
 MIN_COMPARE_QUOTES = 2
 MAX_COMPARE_QUOTES = 3
@@ -117,6 +118,58 @@ def _mongodb_quote_metadata(quote_data: dict) -> dict:
         "source_filename": quote_number or "DIRECT_SYNC",
     }
 
+
+def _quote_line_item(
+    quote_id: str,
+    *,
+    service_category: str,
+    sub_service: str,
+    work_title: str = "",
+    description: str = "",
+    quantity=0,
+    pricing_method: str = "Unit",
+    rate=0,
+    amount=0,
+    item_name: str = "",
+    service_type: str = DEFAULT_SERVICE_TYPE,
+) -> dict:
+    return {
+        "quote_id": quote_id,
+        "service_type": service_type or DEFAULT_SERVICE_TYPE,
+        "service_category": service_category,
+        "sub_service": sub_service,
+        "item_name": item_name or work_title or "",
+        "work_title": work_title,
+        "description": description,
+        "quantity": quantity,
+        "pricing_method": pricing_method or "Unit",
+        "rate": rate,
+        "amount": amount,
+    }
+
+
+class MarketRateRequest(BaseModel):
+    service_type: str = DEFAULT_SERVICE_TYPE
+    service_category: str
+    sub_service: str
+    pricing_method: str
+    entered_rate: Optional[float] = None
+
+
+class MarketRateSuggestRequest(BaseModel):
+    """Vendor quote form (withtatva.ai) — exact bundle match for market guidance."""
+    service_type: str = DEFAULT_SERVICE_TYPE
+    service_category: str
+    sub_service: str
+    pricing_method: str
+    entered_rate: Optional[float] = None
+
+
+class ChatRequest(BaseModel):
+    session_id: str
+    message: str
+
+
 @app.get("/")
 def read_root():
     return {"status": "QuoteSense Backend is running perfectly! 🚀"}
@@ -141,6 +194,76 @@ def health():
             else None
         ),
     }
+
+
+@app.get("/api/market-rate/lookup")
+async def market_rate_lookup(
+    service_category: str,
+    sub_service: str,
+    pricing_method: str,
+    service_type: str = DEFAULT_SERVICE_TYPE,
+):
+    """Return market rate when exact bundle exists; otherwise recommend=false."""
+    return await run_in_threadpool(
+        recommend_rate,
+        service_type,
+        service_category,
+        sub_service,
+        pricing_method,
+        None,
+    )
+
+
+@app.get("/api/market-rate/suggest")
+async def market_rate_suggest_get(
+    service_category: str,
+    sub_service: str,
+    pricing_method: str,
+    service_type: str = DEFAULT_SERVICE_TYPE,
+    entered_rate: Optional[float] = None,
+):
+    """
+    Unified vendor-form endpoint (GET).
+    Call when Pricing Method or Item changes (no rate), or on Rate blur (with entered_rate).
+    """
+    return await run_in_threadpool(
+        recommend_rate,
+        service_type,
+        service_category,
+        sub_service,
+        pricing_method,
+        entered_rate if entered_rate and entered_rate > 0 else None,
+    )
+
+
+@app.post("/api/market-rate/suggest")
+async def market_rate_suggest_post(body: MarketRateSuggestRequest):
+    """
+    Unified vendor-form endpoint (POST) — preferred for withtatva.ai quote form.
+    Omit entered_rate after pricing-method selection; include it on Rate field change/blur.
+    """
+    rate = body.entered_rate if body.entered_rate and body.entered_rate > 0 else None
+    return await run_in_threadpool(
+        recommend_rate,
+        body.service_type,
+        body.service_category,
+        body.sub_service,
+        body.pricing_method,
+        rate,
+    )
+
+
+@app.post("/api/market-rate/recommend")
+async def market_rate_recommend(body: MarketRateRequest):
+    """Compare entered raw rate against stored market average for the bundle."""
+    return await run_in_threadpool(
+        recommend_rate,
+        body.service_type,
+        body.service_category,
+        body.sub_service,
+        body.pricing_method,
+        body.entered_rate,
+    )
 
 
 @app.on_event("startup")
@@ -357,10 +480,6 @@ async def get_progress(session_id: str, has_partial: bool = False):
         payload["error"] = job.get("error")
     return payload
 
-class ChatRequest(BaseModel):
-    session_id: str
-    message: str
-
 '''
 @app.post("/api/sync-mongodb-quotes")
 async def sync_mongodb_quotes(payload: Any=Body(...), session_id: str = None): # Use Any for maximum flexibility
@@ -418,17 +537,18 @@ async def sync_mongodb_quotes(payload: Any=Body(...), session_id: str = None): #
                         pricing_list = work_item.get("pricingInput", [])
                         pricing = pricing_list[0] if pricing_list else {}
                         
-                        items_to_insert.append({
-                            "quote_id": quote_id,
-                            "service_category": category_name,
-                            "sub_service": sub_service_name,
-                            "work_title": work_item.get("workTitle", ""),
-                            "description": work_item.get("description", ""),
-                            "quantity": pricing.get("quantity", 0),
-                            "pricing_method": work_item.get("pricingMethod", {}).get("name", "Unit"),
-                            "rate": pricing.get("rate", 0),
-                            "amount": pricing.get("amount", 0)
-                        })
+                        items_to_insert.append(_quote_line_item(
+                            quote_id,
+                            service_category=category_name,
+                            sub_service=sub_service_name,
+                            work_title=work_item.get("workTitle", ""),
+                            description=work_item.get("description", ""),
+                            quantity=pricing.get("quantity", 0),
+                            pricing_method=work_item.get("pricingMethod", {}).get("name", "Unit"),
+                            rate=pricing.get("rate", 0),
+                            amount=pricing.get("amount", 0),
+                            item_name=work_item.get("workTitle", ""),
+                        ))
 
             if items_to_insert:
                 get_supabase_client().table("quote_items").insert(items_to_insert).execute()
@@ -525,18 +645,18 @@ async def sync_mongodb_quotes(payload: Any = Body(...), session_id: str = None):
                         pricing_list = work_item.get("pricingInput", [])
                         pricing = pricing_list[0] if pricing_list else {}
                         
-                        items_to_insert.append({
-                            "quote_id": quote_id,
-                            "service_category": category_name,
-                            "sub_service": sub_service_name,
-                            "work_title": work_item.get("workTitle", ""),
-                            "description": work_item.get("description", "").replace("&nbsp;", " "),
-                            "quantity": pricing.get("quantity", 0),
-                            "pricing_method": work_item.get("pricingMethod", {}).get("name", "Unit"),
-                            "rate": pricing.get("rate", 0),
-                            "amount": pricing.get("amount", 0),
-                           # "quote_number": data.get("quoteNumber", "DIRECT_SYNC")
-                        })
+                        items_to_insert.append(_quote_line_item(
+                            quote_id,
+                            service_category=category_name,
+                            sub_service=sub_service_name,
+                            work_title=work_item.get("workTitle", ""),
+                            description=work_item.get("description", "").replace("&nbsp;", " "),
+                            quantity=pricing.get("quantity", 0),
+                            pricing_method=work_item.get("pricingMethod", {}).get("name", "Unit"),
+                            rate=pricing.get("rate", 0),
+                            amount=pricing.get("amount", 0),
+                            item_name=work_item.get("workTitle", ""),
+                        ))
 
             if items_to_insert:
                 get_supabase_client().table("quote_items").insert(items_to_insert).execute()
@@ -625,17 +745,18 @@ def _ingest_quotes_to_supabase(quotes_list: list, session_id: str) -> int:
                     sub_service_name = work_item.get("subService", {}).get("name", "General Service")
                     pricing_list = work_item.get("pricingInput", [])
                     pricing = pricing_list[0] if pricing_list else {}
-                    items_to_insert.append({
-                        "quote_id": quote_id,
-                        "service_category": category_name,
-                        "sub_service": sub_service_name,
-                        "work_title": work_item.get("workTitle", ""),
-                        "description": work_item.get("description", "").replace("&nbsp;", " "),
-                        "quantity": pricing.get("quantity", 0),
-                        "pricing_method": work_item.get("pricingMethod", {}).get("name", "Unit"),
-                        "rate": pricing.get("rate", 0),
-                        "amount": pricing.get("grandTotal", 0),
-                    })
+                    items_to_insert.append(_quote_line_item(
+                        quote_id,
+                        service_category=category_name,
+                        sub_service=sub_service_name,
+                        work_title=work_item.get("workTitle", ""),
+                        description=work_item.get("description", "").replace("&nbsp;", " "),
+                        quantity=pricing.get("quantity", 0),
+                        pricing_method=work_item.get("pricingMethod", {}).get("name", "Unit"),
+                        rate=pricing.get("rate", 0),
+                        amount=pricing.get("grandTotal", 0),
+                        item_name=work_item.get("workTitle", ""),
+                    ))
 
         if items_to_insert:
             get_supabase_client().table("quote_items").insert(items_to_insert).execute()

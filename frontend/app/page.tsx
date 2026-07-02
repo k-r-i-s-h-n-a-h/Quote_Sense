@@ -1,9 +1,20 @@
 "use client";
 
 import React, { Suspense, useEffect } from "react";
+import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth";
-import ProjectDashboard from "@/components/dashboard/ProjectDashboard";
+
+const ProjectDashboard = dynamic(
+  () => import("@/components/dashboard/ProjectDashboard"),
+  {
+    loading: () => (
+      <div className="flex items-center justify-center min-h-[40vh]">
+        <div className="w-8 h-8 border-2 border-slate-200 border-t-[#c04a00] rounded-full animate-spin" />
+      </div>
+    ),
+  }
+);
 
 export default function Home() {
   return (

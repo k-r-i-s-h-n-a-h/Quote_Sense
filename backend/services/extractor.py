@@ -7,6 +7,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../'
 from backend.models.schema import ExtractedQuote
 
 from services.env_config import get_gemini_client, get_supabase_client
+from services.market_rate import DEFAULT_SERVICE_TYPE
 from services.extraction_cache import get_extraction_cached_content_name
 from services.taxonomy_prompt import build_extraction_system_instruction
 
@@ -100,6 +101,7 @@ def push_to_supabase(structured_data, filename, session_id):
         for item in service.get("items", []):
             items_payload.append({
                 "quote_id": new_quote_id,
+                "service_type": DEFAULT_SERVICE_TYPE,
                 "service_category": service.get("service_category", "General"),
                 "sub_service": item.get("sub_service", "Unknown"),
                 "item_name": str(item.get("item_name", "") or "").strip(),

@@ -11,21 +11,21 @@ function safeReturnTo(raw: string | null): string {
   return raw;
 }
 
-/** Preserve PM deep-links; strip jwt from returnTo. */
+/** After sign-in, land on projects unless resuming a compare session. */
 function cleanReturnTo(raw: string): string {
   const queryStart = raw.indexOf("?");
-  if (queryStart < 0) return raw.split("?")[0] || raw;
-
-  const path = raw.slice(0, queryStart) || "/";
-  const params = new URLSearchParams(raw.slice(queryStart + 1));
+  const path = queryStart < 0 ? raw : raw.slice(0, queryStart) || "/";
 
   if (path.startsWith("/project/")) {
-    return path;
+    return "/";
   }
 
-  const sessionId = params.get("session_id");
-  if (sessionId) {
-    return `/compare?session_id=${encodeURIComponent(sessionId)}`;
+  if (queryStart >= 0) {
+    const params = new URLSearchParams(raw.slice(queryStart + 1));
+    const sessionId = params.get("session_id");
+    if (sessionId) {
+      return `/compare?session_id=${encodeURIComponent(sessionId)}`;
+    }
   }
 
   return path;

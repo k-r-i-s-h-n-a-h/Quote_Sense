@@ -114,9 +114,7 @@ function userFromJwt(token: string, userId: string): TatvaUser | null {
 }
 
 function buildSsoRedirectUrl(params: URLSearchParams): string {
-  const pathname =
-    typeof window !== "undefined" ? window.location.pathname : undefined;
-  return buildPmRedirectPath(params, pathname);
+  return buildPmRedirectPath(params);
 }
 
 /** Collect SSO params from the current URL or nested inside login returnTo. */
@@ -205,21 +203,12 @@ function applyBootstrapRedirect(redirectTo: string) {
 
   const path = window.location.pathname;
 
-  if (path === "/login") {
+  if (path === "/login" || path.startsWith("/project/")) {
     window.location.replace(redirectTo);
     return;
   }
 
-  if (path.startsWith("/project/") && redirectTo.startsWith("/project/")) {
-    window.history.replaceState({}, "", redirectTo);
-    return;
-  }
-
   if (`${path}${window.location.search}` !== redirectTo) {
-    if (redirectTo.startsWith("/project/")) {
-      window.location.replace(redirectTo);
-      return;
-    }
     window.history.replaceState({}, "", redirectTo);
   }
 }
@@ -280,6 +269,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let cancelled = false;
 
     async function initAuth() {
+      // #region agent log
+      fetch('http://127.0.0.1:7880/ingest/fae56c38-48bc-450d-a803-35ac016bc76b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b7c34a'},body:JSON.stringify({sessionId:'b7c34a',location:'auth.tsx:initAuth:start',message:'auth init started',data:{},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
+      // #endregion
       try {
         const fromRedirect = await bootstrapFromRedirectParams();
         if (cancelled) return;
@@ -287,6 +279,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (fromRedirect) {
           setUser(fromRedirect.user);
           applyBootstrapRedirect(fromRedirect.redirectTo);
+          // #region agent log
+          fetch('http://127.0.0.1:7880/ingest/fae56c38-48bc-450d-a803-35ac016bc76b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b7c34a'},body:JSON.stringify({sessionId:'b7c34a',location:'auth.tsx:initAuth:redirect',message:'auth from redirect',data:{hasUser:true},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
+          // #endregion
           return;
         }
 
@@ -296,8 +291,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setUser(stored);
           refreshProfile().catch(() => {});
         }
+        // #region agent log
+        fetch('http://127.0.0.1:7880/ingest/fae56c38-48bc-450d-a803-35ac016bc76b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b7c34a'},body:JSON.stringify({sessionId:'b7c34a',location:'auth.tsx:initAuth:stored',message:'auth stored session',data:{hasStored:!!stored,hasToken:!!token},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
+        // #endregion
       } finally {
-        if (!cancelled) setIsLoading(false);
+        if (!cancelled) {
+          setIsLoading(false);
+          // #region agent log
+          fetch('http://127.0.0.1:7880/ingest/fae56c38-48bc-450d-a803-35ac016bc76b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b7c34a'},body:JSON.stringify({sessionId:'b7c34a',location:'auth.tsx:initAuth:done',message:'auth loading false',data:{cancelled:false},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
+          // #endregion
+        }
       }
     }
 

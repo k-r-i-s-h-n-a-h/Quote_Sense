@@ -36,6 +36,9 @@ export default function ProjectDashboard() {
         setError(result.message);
         setProjects([]);
       }
+      // #region agent log
+      fetch('http://127.0.0.1:7880/ingest/fae56c38-48bc-450d-a803-35ac016bc76b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b7c34a'},body:JSON.stringify({sessionId:'b7c34a',location:'ProjectDashboard.tsx:fetch',message:'projects fetch result',data:{ok:result.ok,status:result.ok?200:('status' in result?result.status:null),count:result.ok?result.projects.length:0,message:result.ok?null:result.message},timestamp:Date.now(),hypothesisId:'H4'})}).catch(()=>{});
+      // #endregion
       setLoading(false);
     })();
 

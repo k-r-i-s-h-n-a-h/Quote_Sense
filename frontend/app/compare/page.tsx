@@ -397,15 +397,24 @@ function QuoteSenseContent() {
       onTick: handleProgressTick,
     });
 
+    // #region agent log
+    fetch('http://127.0.0.1:7880/ingest/fae56c38-48bc-450d-a803-35ac016bc76b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b7c34a'},body:JSON.stringify({sessionId:'b7c34a',location:'compare/page.tsx:poll',message:'poll finished',data:{outcome:result.outcome,sessionId:sid,hasPartial:partialAppliedRef.current},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
+    // #endregion
+
     if (result.outcome === "done") {
       processComparisonData(result.result);
+      setLoading(false);
       return;
     }
     if (result.outcome === "error" || result.outcome === "unknown") {
       setReport(`❌ ${result.message}`);
+      setLoading(false);
       return;
     }
-    if (result.outcome === "cancelled") return;
+    if (result.outcome === "cancelled") {
+      setLoading(false);
+      return;
+    }
 
     // Timeout — if matrix already visible, keep it and explain; don't wipe results.
     if (partialAppliedRef.current) {
@@ -421,6 +430,7 @@ function QuoteSenseContent() {
       "🕒 PDF extraction is taking longer than usual (large quotes can take 15+ minutes). " +
         "Keep the backend running and try Compare again — or use fewer/smaller PDFs."
     );
+    setLoading(false);
   };
 
   const handleUpload = async () => {

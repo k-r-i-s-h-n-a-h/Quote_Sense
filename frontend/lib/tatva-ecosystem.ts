@@ -38,7 +38,10 @@ export function getTatvaEcosystemApps(): TatvaApp[] {
       id: "compare",
       name: "Connect",
       description: "Projects & vendors",
-      href: envUrl("NEXT_PUBLIC_COMPARE_URL", "/"),
+      href:
+        process.env.NEXT_PUBLIC_CONNECT_URL?.trim() ||
+        process.env.NEXT_PUBLIC_COMPARE_URL?.trim() ||
+        "/",
       nameClassName:
         "bg-gradient-to-r from-orange-500 to-violet-500 bg-clip-text text-transparent",
     },

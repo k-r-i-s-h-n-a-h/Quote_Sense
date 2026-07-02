@@ -17,6 +17,9 @@ function ShellContent({ children }: { children: React.ReactNode }) {
     pathname === "/" || pathname === "/compare" || pathname.startsWith("/project/");
 
   useEffect(() => {
+    // #region agent log
+    fetch('http://127.0.0.1:7880/ingest/fae56c38-48bc-450d-a803-35ac016bc76b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b7c34a'},body:JSON.stringify({sessionId:'b7c34a',location:'AppShell.tsx:state',message:'shell render state',data:{isLoading,isAuthenticated,pathname,isProtectedRoute},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
+    // #endregion
     if (isLoading) return;
     if (!isAuthenticated && isProtectedRoute) {
       const returnTo = `${window.location.pathname}${window.location.search}`;

@@ -27,6 +27,13 @@ pd = _PandasLazy()
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 
 from services.env_config import get_gemini_client, get_supabase_client
+from services.market_rate import (
+    DEFAULT_SERVICE_TYPE,
+    lookup_market_rate,
+    normalize_pricing_method,
+    normalize_service_type,
+    update_rates_from_dataframe,
+)
 
 DEBUG_LOG_PATH = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "../../.cursor/debug-b7c34a.log")
@@ -155,136 +162,6 @@ def _line_item_key(item_label: str, room: str) -> str:
     return label or loc or "Unspecified"
 
 
-def _moving_avg_key(service_category: str, sub_service: str, item_key: str) -> dict:
-    """Supabase row identity for a moving-average bucket (line-item level)."""
-    return {
-        "service_category": service_category,
-        "sub_service": sub_service,
-        "item_key": item_key,
-    }
-
-
-def _fetch_moving_average_row(key: dict):
-    """Return an existing market_moving_averages row, or None."""
-    try:
-        res = (
-            get_supabase_client().table("market_moving_averages")
-            .select("*")
-            .match(key)
-            .limit(1)
-            .execute()
-        )
-        return res.data[0] if res.data else None
-    except Exception as e:
-        print(f"⚠️ Could not fetch moving average for {key}: {e}")
-        return None
-
-
-def _session_already_applied(session_id: str, item_id: str) -> bool:
-    """True if this comparison session already updated this moving-avg bucket."""
-    if not session_id or not item_id or not _sessions_table_available():
-        return False
-    try:
-        res = (
-            get_supabase_client().table("market_moving_avg_sessions")
-            .select("id")
-            .eq("session_id", session_id)
-            .eq("item_id", item_id)
-            .limit(1)
-            .execute()
-        )
-        return bool(res.data)
-    except Exception as e:
-        print(f"⚠️ Could not check moving-avg session guard: {e}")
-        return False
-
-
-def _record_moving_avg_session(session_id: str, item_id: str, batch_avg: float, batch_weight: int):
-    if not _sessions_table_available():
-        return
-    try:
-        get_supabase_client().table("market_moving_avg_sessions").insert({
-            "session_id": session_id,
-            "item_id": item_id,
-            "batch_avg": round(batch_avg, 2),
-            "batch_weight": batch_weight,
-        }).execute()
-    except Exception as e:
-        print(f"⚠️ Could not record moving-avg session {session_id}: {e}")
-
-
-def _update_moving_average(
-    session_id: str,
-    service_category: str,
-    sub_service: str,
-    item_key: str,
-    batch_prices: list[float],
-) -> tuple[float, int]:
-    """Merge this session's batch into the stored weighted moving average.
-
-    Formula (from manager's sheet):
-      new_avg = (prev_avg × prev_weight + batch_avg × batch_weight) / (prev_weight + batch_weight)
-      new_weight = prev_weight + batch_weight
-
-    ``batch_prices`` = vendor amounts > 0 for this line item in the current session.
-    """
-    label = f"{sub_service} / {item_key}"
-    batch_weight = len(batch_prices)
-    key = _moving_avg_key(service_category, sub_service, item_key)
-    if batch_weight == 0:
-        existing = _fetch_moving_average_row(key)
-        if existing:
-            return float(existing["moving_average"]), int(existing["weight"])
-        return 0.0, 0
-
-    batch_avg = sum(batch_prices) / batch_weight
-    existing = _fetch_moving_average_row(key)
-
-    if existing and _session_already_applied(session_id, existing["id"]):
-        return float(existing["moving_average"]), int(existing["weight"])
-
-    if existing is None:
-        # First real quotes for this sub-service → bootstrap baseline from this session.
-        # No manual seeding required: batch_avg and batch_weight come from actual vendor prices.
-        moving_avg = batch_avg
-        weight = batch_weight
-        print(
-            f"  📊 Moving avg bootstrap: {label} → "
-            f"₹{moving_avg:,.0f} (weight {weight} from {batch_weight} quote(s) in this session)"
-        )
-    else:
-        prev_avg = float(existing["moving_average"])
-        prev_weight = int(existing["weight"])
-        moving_avg = ((prev_avg * prev_weight) + (batch_avg * batch_weight)) / (prev_weight + batch_weight)
-        weight = prev_weight + batch_weight
-        print(
-            f"  📊 Moving avg updated: {label} → "
-            f"₹{moving_avg:,.0f} (weight {prev_weight} + {batch_weight} = {weight})"
-        )
-
-    payload = {
-        **key,
-        "moving_average": round(moving_avg, 2),
-        "weight": weight,
-        "last_session_id": session_id,
-    }
-
-    try:
-        if existing and existing.get("id"):
-            get_supabase_client().table("market_moving_averages").update(payload).eq("id", existing["id"]).execute()
-            item_id = existing["id"]
-        else:
-            res = get_supabase_client().table("market_moving_averages").insert(payload).execute()
-            item_id = res.data[0]["id"] if res.data else None
-
-        if item_id:
-            _record_moving_avg_session(session_id, item_id, batch_avg, batch_weight)
-    except Exception as e:
-        print(f"⚠️ Could not persist moving average for {key}: {e}")
-
-    return round(moving_avg, 2), weight
-
-
 def _build_fallback_report(chart_data):
     """A deterministic, no-AI recommendation built straight from the totals.
 
@@ -397,10 +274,19 @@ def run_comparison(session_id, on_matrix_ready=None, df=None, fast_moving_avg=Fa
         # Three-level hierarchy:
         #   service_category -> sub_service -> line items (item_name + room).
         # Line items stay visible; the UI sums amounts on the sub_service header row.
-        for col in ('work_title', 'item_name', 'sub_service', 'service_category'):
+        for col in ('work_title', 'item_name', 'sub_service', 'service_category', 'pricing_method', 'service_type', 'rate'):
             if col not in df.columns:
-                df[col] = ''
-            df[col] = df[col].fillna('').astype(str).str.strip()
+                df[col] = '' if col != 'rate' else 0.0
+            if col == 'rate':
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
+            else:
+                df[col] = df[col].fillna('').astype(str).str.strip()
+
+        if 'service_type' not in df.columns or df['service_type'].eq('').all():
+            df['service_type'] = DEFAULT_SERVICE_TYPE
+
+        # Update per-unit market rates by bundle (type + category + sub_service + pricing_method)
+        bundle_rate_map = update_rates_from_dataframe(df, session_id, fast=fast_moving_avg)
 
         def _is_blank(value):
             return (not value) or value.lower() in ('', 'nan', 'none', 'null')
@@ -451,22 +337,30 @@ def run_comparison(session_id, on_matrix_ready=None, df=None, fast_moving_avg=Fa
 
         for index, row in pivot_df.iterrows():
             category, sub_service_name, item_label, room = index
-            line_key = _line_item_key(str(item_label), str(room))
-            batch_prices = [float(row[v]) for v in vendors if float(row[v]) > 0]
-            if fast_moving_avg:
-                batch_weight = len(batch_prices)
-                moving_avg = (
-                    round(sum(batch_prices) / batch_weight, 2) if batch_weight else 0.0
-                )
-                moving_weight = batch_weight
+
+            line_mask = (
+                (df['service_category'] == category)
+                & (df['sub_service'] == sub_service_name)
+                & (df['item_label'] == item_label)
+                & (df['room'] == room)
+            )
+            line_slice = df.loc[line_mask]
+            service_type = normalize_service_type(
+                line_slice['service_type'].iloc[0] if len(line_slice) else DEFAULT_SERVICE_TYPE
+            )
+            pricing_method = normalize_pricing_method(
+                line_slice['pricing_method'].iloc[0] if len(line_slice) else 'Unit'
+            )
+            bundle = (service_type, str(category), str(sub_service_name), pricing_method)
+
+            if bundle in bundle_rate_map:
+                moving_avg, moving_weight = bundle_rate_map[bundle]
             else:
-                moving_avg, moving_weight = _update_moving_average(
-                    session_id,
-                    str(category),
-                    str(sub_service_name),
-                    line_key,
-                    batch_prices,
+                lookup = lookup_market_rate(
+                    service_type, str(category), str(sub_service_name), pricing_method
                 )
+                moving_avg = lookup["market_rate"] if lookup else 0.0
+                moving_weight = lookup["weight"] if lookup else 0
 
             row_dict = {
                 "category": str(category),
@@ -475,6 +369,8 @@ def run_comparison(session_id, on_matrix_ready=None, df=None, fast_moving_avg=Fa
                 "room": str(room),
                 "work_item": str(item_label),
                 "taxonomy": str(sub_service_name),
+                "service_type": service_type,
+                "pricing_method": pricing_method,
                 "moving_average": round(moving_avg),
                 "moving_weight": moving_weight,
                 "market_average": round(moving_avg),
@@ -616,6 +512,15 @@ def mongodb_quotes_to_dataframe(quotes_list: list):
                     pricing_list = work_item.get("pricingInput") or []
                     pricing = pricing_list[0] if pricing_list else {}
                     amount = float(pricing.get("grandTotal") or pricing.get("amount") or 0)
+                    pricing_method = (
+                        (work_item.get("pricingMethod") or {}).get("name") or "Unit"
+                    )
+                    service_type = (
+                        work_item.get("serviceType")
+                        or work_item.get("type")
+                        or section.get("type")
+                        or DEFAULT_SERVICE_TYPE
+                    )
                     rows.append({
                         "vendor_name": vendor_key,
                         "company": company,
@@ -624,12 +529,14 @@ def mongodb_quotes_to_dataframe(quotes_list: list):
                         "quote_date": quote_date[:10] if len(quote_date) >= 10 else quote_date,
                         "grand_total": grand_total,
                         "client_name": client_detail.get("clientName") or "",
+                        "service_type": str(service_type).strip() or DEFAULT_SERVICE_TYPE,
                         "service_category": category_name,
                         "sub_service": sub_service_name,
                         "work_title": work_item.get("workTitle") or "",
                         "item_name": work_item.get("workTitle") or "",
                         "description": str(work_item.get("description") or "").replace("&nbsp;", " "),
                         "quantity": pricing.get("quantity") or 0,
+                        "pricing_method": pricing_method,
                         "rate": pricing.get("rate") or 0,
                         "amount": amount,
                     })

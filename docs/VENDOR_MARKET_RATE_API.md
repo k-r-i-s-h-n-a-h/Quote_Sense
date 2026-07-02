@@ -152,11 +152,62 @@ rateInput.addEventListener("blur", async () => {
 
 ---
 
+## Bulk load by service category (recommended for withtatva.ai)
+
+Call **once** when the user selects **Main Service**. Cache the response and match locally on Item + Pricing Method — no API call on every field change.
+
+### `GET /api/market-rate/by-category`
+
+```http
+GET /api/market-rate/by-category?service_category=Residential%20Construction
+```
+
+Optional: `service_type=ESSENTIAL` (default)
+
+**Example response:**
+
+```json
+{
+  "service_category": "Residential Construction",
+  "service_type": "ESSENTIAL",
+  "count": 24,
+  "items": [
+    {
+      "service_type": "ESSENTIAL",
+      "service_category": "Residential Construction",
+      "sub_service": "Footings",
+      "pricing_method": "Unit",
+      "market_rate": 1250.0,
+      "weight": 8,
+      "band_low": 1062.5,
+      "band_high": 1437.5
+    }
+  ]
+}
+```
+
+**Client-side match** (no further API calls):
+
+```javascript
+const match = items.find(
+  (r) => r.sub_service === subService && r.pricing_method === pricingMethod
+);
+if (!match) hidePanel();
+
+const verdict =
+  enteredRate < match.market_rate * 0.85 ? "low"
+  : enteredRate > match.market_rate * 1.15 ? "high"
+  : "fair";
+```
+
+---
+
 ## Alternate endpoints
 
 | Endpoint | Use |
 |----------|-----|
-| `GET /api/market-rate/suggest?...` | Same as POST; query params instead of body |
+| `GET /api/market-rate/by-category?...` | **Bulk** — all bundles for one Main Service |
+| `GET /api/market-rate/suggest?...` | Single-row lookup; query params instead of POST body |
 | `GET /api/market-rate/lookup?...` | Lookup only (no `entered_rate`) |
 | `POST /api/market-rate/recommend` | Same as suggest POST (legacy alias) |
 

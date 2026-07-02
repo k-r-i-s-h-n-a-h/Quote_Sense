@@ -248,6 +248,75 @@ def _verdict_message(verdict: str, entered_rate: float, market_rate: float, pric
     )
 
 
+def list_market_rates_by_category(
+    service_category: str,
+    service_type: str = DEFAULT_SERVICE_TYPE,
+) -> dict:
+    """Return all recommendable bundles for one service category (PM bulk-load)."""
+    cat = normalize_text(service_category, "")
+    if not cat:
+        return {
+            "service_category": "",
+            "service_type": normalize_service_type(service_type),
+            "count": 0,
+            "items": [],
+            "message": "service_category is required.",
+        }
+
+    st = normalize_service_type(service_type)
+    try:
+        res = (
+            get_supabase_client()
+            .table("market_moving_averages")
+            .select(
+                "service_type,service_category,sub_service,pricing_method,"
+                "rate_moving_average,moving_average,weight"
+            )
+            .eq("service_category", cat)
+            .eq("service_type", st)
+            .execute()
+        )
+        rows = res.data or []
+    except Exception as e:
+        print(f"⚠️ Could not list market rates for {cat}: {e}")
+        return {
+            "service_category": cat,
+            "service_type": st,
+            "count": 0,
+            "items": [],
+            "message": "Could not load market rates for this category.",
+        }
+
+    items: list[dict] = []
+    for row in rows:
+        rate = float(row.get("rate_moving_average") or row.get("moving_average") or 0)
+        weight = int(row.get("weight") or 0)
+        if rate <= 0 or weight < MIN_WEIGHT_FOR_RECOMMEND:
+            continue
+        sub = normalize_text(row.get("sub_service"), "General")
+        pm = normalize_pricing_method(row.get("pricing_method"))
+        items.append(
+            {
+                "service_type": st,
+                "service_category": cat,
+                "sub_service": sub,
+                "pricing_method": pm,
+                "market_rate": round(rate, 2),
+                "weight": weight,
+                "band_low": round(rate * LOW_THRESHOLD, 2),
+                "band_high": round(rate * HIGH_THRESHOLD, 2),
+            }
+        )
+
+    items.sort(key=lambda x: (x["sub_service"].lower(), x["pricing_method"].lower()))
+    return {
+        "service_category": cat,
+        "service_type": st,
+        "count": len(items),
+        "items": items,
+    }
+
+
 def recommend_rate(
     service_type: str,
     service_category: str,

@@ -46,6 +46,7 @@ from services.comparator import (
 from services.env_config import env_diagnostics, get_supabase_client
 from services.tatva_fetch import fetch_project_quotes, filter_quotes_by_ids
 from services.market_rate import DEFAULT_SERVICE_TYPE, list_market_rates_by_category, recommend_rate
+from services.tatva_services import resolve_service_by_id
 
 MIN_COMPARE_QUOTES = 2
 MAX_COMPARE_QUOTES = 3
@@ -198,19 +199,49 @@ def health():
 
 @app.get("/api/market-rate/by-category")
 async def market_rate_by_category(
-    service_category: str,
+    service_id: Optional[str] = None,
+    service_category: Optional[str] = None,
     service_type: str = DEFAULT_SERVICE_TYPE,
 ):
     """
-    Bulk market rates for one Main Service (service_category).
-    PM platform calls once when the user selects a category, then matches locally
-    on sub_service + pricing_method without further API calls.
+    Bulk market rates for one Main Service.
+    Prefer service_id (Tatva PM ObjectId); service_category name also accepted.
+    PM calls once when the user selects a service, then matches locally on
+    sub_service + pricing_method without further API calls.
     """
-    return await run_in_threadpool(
-        list_market_rates_by_category,
-        service_category,
-        service_type,
-    )
+    if service_id:
+        resolved = await run_in_threadpool(resolve_service_by_id, service_id.strip())
+        if not resolved:
+            return {
+                "service_id": service_id.strip(),
+                "service_type": service_type,
+                "count": 0,
+                "items": [],
+                "message": "Unknown service_id or Tatva services API unavailable.",
+            }
+        result = await run_in_threadpool(
+            list_market_rates_by_category,
+            resolved["service_category"],
+            service_type,
+        )
+        result["service_id"] = resolved["service_id"]
+        if resolved.get("service_code"):
+            result["service_code"] = resolved["service_code"]
+        return result
+
+    if service_category:
+        return await run_in_threadpool(
+            list_market_rates_by_category,
+            service_category,
+            service_type,
+        )
+
+    return {
+        "service_type": service_type,
+        "count": 0,
+        "items": [],
+        "message": "Provide service_id or service_category.",
+    }
 
 
 @app.get("/api/market-rate/lookup")

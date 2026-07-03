@@ -158,29 +158,43 @@ Call **once** when the user selects **Main Service**. Cache the response and mat
 
 ### `GET /api/market-rate/by-category`
 
+**Preferred — by Tatva PM service ObjectId:**
+
+```http
+GET /api/market-rate/by-category?service_id=6926b1978ba6a3cfc5a191ce
+```
+
+**Alternate — by category name:**
+
 ```http
 GET /api/market-rate/by-category?service_category=Residential%20Construction
 ```
 
+Provide **either** `service_id` **or** `service_category` (not both required).
+
 Optional: `service_type=ESSENTIAL` (default)
 
-**Example response:**
+`service_id` is resolved via Tatva services API (`/admin/api/services`) to the category name stored in market data.
+
+**Example response (by service_id):**
 
 ```json
 {
-  "service_category": "Residential Construction",
+  "service_id": "6926b1978ba6a3cfc5a191ce",
+  "service_code": "INTERIORS",
+  "service_category": "Interiors",
   "service_type": "ESSENTIAL",
-  "count": 24,
+  "count": 109,
   "items": [
     {
       "service_type": "ESSENTIAL",
-      "service_category": "Residential Construction",
-      "sub_service": "Footings",
-      "pricing_method": "Unit",
-      "market_rate": 1250.0,
-      "weight": 8,
-      "band_low": 1062.5,
-      "band_high": 1437.5
+      "service_category": "Interiors",
+      "sub_service": "Wardrobes",
+      "pricing_method": "Area (in sqft)",
+      "market_rate": 1429.11,
+      "weight": 506,
+      "band_low": 1214.74,
+      "band_high": 1643.48
     }
   ]
 }

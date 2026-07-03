@@ -202,13 +202,27 @@ async def market_rate_by_category(
     service_id: Optional[str] = None,
     service_category: Optional[str] = None,
     service_type: str = DEFAULT_SERVICE_TYPE,
+    sub_service: Optional[str] = None,
+    pricing_method: Optional[str] = None,
+    entered_rate: Optional[float] = None,
 ):
     """
     Bulk market rates for one Main Service.
     Prefer service_id (Tatva PM ObjectId); service_category name also accepted.
     PM calls once when the user selects a service, then matches locally on
     sub_service + pricing_method without further API calls.
+
+    Each item includes recommend + message + recommendation.
+    Optional sub_service + pricing_method + entered_rate adds selected_recommendation
+    with verdict text for the active work-item row.
     """
+    rate = entered_rate if entered_rate and entered_rate > 0 else None
+    list_kwargs = {
+        "sub_service": sub_service,
+        "pricing_method": pricing_method,
+        "entered_rate": rate,
+    }
+
     if service_id:
         resolved = await run_in_threadpool(resolve_service_by_id, service_id.strip())
         if not resolved:
@@ -223,6 +237,7 @@ async def market_rate_by_category(
             list_market_rates_by_category,
             resolved["service_category"],
             service_type,
+            **list_kwargs,
         )
         result["service_id"] = resolved["service_id"]
         if resolved.get("service_code"):
@@ -234,6 +249,7 @@ async def market_rate_by_category(
             list_market_rates_by_category,
             service_category,
             service_type,
+            **list_kwargs,
         )
 
     return {

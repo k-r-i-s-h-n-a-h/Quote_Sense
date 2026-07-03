@@ -230,6 +230,31 @@ def _verdict(entered_rate: float, market_rate: float) -> str:
     return "fair"
 
 
+def _verdict_label(verdict: str) -> str:
+    return {
+        "low": "Below Market",
+        "fair": "Fair Price",
+        "high": "Above Market",
+    }.get(verdict, "Unknown")
+
+
+def _verdict_suggestion(verdict: str) -> str:
+    """Short actionable guidance for PM UI chips / banners."""
+    if verdict == "low":
+        return "Your rate is below market — consider increasing it to avoid underpricing."
+    if verdict == "high":
+        return "Your rate is above market — consider lowering it to stay competitive."
+    return "Your rate is within market range — looks fair and competitive."
+
+
+def _fair_range_message(band_low: float, band_high: float, pricing_method: str) -> str:
+    unit = pricing_method or "unit"
+    return (
+        f"Fair market range: ₹{band_low:,.2f} – ₹{band_high:,.2f}/{unit}. "
+        f"Enter your rate to see if it's low, fair, or high."
+    )
+
+
 def _verdict_message(verdict: str, entered_rate: float, market_rate: float, pricing_method: str, weight: int) -> str:
     unit = pricing_method or "unit"
     if verdict == "low":
@@ -248,9 +273,51 @@ def _verdict_message(verdict: str, entered_rate: float, market_rate: float, pric
     )
 
 
+def _market_hint_message(market_rate: float, pricing_method: str, weight: int) -> str:
+    pm = pricing_method or "unit"
+    return (
+        f"Market rate: ~₹{market_rate:,.2f}/{pm} "
+        f"({weight} quote{'s' if weight != 1 else ''})"
+    )
+
+
+def _item_recommendation(
+    market_rate: float,
+    pricing_method: str,
+    weight: int,
+    band_low: float,
+    band_high: float,
+    entered_rate: float | None = None,
+) -> dict:
+    """Per-item recommendation payload for PM bulk responses."""
+    rec: dict = {
+        "recommend": True,
+        "market_rate": market_rate,
+        "band_low": band_low,
+        "band_high": band_high,
+        "market_hint": _market_hint_message(market_rate, pricing_method, weight),
+    }
+    if entered_rate is not None and float(entered_rate) > 0:
+        rate = float(entered_rate)
+        verdict = _verdict(rate, market_rate)
+        rec["entered_rate"] = rate
+        rec["verdict"] = verdict
+        rec["verdict_label"] = _verdict_label(verdict)
+        rec["suggestion"] = _verdict_suggestion(verdict)
+        rec["message"] = _verdict_message(verdict, rate, market_rate, pricing_method, weight)
+    else:
+        rec["suggestion"] = _fair_range_message(band_low, band_high, pricing_method)
+        rec["message"] = rec["market_hint"]
+    return rec
+
+
 def list_market_rates_by_category(
     service_category: str,
     service_type: str = DEFAULT_SERVICE_TYPE,
+    *,
+    sub_service: str | None = None,
+    pricing_method: str | None = None,
+    entered_rate: float | None = None,
 ) -> dict:
     """Return all recommendable bundles for one service category (PM bulk-load)."""
     cat = normalize_text(service_category, "")
@@ -295,26 +362,60 @@ def list_market_rates_by_category(
             continue
         sub = normalize_text(row.get("sub_service"), "General")
         pm = normalize_pricing_method(row.get("pricing_method"))
-        items.append(
-            {
-                "service_type": st,
-                "service_category": cat,
-                "sub_service": sub,
-                "pricing_method": pm,
-                "market_rate": round(rate, 2),
-                "weight": weight,
-                "band_low": round(rate * LOW_THRESHOLD, 2),
-                "band_high": round(rate * HIGH_THRESHOLD, 2),
-            }
-        )
+        rounded_rate = round(rate, 2)
+        band_low = round(rate * LOW_THRESHOLD, 2)
+        band_high = round(rate * HIGH_THRESHOLD, 2)
+        rate_for_item = None
+        if (
+            entered_rate
+            and entered_rate > 0
+            and sub_service
+            and pricing_method
+            and sub == normalize_text(sub_service)
+            and pm == normalize_pricing_method(pricing_method)
+        ):
+            rate_for_item = float(entered_rate)
+        recommendation = _item_recommendation(rounded_rate, pm, weight, band_low, band_high, rate_for_item)
+        item = {
+            "service_type": st,
+            "service_category": cat,
+            "sub_service": sub,
+            "pricing_method": pm,
+            "market_rate": rounded_rate,
+            "weight": weight,
+            "band_low": band_low,
+            "band_high": band_high,
+            "recommend": True,
+            "market_hint": recommendation["market_hint"],
+            "suggestion": recommendation["suggestion"],
+            "message": recommendation["message"],
+            "recommendation": recommendation,
+        }
+        if recommendation.get("verdict"):
+            item["verdict"] = recommendation["verdict"]
+            item["verdict_label"] = recommendation["verdict_label"]
+            item["entered_rate"] = recommendation["entered_rate"]
+        items.append(item)
 
     items.sort(key=lambda x: (x["sub_service"].lower(), x["pricing_method"].lower()))
-    return {
+    result = {
         "service_category": cat,
         "service_type": st,
         "count": len(items),
         "items": items,
     }
+
+    if sub_service and pricing_method:
+        selected = recommend_rate(
+            st,
+            cat,
+            sub_service,
+            pricing_method,
+            entered_rate if entered_rate and entered_rate > 0 else None,
+        )
+        result["selected_recommendation"] = selected
+
+    return result
 
 
 def recommend_rate(
@@ -337,6 +438,9 @@ def recommend_rate(
         **lookup,
         "band_low": round(lookup["market_rate"] * LOW_THRESHOLD, 2),
         "band_high": round(lookup["market_rate"] * HIGH_THRESHOLD, 2),
+        "market_hint": _market_hint_message(
+            lookup["market_rate"], lookup["pricing_method"], lookup["weight"]
+        ),
     }
 
     if entered_rate is not None and float(entered_rate) > 0:
@@ -344,15 +448,16 @@ def recommend_rate(
         verdict = _verdict(rate, lookup["market_rate"])
         result["entered_rate"] = rate
         result["verdict"] = verdict
+        result["verdict_label"] = _verdict_label(verdict)
+        result["suggestion"] = _verdict_suggestion(verdict)
         result["message"] = _verdict_message(
             verdict, rate, lookup["market_rate"], lookup["pricing_method"], lookup["weight"]
         )
     else:
-        pm = lookup["pricing_method"]
-        result["message"] = (
-            f"Market rate: ~₹{lookup['market_rate']:,.2f}/{pm} "
-            f"({lookup['weight']} quote{'s' if lookup['weight'] != 1 else ''})"
+        result["suggestion"] = _fair_range_message(
+            result["band_low"], result["band_high"], lookup["pricing_method"]
         )
+        result["message"] = result["market_hint"]
 
     return result
 

@@ -193,15 +193,7 @@ Optional: `service_type=ESSENTIAL` (default)
       "weight": 506,
       "band_low": 1214.74,
       "band_high": 1643.48,
-      "recommend": true,
-      "message": "Market rate: ~₹1,429.11/Area (in sqft) (506 quotes)",
-      "recommendation": {
-        "recommend": true,
-        "market_rate": 1429.11,
-        "band_low": 1214.74,
-        "band_high": 1643.48,
-        "message": "Market rate: ~₹1,429.11/Area (in sqft) (506 quotes)"
-      }
+      "suggestion": "Fair market range: ₹1,214.74 – ₹1,643.48/Area (in sqft). Enter your rate to see if it's low, fair, or high."
     }
   ]
 }
@@ -213,18 +205,21 @@ Optional: `service_type=ESSENTIAL` (default)
 GET /api/market-rate/by-category?service_id=6926b1978ba6a3cfc5a191ce&sub_service=Wardrobes&pricing_method=Area%20(in%20sqft)&entered_rate=2000
 ```
 
-Returns `selected_recommendation` plus matching item includes `verdict`:
+Returns `selected_recommendation` for the active row only (items stay flat):
 
 ```json
 {
   "selected_recommendation": {
-    "recommend": true,
-    "verdict": "high",
-    "message": "Your rate ₹2,000.00/Area (in sqft) is above market (~₹1,429.11, 506 quotes). Consider adjusting to stay competitive.",
+    "sub_service": "Wardrobes",
+    "pricing_method": "Area (in sqft)",
     "market_rate": 1429.11,
+    "weight": 506,
     "band_low": 1214.74,
     "band_high": 1643.48,
-    "entered_rate": 2000
+    "entered_rate": 2000,
+    "verdict": "high",
+    "verdict_label": "Above Market",
+    "suggestion": "Your rate is above market — consider lowering it to stay competitive."
   }
 }
 ```

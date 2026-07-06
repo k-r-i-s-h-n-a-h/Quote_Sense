@@ -281,34 +281,53 @@ def _market_hint_message(market_rate: float, pricing_method: str, weight: int) -
     )
 
 
-def _item_recommendation(
-    market_rate: float,
+def _slim_bulk_item(
+    sub_service: str,
     pricing_method: str,
+    market_rate: float,
     weight: int,
     band_low: float,
     band_high: float,
-    entered_rate: float | None = None,
 ) -> dict:
-    """Per-item recommendation payload for PM bulk responses."""
-    rec: dict = {
-        "recommend": True,
+    """Flat item row for PM bulk cache — no nested objects or repeated category keys."""
+    return {
+        "sub_service": sub_service,
+        "pricing_method": pricing_method,
         "market_rate": market_rate,
+        "weight": weight,
         "band_low": band_low,
         "band_high": band_high,
-        "market_hint": _market_hint_message(market_rate, pricing_method, weight),
+        "suggestion": _fair_range_message(band_low, band_high, pricing_method),
     }
-    if entered_rate is not None and float(entered_rate) > 0:
-        rate = float(entered_rate)
-        verdict = _verdict(rate, market_rate)
-        rec["entered_rate"] = rate
-        rec["verdict"] = verdict
-        rec["verdict_label"] = _verdict_label(verdict)
-        rec["suggestion"] = _verdict_suggestion(verdict)
-        rec["message"] = _verdict_message(verdict, rate, market_rate, pricing_method, weight)
-    else:
-        rec["suggestion"] = _fair_range_message(band_low, band_high, pricing_method)
-        rec["message"] = rec["market_hint"]
-    return rec
+
+
+def _slim_selected_recommendation(
+    sub_service: str,
+    pricing_method: str,
+    full: dict,
+) -> dict:
+    """Verdict payload for the active work-item row only."""
+    if not full.get("recommend"):
+        return {
+            "sub_service": sub_service,
+            "pricing_method": pricing_method,
+            "suggestion": full.get("message", "No market data for this item and pricing method yet."),
+        }
+
+    slim: dict = {
+        "sub_service": sub_service,
+        "pricing_method": pricing_method,
+        "market_rate": full["market_rate"],
+        "weight": full["weight"],
+        "band_low": full["band_low"],
+        "band_high": full["band_high"],
+        "suggestion": full["suggestion"],
+    }
+    if full.get("entered_rate"):
+        slim["entered_rate"] = full["entered_rate"]
+        slim["verdict"] = full["verdict"]
+        slim["verdict_label"] = full["verdict_label"]
+    return slim
 
 
 def list_market_rates_by_category(
@@ -365,37 +384,7 @@ def list_market_rates_by_category(
         rounded_rate = round(rate, 2)
         band_low = round(rate * LOW_THRESHOLD, 2)
         band_high = round(rate * HIGH_THRESHOLD, 2)
-        rate_for_item = None
-        if (
-            entered_rate
-            and entered_rate > 0
-            and sub_service
-            and pricing_method
-            and sub == normalize_text(sub_service)
-            and pm == normalize_pricing_method(pricing_method)
-        ):
-            rate_for_item = float(entered_rate)
-        recommendation = _item_recommendation(rounded_rate, pm, weight, band_low, band_high, rate_for_item)
-        item = {
-            "service_type": st,
-            "service_category": cat,
-            "sub_service": sub,
-            "pricing_method": pm,
-            "market_rate": rounded_rate,
-            "weight": weight,
-            "band_low": band_low,
-            "band_high": band_high,
-            "recommend": True,
-            "market_hint": recommendation["market_hint"],
-            "suggestion": recommendation["suggestion"],
-            "message": recommendation["message"],
-            "recommendation": recommendation,
-        }
-        if recommendation.get("verdict"):
-            item["verdict"] = recommendation["verdict"]
-            item["verdict_label"] = recommendation["verdict_label"]
-            item["entered_rate"] = recommendation["entered_rate"]
-        items.append(item)
+        items.append(_slim_bulk_item(sub, pm, rounded_rate, weight, band_low, band_high))
 
     items.sort(key=lambda x: (x["sub_service"].lower(), x["pricing_method"].lower()))
     result = {
@@ -413,7 +402,11 @@ def list_market_rates_by_category(
             pricing_method,
             entered_rate if entered_rate and entered_rate > 0 else None,
         )
-        result["selected_recommendation"] = selected
+        result["selected_recommendation"] = _slim_selected_recommendation(
+            normalize_text(sub_service),
+            normalize_pricing_method(pricing_method),
+            selected,
+        )
 
     return result
 

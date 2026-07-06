@@ -1,6 +1,7 @@
 from fastapi import FastAPI, UploadFile, File, Form, Body, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 from typing import List,Any,Optional
 import os
@@ -50,6 +51,34 @@ from services.tatva_services import resolve_service_by_id
 
 MIN_COMPARE_QUOTES = 2
 MAX_COMPARE_QUOTES = 3
+
+BULK_MARKET_RATE_CACHE = "public, max-age=7200, stale-while-revalidate=300"
+RATE_VERDICT_CACHE = "private, max-age=300"
+MARKET_RATE_ERROR_CACHE = "no-store"
+
+
+def _market_rate_by_category_cache_control(
+    entered_rate: Optional[float],
+    *,
+    error: bool = False,
+) -> dict[str, str]:
+    if error:
+        return {"Cache-Control": MARKET_RATE_ERROR_CACHE}
+    if entered_rate and entered_rate > 0:
+        return {"Cache-Control": RATE_VERDICT_CACHE}
+    return {"Cache-Control": BULK_MARKET_RATE_CACHE}
+
+
+def _market_rate_by_category_response(
+    payload: dict,
+    entered_rate: Optional[float],
+    *,
+    error: bool = False,
+) -> JSONResponse:
+    return JSONResponse(
+        content=payload,
+        headers=_market_rate_by_category_cache_control(entered_rate, error=error),
+    )
 
 app = FastAPI(title="QuoteSense API")
 
@@ -198,7 +227,9 @@ def health():
 
 
 @app.get("/api/market-rate/by-category")
+@app.head("/api/market-rate/by-category")
 async def market_rate_by_category(
+    request: Request,
     service_id: Optional[str] = None,
     service_category: Optional[str] = None,
     service_type: str = DEFAULT_SERVICE_TYPE,
@@ -212,9 +243,7 @@ async def market_rate_by_category(
     PM calls once when the user selects a service, then matches locally on
     sub_service + pricing_method without further API calls.
 
-    Each item includes recommend + message + recommendation.
-    Optional sub_service + pricing_method + entered_rate adds selected_recommendation
-    with verdict text for the active work-item row.
+    Bulk responses are HTTP-cached for 2h; rate-specific verdict responses cache 5m (private).
     """
     rate = entered_rate if entered_rate and entered_rate > 0 else None
     list_kwargs = {
@@ -226,13 +255,19 @@ async def market_rate_by_category(
     if service_id:
         resolved = await run_in_threadpool(resolve_service_by_id, service_id.strip())
         if not resolved:
-            return {
+            payload = {
                 "service_id": service_id.strip(),
                 "service_type": service_type,
                 "count": 0,
                 "items": [],
                 "message": "Unknown service_id or Tatva services API unavailable.",
             }
+            if request.method == "HEAD":
+                return Response(
+                    status_code=200,
+                    headers=_market_rate_by_category_cache_control(rate, error=True),
+                )
+            return _market_rate_by_category_response(payload, rate, error=True)
         result = await run_in_threadpool(
             list_market_rates_by_category,
             resolved["service_category"],
@@ -242,22 +277,39 @@ async def market_rate_by_category(
         result["service_id"] = resolved["service_id"]
         if resolved.get("service_code"):
             result["service_code"] = resolved["service_code"]
-        return result
+        if request.method == "HEAD":
+            return Response(
+                status_code=200,
+                headers=_market_rate_by_category_cache_control(rate),
+            )
+        return _market_rate_by_category_response(result, rate)
 
     if service_category:
-        return await run_in_threadpool(
+        result = await run_in_threadpool(
             list_market_rates_by_category,
             service_category,
             service_type,
             **list_kwargs,
         )
+        if request.method == "HEAD":
+            return Response(
+                status_code=200,
+                headers=_market_rate_by_category_cache_control(rate),
+            )
+        return _market_rate_by_category_response(result, rate)
 
-    return {
+    payload = {
         "service_type": service_type,
         "count": 0,
         "items": [],
         "message": "Provide service_id or service_category.",
     }
+    if request.method == "HEAD":
+        return Response(
+            status_code=200,
+            headers=_market_rate_by_category_cache_control(rate, error=True),
+        )
+    return _market_rate_by_category_response(payload, rate, error=True)
 
 
 @app.get("/api/market-rate/lookup")

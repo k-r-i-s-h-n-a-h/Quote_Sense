@@ -176,6 +176,16 @@ Optional: `service_type=ESSENTIAL` (default)
 
 `service_id` is resolved via Tatva services API (`/admin/api/services`) to the category name stored in market data.
 
+**HTTP caching**
+
+| Request | `Cache-Control` |
+|---------|-----------------|
+| Bulk (`service_id` only) | `public, max-age=7200, stale-while-revalidate=300` (2 hours) |
+| With `entered_rate` | `private, max-age=300` (5 minutes) |
+| Error / missing params | `no-store` |
+
+Verify headers: `curl -I` (HEAD) or `curl -s -D - -o /dev/null "<url>"`
+
 **Example response (by service_id):**
 
 ```json

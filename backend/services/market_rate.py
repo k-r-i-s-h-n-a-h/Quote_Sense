@@ -14,6 +14,20 @@ from typing import Any
 from services.env_config import get_supabase_client
 
 DEFAULT_SERVICE_TYPE = "ESSENTIAL"
+SERVICE_TYPE_ESSENTIAL = "ESSENTIAL"
+SERVICE_TYPE_MID_SEGMENT = "MID_SEGMENT"
+SERVICE_TYPE_LUXURY = "LUXURY"
+
+_SERVICE_TYPE_ALIASES: dict[str, str] = {
+    "essential": SERVICE_TYPE_ESSENTIAL,
+    "affordable": SERVICE_TYPE_ESSENTIAL,
+    "mid-segment": SERVICE_TYPE_MID_SEGMENT,
+    "mid segment": SERVICE_TYPE_MID_SEGMENT,
+    "mid_segment": SERVICE_TYPE_MID_SEGMENT,
+    "midsegment": SERVICE_TYPE_MID_SEGMENT,
+    "luxury": SERVICE_TYPE_LUXURY,
+}
+
 MIN_WEIGHT_FOR_RECOMMEND = 1
 LOW_THRESHOLD = 0.85
 HIGH_THRESHOLD = 1.15
@@ -35,7 +49,21 @@ def normalize_pricing_method(value: Any) -> str:
 
 
 def normalize_service_type(value: Any) -> str:
-    return normalize_text(value, DEFAULT_SERVICE_TYPE) or DEFAULT_SERVICE_TYPE
+    text = normalize_text(value, "")
+    if not text:
+        return DEFAULT_SERVICE_TYPE
+    canonical = _SERVICE_TYPE_ALIASES.get(text.lower().replace("_", " ").replace("-", " "))
+    if canonical:
+        return canonical
+    if text.lower().replace("-", "_").replace(" ", "_") == "MID_SEGMENT":
+        return SERVICE_TYPE_MID_SEGMENT
+    if text.upper() in (
+        SERVICE_TYPE_ESSENTIAL,
+        SERVICE_TYPE_MID_SEGMENT,
+        SERVICE_TYPE_LUXURY,
+    ):
+        return text.upper()
+    return text
 
 
 def bundle_key(

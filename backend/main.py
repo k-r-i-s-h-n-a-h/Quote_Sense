@@ -52,7 +52,9 @@ from services.tatva_services import resolve_service_by_id
 MIN_COMPARE_QUOTES = 2
 MAX_COMPARE_QUOTES = 3
 
-BULK_MARKET_RATE_CACHE = "public, max-age=7200, stale-while-revalidate=300"
+# Bulk: private = browser/PM app may cache 2h; CDN (Cloudflare) should not → cf-cache-status: DYNAMIC
+BULK_MARKET_RATE_CACHE = "private, max-age=7200, stale-while-revalidate=300"
+BULK_MARKET_RATE_CDN_CACHE = "no-store"
 RATE_VERDICT_CACHE = "private, max-age=300"
 MARKET_RATE_ERROR_CACHE = "no-store"
 
@@ -66,7 +68,10 @@ def _market_rate_by_category_cache_control(
         return {"Cache-Control": MARKET_RATE_ERROR_CACHE}
     if entered_rate and entered_rate > 0:
         return {"Cache-Control": RATE_VERDICT_CACHE}
-    return {"Cache-Control": BULK_MARKET_RATE_CACHE}
+    return {
+        "Cache-Control": BULK_MARKET_RATE_CACHE,
+        "CDN-Cache-Control": BULK_MARKET_RATE_CDN_CACHE,
+    }
 
 
 def _market_rate_by_category_response(

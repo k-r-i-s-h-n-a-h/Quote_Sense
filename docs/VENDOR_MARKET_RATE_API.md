@@ -178,11 +178,13 @@ Optional: `service_type=ESSENTIAL` (default)
 
 **HTTP caching**
 
-| Request | `Cache-Control` |
-|---------|-----------------|
-| Bulk (`service_id` only) | `public, max-age=7200, stale-while-revalidate=300` (2 hours) |
-| With `entered_rate` | `private, max-age=300` (5 minutes) |
-| Error / missing params | `no-store` |
+| Request | Headers | Effect |
+|---------|---------|--------|
+| Bulk (`service_id` only) | `Cache-Control: private, max-age=7200` + `CDN-Cache-Control: no-store` | PM app/browser may cache 2h; **Cloudflare edge stays `DYNAMIC`** (no CDN cache) |
+| With `entered_rate` | `Cache-Control: private, max-age=300` | 5 min private cache per user/rate |
+| Error / missing params | `Cache-Control: no-store` | Do not cache |
+
+`cf-cache-status` is set by **Cloudflare**, not this API. We use `private` + `CDN-Cache-Control: no-store` so edge caches do not serve stale market data (`HIT`). Yash's app should cache the bulk response locally after the first call.
 
 Verify headers: `curl -I` (HEAD) or `curl -s -D - -o /dev/null "<url>"`
 

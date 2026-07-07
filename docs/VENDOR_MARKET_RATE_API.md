@@ -174,7 +174,7 @@ Provide **either** `service_id` **or** `service_category` (not both required).
 
 Optional: `service_type=ESSENTIAL` (default)
 
-`service_id` is resolved via Tatva services API (`/admin/api/services`) to the category name stored in market data.
+`service_id` is resolved via Tatva services API (`/admin/api/services`) to the category name stored in market data. If the API is unreachable (e.g. on Render), the backend falls back to `backend/data/tatva_service_ids.json` — all 11 Tatva main services are pre-mapped.
 
 **HTTP caching**
 

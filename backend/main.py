@@ -260,7 +260,7 @@ async def market_rate_by_category(
                 "service_type": service_type,
                 "count": 0,
                 "items": [],
-                "message": "Unknown service_id or Tatva services API unavailable.",
+                "message": "Unknown service_id.",
             }
             if request.method == "HEAD":
                 return Response(

@@ -523,3 +523,47 @@ def update_rates_from_dataframe(df, session_id: str, fast: bool = False) -> dict
         results[bundle] = (avg, weight)
 
     return results
+
+
+def finalize_session_market_rates(session_id: str, df=None) -> dict:
+    """
+    Merge this session's rates into market_moving_averages, then mark quotes
+    with market_rates_applied_at so scheduled cleanup can delete raw rows later.
+    """
+    from datetime import datetime, timezone
+
+    sid = (session_id or "").strip()
+    if not sid:
+        return {"ok": False, "error": "session_id is required"}
+
+    if df is None:
+        from services.comparator import fetch_data
+
+        df = fetch_data(sid)
+
+    bundles = update_rates_from_dataframe(df, sid, fast=False)
+    applied_at = datetime.now(timezone.utc).isoformat()
+
+    try:
+        get_supabase_client().table("quotes").update(
+            {"market_rates_applied_at": applied_at}
+        ).eq("session_id", sid).execute()
+    except Exception as e:
+        print(f"⚠️ Could not set market_rates_applied_at for {sid}: {e}")
+        return {
+            "ok": False,
+            "session_id": sid,
+            "bundles_updated": len(bundles),
+            "error": str(e),
+        }
+
+    print(
+        f"  ✅ Market rates finalized for {sid}: "
+        f"{len(bundles)} bundles, applied_at={applied_at}"
+    )
+    return {
+        "ok": True,
+        "session_id": sid,
+        "bundles_updated": len(bundles),
+        "applied_at": applied_at,
+    }

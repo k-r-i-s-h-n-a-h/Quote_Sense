@@ -46,7 +46,12 @@ from services.comparator import (
 )
 from services.env_config import env_diagnostics, get_supabase_client
 from services.tatva_fetch import fetch_project_quotes, filter_quotes_by_ids
-from services.market_rate import DEFAULT_SERVICE_TYPE, list_market_rates_by_category, recommend_rate
+from services.market_rate import (
+    DEFAULT_SERVICE_TYPE,
+    finalize_session_market_rates,
+    list_market_rates_by_category,
+    recommend_rate,
+)
 from services.tatva_services import resolve_service_by_id
 
 MIN_COMPARE_QUOTES = 2
@@ -490,6 +495,11 @@ async def _run_compare_pipeline(session_id, saved_files):
             )
             return
 
+        try:
+            await run_in_threadpool(finalize_session_market_rates, session_id, None)
+        except Exception as finalize_err:
+            print(f"⚠️ Market rate finalize failed for {session_id}: {finalize_err}")
+
         _set_progress(
             session_id,
             status="done",
@@ -911,14 +921,15 @@ async def _run_mongodb_sync_pipeline(session_id: str, quotes_list: list):
 
         def _compare_from_payload():
             df = mongodb_quotes_to_dataframe(quotes_list)
-            return run_comparison(
+            result = run_comparison(
                 session_id,
                 _publish_matrix,
                 df=df,
                 fast_moving_avg=True,
             )
+            return result, df
 
-        comparison_result = await run_in_threadpool(_compare_from_payload)
+        comparison_result, compare_df = await run_in_threadpool(_compare_from_payload)
 
         if comparison_result.get("error"):
             _set_progress(
@@ -928,6 +939,12 @@ async def _run_mongodb_sync_pipeline(session_id: str, quotes_list: list):
                 error=comparison_result["error"],
             )
             return
+
+        try:
+            await run_in_threadpool(_ingest_quotes_to_supabase, quotes_list, session_id)
+            await run_in_threadpool(finalize_session_market_rates, session_id, compare_df)
+        except Exception as persist_err:
+            print(f"⚠️ Supabase persist/finalize failed for {session_id}: {persist_err}")
 
         _set_progress(
             session_id,
@@ -945,15 +962,6 @@ async def _run_mongodb_sync_pipeline(session_id: str, quotes_list: list):
                 "vendorMeta": comparison_result.get("vendorMeta", {}),
             },
         )
-
-        # Persist to Supabase in the background for chat / history (non-blocking).
-        async def _persist():
-            try:
-                await run_in_threadpool(_ingest_quotes_to_supabase, quotes_list, session_id)
-            except Exception as persist_err:
-                print(f"⚠️ Background Supabase persist failed for {session_id}: {persist_err}")
-
-        asyncio.create_task(_persist())
 
     except Exception as e:
         print(f"❌ MongoDB sync pipeline crash for {session_id}: {e}")

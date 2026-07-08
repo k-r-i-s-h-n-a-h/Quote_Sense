@@ -15,7 +15,14 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from services.env_config import get_supabase_client
-from services.market_rate import DEFAULT_SERVICE_TYPE, normalize_pricing_method, normalize_service_type, normalize_text
+from services.market_rate import (
+    DEFAULT_SERVICE_TYPE,
+    MIN_VALID_RATE,
+    normalize_pricing_method,
+    normalize_service_type,
+    normalize_text,
+    resolve_effective_rate,
+)
 
 BATCH = 500
 
@@ -27,8 +34,8 @@ def fetch_all_quote_items():
     while True:
         res = (
             client.table("quote_items")
-            .select("service_type,service_category,sub_service,pricing_method,rate")
-            .gt("rate", 0)
+            .select("service_type,service_category,sub_service,pricing_method,rate,quantity,amount")
+            .gt("amount", 0)
             .range(offset, offset + BATCH - 1)
             .execute()
         )
@@ -49,8 +56,11 @@ def aggregate(rows):
         cat = normalize_text(row.get("service_category"), "Other")
         sub = normalize_text(row.get("sub_service"), "General")
         pm = normalize_pricing_method(row.get("pricing_method"))
-        rate = float(row.get("rate") or 0)
-        if rate <= 0 or not cat or not sub or not pm:
+        # Vendors sometimes leave Rate = 1 as a placeholder on "On Actuals" /
+        # "Per Project" line items — fall back to Amount / Quantity for those
+        # so a junk "₹1" doesn't pollute the moving average.
+        rate = resolve_effective_rate(row.get("rate"), row.get("quantity"), row.get("amount"), pm)
+        if rate <= MIN_VALID_RATE or not cat or not sub or not pm:
             continue
         buckets.setdefault((st, cat, sub, pm), []).append(rate)
 

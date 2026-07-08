@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth";
+import { getUserDisplayName } from "@/lib/user-display";
 import { fetchUserProjects, getAuthUserId } from "@/lib/project-api";
 import type { ProjectSummary } from "@/lib/project-types";
 import { ProjectTile } from "./ProjectTile";
@@ -9,7 +10,7 @@ import StandalonePdfSection from "./StandalonePdfSection";
 
 export default function ProjectDashboard() {
   const { user } = useAuth();
-  const displayName = user?.name || user?.fullName || user?.phoneNumber || "there";
+  const displayName = getUserDisplayName(user);
   const userId = getAuthUserId(user);
 
   const [projects, setProjects] = useState<ProjectSummary[]>([]);

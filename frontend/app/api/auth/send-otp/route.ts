@@ -19,12 +19,14 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify({ phoneNumber }),
     });
 
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
     return NextResponse.json(data, { status: res.status });
-  } catch {
-    return NextResponse.json(
-      { success: false, message: "Unable to send OTP. Please try again." },
-      { status: 500 }
-    );
+  } catch (err) {
+    const message =
+      err instanceof Error && err.message.includes("ENOTFOUND")
+        ? "Auth service unreachable. Check TATVA_API_BASE is set to https://devopsapi.withtatva.ai"
+        : "Unable to send OTP. Please try again.";
+    console.error("send-otp proxy failed:", err);
+    return NextResponse.json({ success: false, message }, { status: 500 });
   }
 }

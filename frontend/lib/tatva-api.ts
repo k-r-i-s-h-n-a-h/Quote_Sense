@@ -1,7 +1,7 @@
 /** TatvaOps APIs — proxied via Next.js routes to avoid CORS on localhost. */
 
 export const TATVA_API_BASE =
-  process.env.TATVA_API_BASE || "https://api.withtatva.ai";
+  process.env.TATVA_API_BASE || "https://devopsapi.withtatva.ai";
 
 export const TATVA_USERS_API =
   process.env.TATVA_USERS_API_BASE || `${TATVA_API_BASE}/users/api`;

@@ -10,7 +10,7 @@ from services.comparator import _unwrap_quote_payload
 
 
 def _tatva_api_base() -> str:
-    return os.getenv("TATVA_API_BASE", "https://api.withtatva.ai").rstrip("/")
+    return os.getenv("TATVA_API_BASE", "https://devopsapi.withtatva.ai").rstrip("/")
 
 
 def _unwrap_quotes_list(payload) -> list:

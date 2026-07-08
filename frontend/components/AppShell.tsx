@@ -4,14 +4,18 @@ import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import SiteHeader from "@/components/SiteHeader";
+import WelcomeNameModal from "@/components/WelcomeNameModal";
 import Footer from "@/components/Footer";
+import { userNeedsName } from "@/lib/user-display";
 
 function ShellContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
 
   const isAuthRoute = pathname === "/login" || pathname === "/register";
+  const showNameOnboarding =
+    isAuthenticated && !isLoading && !isAuthRoute && userNeedsName(user);
   const showFooter = isAuthRoute && !isAuthenticated;
   const isProtectedRoute =
     pathname === "/" || pathname === "/compare" || pathname.startsWith("/project/");
@@ -45,6 +49,7 @@ function ShellContent({ children }: { children: React.ReactNode }) {
       <SiteHeader />
       <div className="flex-1">{children}</div>
       {showFooter && <Footer />}
+      {showNameOnboarding && <WelcomeNameModal />}
     </div>
   );
 }

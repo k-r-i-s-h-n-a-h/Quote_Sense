@@ -7,6 +7,7 @@ import TatvaLogo from "./TatvaLogo";
 import ProfileModal from "./ProfileModal";
 import TatvaEcosystemMenu from "./TatvaEcosystemMenu";
 import { useAuth } from "@/lib/auth";
+import { getUserDisplayName, getUserInitial } from "@/lib/user-display";
 
 export default function SiteHeader() {
   const pathname = usePathname();
@@ -16,7 +17,8 @@ export default function SiteHeader() {
 
   const isAuthRoute = pathname === "/login" || pathname === "/register";
 
-  const displayName = user?.name || user?.fullName || user?.phoneNumber || "Account";
+  const displayName = getUserDisplayName(user, "Account");
+  const avatarInitial = getUserInitial(user);
 
   return (
     <>
@@ -39,7 +41,7 @@ export default function SiteHeader() {
                   className="inline-flex items-center justify-center w-9 h-9 rounded-full hover:bg-slate-50 transition-colors"
                 >
                   <span className="w-8 h-8 rounded-full bg-gradient-to-br from-slate-400 to-slate-600 flex items-center justify-center text-white text-sm font-bold">
-                    {displayName.charAt(0).toUpperCase()}
+                    {avatarInitial}
                   </span>
                 </button>
                 <button

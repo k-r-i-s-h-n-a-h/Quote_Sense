@@ -25,7 +25,7 @@ _DATA_FILE = Path(__file__).resolve().parent.parent / "data" / "tatva_service_id
 
 
 def _tatva_api_base() -> str:
-    return os.getenv("TATVA_API_BASE", "https://api.withtatva.ai").rstrip("/")
+    return os.getenv("TATVA_API_BASE", "https://devopsapi.withtatva.ai").rstrip("/")
 
 
 def _ssl_context() -> ssl.SSLContext:

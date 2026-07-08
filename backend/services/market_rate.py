@@ -32,6 +32,58 @@ MIN_WEIGHT_FOR_RECOMMEND = 1
 LOW_THRESHOLD = 0.85
 HIGH_THRESHOLD = 1.15
 
+# Vendors sometimes fill Rate = 1 as a form placeholder on line items priced
+# "On Actuals" / "Per Project" — the real total lives in Amount instead. A rate
+# this low is never a genuine per-unit price for any TatvaOps service, so treat
+# it as invalid.
+MIN_VALID_RATE = 1.0
+
+# Pricing methods where the vendor's "rate" column is not a real unit price
+# (it's filled with a placeholder like 1) and Amount holds the true value.
+_AMOUNT_BASED_PRICING_METHODS = {
+    "on actuals",
+    "per project",
+    "lumpsum",
+    "lump sum",
+    "actuals",
+}
+
+
+def is_amount_based_pricing_method(pricing_method: Any) -> bool:
+    return normalize_text(pricing_method, "").strip().lower() in _AMOUNT_BASED_PRICING_METHODS
+
+
+def resolve_effective_rate(
+    rate: float, quantity: float = 0.0, amount: float = 0.0, pricing_method: Any = ""
+) -> float:
+    """
+    Return a trustworthy per-unit rate for moving-average purposes.
+
+    If the vendor supplied a real rate (> MIN_VALID_RATE), use it as-is. If the
+    rate looks like a placeholder (<= MIN_VALID_RATE) on an amount-based pricing
+    method (e.g. "On Actuals"), fall back to Amount / Quantity so a junk "₹1"
+    line item doesn't drag the market average down to ₹1.
+    """
+    try:
+        rate = float(rate or 0)
+    except (TypeError, ValueError):
+        rate = 0.0
+    if rate > MIN_VALID_RATE:
+        return rate
+    if is_amount_based_pricing_method(pricing_method):
+        try:
+            amount = float(amount or 0)
+        except (TypeError, ValueError):
+            amount = 0.0
+        try:
+            quantity = float(quantity or 0)
+        except (TypeError, ValueError):
+            quantity = 0.0
+        if amount > 0:
+            qty = quantity if quantity > 0 else 1.0
+            return round(amount / qty, 2)
+    return rate
+
 _SESSIONS_TABLE_AVAILABLE: bool | None = None
 
 
@@ -131,7 +183,7 @@ def lookup_market_rate(
 
     rate = float(row.get("rate_moving_average") or row.get("moving_average") or 0)
     weight = int(row.get("weight") or 0)
-    if rate <= 0 or weight < MIN_WEIGHT_FOR_RECOMMEND:
+    if rate <= MIN_VALID_RATE or weight < MIN_WEIGHT_FOR_RECOMMEND:
         return None
 
     return {
@@ -405,7 +457,7 @@ def list_market_rates_by_category(
     for row in rows:
         rate = float(row.get("rate_moving_average") or row.get("moving_average") or 0)
         weight = int(row.get("weight") or 0)
-        if rate <= 0 or weight < MIN_WEIGHT_FOR_RECOMMEND:
+        if rate <= MIN_VALID_RATE or weight < MIN_WEIGHT_FOR_RECOMMEND:
             continue
         sub = normalize_text(row.get("sub_service"), "General")
         pm = normalize_pricing_method(row.get("pricing_method"))
@@ -499,13 +551,15 @@ def update_rates_from_dataframe(df, session_id: str, fast: bool = False) -> dict
     grouped: dict[tuple, dict[str, float]] = {}
 
     for _, row in df.iterrows():
-        rate = float(row.get("rate") or 0)
-        if rate <= 0:
+        pm = normalize_pricing_method(row.get("pricing_method"))
+        rate = resolve_effective_rate(
+            row.get("rate"), row.get("quantity"), row.get("amount"), pm
+        )
+        if rate <= MIN_VALID_RATE:
             continue
         st = normalize_service_type(row.get("service_type"))
         cat = normalize_text(row.get("service_category"), "Other")
         sub = normalize_text(row.get("sub_service"), "General")
-        pm = normalize_pricing_method(row.get("pricing_method"))
         vendor = normalize_text(row.get("vendor_name"))
         if not vendor:
             continue

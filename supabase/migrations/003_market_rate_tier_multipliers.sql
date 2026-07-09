@@ -1,3 +1,16 @@
+-- DEPRECATED as of migration 006 — do not run this again.
+--
+-- This was a stopgap to seed generic Mid-segment/Luxury data by multiplying
+-- Essential rows (× 1.35 / × 1.75) before real tiered quotes existed. Vendors
+-- now submit quotes with an explicit quoteType (essential/midlevel/luxury) on
+-- the Tatva platform, and the backend ingestion pipeline writes each quote's
+-- real rates straight into market_moving_averages under its own service_type
+-- (see services/comparator.py::mongodb_quotes_to_dataframe and
+-- main.py::_ingest_quotes_to_supabase). Math-derived rows are no longer needed
+-- and were removed by migration 006_remove_tier_multiplier_math.sql.
+--
+-- Kept here only for historical reference.
+--
 -- Derive Mid-segment and Luxury market rates from Essential rows (generic tier data).
 -- Run in Supabase SQL editor (staging first, then prod).
 --

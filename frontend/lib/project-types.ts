@@ -2,8 +2,8 @@
 
 export type QuoteStatus = "draft" | "submitted" | "revised";
 
-/** PM platform tier flags (premium / mid / budget). */
-export type QuoteTier = "premium" | "mid_level" | "budget_friendly";
+/** Quote type as set on the Tatva PM platform (matches backend service_type). */
+export type QuoteTier = "ESSENTIAL" | "MID_SEGMENT" | "LUXURY";
 
 export type VendorQuote = {
   id: string;
@@ -116,9 +116,9 @@ export const TATVA_SERVICES: TatvaService[] = [
 ];
 
 export const QUOTE_TIER_LABELS: Record<QuoteTier, string> = {
-  premium: "Premium",
-  mid_level: "Mid level",
-  budget_friendly: "Budget friendly",
+  ESSENTIAL: "Essential",
+  MID_SEGMENT: "Mid-segment",
+  LUXURY: "Luxury",
 };
 
 export function formatInr(amount: number): string {

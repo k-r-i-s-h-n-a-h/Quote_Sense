@@ -3,7 +3,6 @@
  */
 
 import {
-  QUOTE_TIER_LABELS,
   TATVA_SERVICES,
   type ProjectData,
   type ProjectSummary,
@@ -167,44 +166,53 @@ function mapQuoteStatus(raw: string): QuoteStatus {
   return "submitted";
 }
 
+/**
+ * Read the quote's tier straight from the Tatva PM record — `quoteType` is the
+ * canonical field (values: "essential" | "midlevel"/"mid_level" | "luxury").
+ * Falls back to a few legacy field names for older payloads.
+ */
 export function mapQuoteTier(raw: RawRecord): QuoteTier | undefined {
   const candidates = [
+    raw.quoteType,
     raw.quotationTier,
     raw.quoteTier,
     raw.pricingTier,
     raw.tier,
     raw.packageType,
     raw.quotationType,
-    raw.quoteType,
     raw.budgetTier,
     raw.priceBand,
   ].map((v) => asString(v).toLowerCase());
 
   const joined = candidates.join(" ");
-  if (joined.includes("premium") || joined.includes("high") || raw.isPremium === true) {
-    return "premium";
+  if (joined.includes("luxury") || joined.includes("premium") || joined.includes("high")) {
+    return "LUXURY";
+  }
+  if (joined.includes("mid") || joined.includes("standard") || joined.includes("medium")) {
+    return "MID_SEGMENT";
   }
   if (
+    joined.includes("essential") ||
     joined.includes("budget") ||
     joined.includes("economy") ||
     joined.includes("friendly") ||
     raw.isBudgetFriendly === true
   ) {
-    return "budget_friendly";
-  }
-  if (joined.includes("mid") || joined.includes("standard") || joined.includes("medium")) {
-    return "mid_level";
+    return "ESSENTIAL";
   }
   return undefined;
 }
 
-function quoteLabel(raw: RawRecord, tier?: QuoteTier): string {
+/**
+ * Secondary line under the quote number. The quote type (Essential/Mid-segment/
+ * Luxury) already has its own badge, so it's deliberately NOT repeated here.
+ */
+function quoteLabel(raw: RawRecord): string {
   const draft = asString(raw.draftName);
   if (draft) return draft;
-  if (tier) return QUOTE_TIER_LABELS[tier];
   const variant = asString(raw.variantName || raw.label || raw.title);
   if (variant) return variant;
-  return `Quote ${asString(raw.quoteNumber, "—")}`;
+  return "";
 }
 
 function countLineItems(raw: RawRecord): number {
@@ -305,7 +313,7 @@ export function mapApiQuote(raw: RawRecord): VendorQuote {
   return {
     id: asString(raw._id || raw.id),
     quoteNumber: asString(raw.quoteNumber, "—"),
-    label: quoteLabel(raw, tier),
+    label: quoteLabel(raw),
     amount: extractGrandTotal(raw),
     date: formatQuoteDate(raw.quoteDate || raw.createdAt),
     status: mapQuoteStatus(asString(raw.status, "submitted")),

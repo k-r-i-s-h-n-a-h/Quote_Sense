@@ -72,7 +72,20 @@ def process_quote_with_gemini(pdf_path, temperature=0.0, extra_instruction=""):
 
 
 def push_to_supabase(structured_data, filename, session_id):
+    from datetime import datetime, timezone
+    from services.market_rate import quote_number_is_rate_source_already
+
     quote_number = str(structured_data.get("quote_number", "") or "").lstrip("#").strip()
+
+    # If this quote_number was already ingested in a previous session, pre-set
+    # market_rates_applied_at so finalize_session_market_rates skips it — preventing
+    # the same quote's rates from inflating the moving-average weight a second time.
+    is_rate_duplicate = quote_number_is_rate_source_already(quote_number)
+    if is_rate_duplicate:
+        print(
+            f"  ⚠️ Quote #{quote_number} already in market rates — "
+            "keeping for comparison display but skipping rate re-application."
+        )
 
     quote_payload = {
         "vendor_name": structured_data.get("vendor_name", "Unknown"),
@@ -82,6 +95,8 @@ def push_to_supabase(structured_data, filename, session_id):
         "source_filename": filename,
         "session_id": session_id,
         "quote_number": quote_number,
+        # Pre-mark so finalize won't re-apply rates for this duplicate quote.
+        "market_rates_applied_at": datetime.now(timezone.utc).isoformat() if is_rate_duplicate else None,
     }
 
     print(f"  -> Pushing metadata for {quote_payload['vendor_name']}...")

@@ -43,6 +43,22 @@ const VendorChart = dynamic(() => import("../../components/VendorChart"), {
   ),
 });
 
+/** True when report text is an error payload, not an AI recommendation. */
+function isErrorReport(report: string): boolean {
+  const t = report.trim();
+  return t.startsWith("❌") || t.startsWith("Error:");
+}
+
+/** Expired / unknown backend job — common after reload with a stale session_id in the URL. */
+function isStaleSessionMessage(message: string): boolean {
+  const m = message.toLowerCase();
+  return (
+    m.includes("no job found") ||
+    m.includes("job not found") ||
+    m.includes("may have expired")
+  );
+}
+
 
 // Main export wrapped in Suspense to fix the Next.js/useSearchParams error
 export default function Home() {
@@ -125,6 +141,27 @@ function QuoteSenseContent() {
   const getBackendUrl = () =>
     process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8001";
 
+  /** Drop session_id from the URL so a reload does not re-poll an expired job. */
+  const clearCompareSessionFromUrl = () => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has("session_id")) return;
+    params.delete("session_id");
+    const qs = params.toString();
+    window.history.replaceState(null, "", qs ? `/compare?${qs}` : "/compare");
+  };
+
+  const resetStaleCompareSession = () => {
+    pollingActiveRef.current = false;
+    partialAppliedRef.current = false;
+    projectCompareStartedRef.current = false;
+    setActiveJobId(null);
+    setSessionId("");
+    setReport("");
+    setLoading(false);
+    clearCompareSessionFromUrl();
+  };
+
   const handleGoBack = () => {
     if (projectIdParam) {
       router.push(`/project/${encodeURIComponent(projectIdParam)}`);
@@ -134,10 +171,9 @@ function QuoteSenseContent() {
   };
 
   const handleNewComparison = () => {
-    pollingActiveRef.current = false;
+    resetStaleCompareSession();
     resetSelection();
-    setLoading(false);
-    router.push("/compare");
+    router.replace("/compare");
   };
 
   const processComparisonData = (data: any) => {
@@ -360,6 +396,9 @@ function QuoteSenseContent() {
     setSessionId("");
     setActiveJobId(null);
     setChatHistory([]);
+    projectCompareStartedRef.current = false;
+    partialAppliedRef.current = false;
+    pollingActiveRef.current = false;
   };
 
   const handleDownloadPdf = async () => {
@@ -407,6 +446,11 @@ function QuoteSenseContent() {
       return;
     }
     if (result.outcome === "error" || result.outcome === "unknown") {
+      // Stale session_id on reload (job expired on backend) — return to fresh upload UI.
+      if (!partialAppliedRef.current && isStaleSessionMessage(result.message)) {
+        resetStaleCompareSession();
+        return;
+      }
       setReport(`❌ ${result.message}`);
       setLoading(false);
       return;
@@ -698,10 +742,13 @@ function QuoteSenseContent() {
                 <thead>
                   <tr className="text-slate-500 uppercase text-[10px] font-bold tracking-widest">
                     <th className="p-4 border-b border-slate-200 w-[250px] bg-slate-50">Service Description</th>
-                    <th className="p-4 border-b border-slate-200 text-right w-[120px] bg-indigo-50/60 text-indigo-700">
-                      <div>Moving Avg</div>
-                      <div className="text-[9px] font-normal normal-case tracking-normal text-indigo-400 mt-0.5">
-                        Historical baseline
+                    <th className="p-4 border-b border-slate-200 text-right w-[140px] bg-indigo-50/60 text-indigo-700">
+                      <div>Market Est.</div>
+                      <div className="text-[9px] font-normal normal-case tracking-normal text-indigo-400 mt-0.5 leading-tight">
+                        Historical avg × item qty
+                      </div>
+                      <div className="text-[9px] font-normal normal-case tracking-normal text-indigo-300 mt-0.5 leading-tight">
+                        (all past sessions)
                       </div>
                     </th>
                     {vendors.map((vendor, i) => {
@@ -763,7 +810,10 @@ function QuoteSenseContent() {
                                   {sub.sub}
                                 </div>
                               </td>
-                              <td className="px-3 py-3 text-right align-middle bg-indigo-100/50 border-r border-slate-300">
+                              <td
+                                className="px-3 py-3 text-right align-middle bg-indigo-100/50 border-r border-slate-300"
+                                title="Sum of all line-item market estimates for this service (historical avg rate × avg qty per item, from all past sessions)"
+                              >
                                 {subBaseline > 0 ? (
                                   <div className="text-base font-extrabold text-indigo-900 tabular-nums">
                                     {formatInrFull(subBaseline)}
@@ -826,17 +876,35 @@ function QuoteSenseContent() {
                                       </div>
                                     )}
                                   </td>
-                                  <td className="px-4 py-2.5 text-right align-top bg-indigo-50/15 border-r border-indigo-100/40">
+                                  <td
+                                    className="px-4 py-2.5 text-right align-top bg-indigo-50/15 border-r border-indigo-100/40"
+                                    title="Market Est. = historical avg rate × avg quantity for this item, built from all past uploaded quotes — not just the vendors in this comparison"
+                                  >
                                     {baseline > 0 ? (
                                       <>
                                         <div className="text-sm font-medium text-indigo-700 tabular-nums">
                                           {formatInrFull(baseline)}
                                         </div>
                                         {weight > 0 && (
-                                          <div className="text-[10px] text-slate-400 mt-0.5" title="Quotes used to build this baseline">
+                                          <div
+                                            className="text-[10px] text-slate-400 mt-0.5"
+                                            title={`Built from ${weight} quote${weight === 1 ? "" : "s"} across all past sessions`}
+                                          >
                                             {formatQuoteCountLabel(weight)}
                                           </div>
                                         )}
+                                        {(() => {
+                                          const ratePerUnit = Number((row as any).market_rate_per_unit) || 0;
+                                          const pm = String((row as any).pricing_method || "");
+                                          if (ratePerUnit > 0 && pm) {
+                                            return (
+                                              <div className="text-[9px] text-indigo-300 mt-0.5 tabular-nums" title="Historical avg market rate per unit">
+                                                ₹{ratePerUnit.toLocaleString("en-IN")}/{pm}
+                                              </div>
+                                            );
+                                          }
+                                          return null;
+                                        })()}
                                       </>
                                     ) : (
                                       <span className="text-sm text-slate-300">—</span>
@@ -882,9 +950,9 @@ function QuoteSenseContent() {
               </table>
             </div>
             <p className="text-[11px] text-slate-400 mt-3 px-1">
-              <span className="text-emerald-700 font-medium">Green</span> = below baseline ·{" "}
-              <span className="text-amber-700 font-medium">Amber</span> = above baseline · Moving avg
-              updates as more quotes are processed.
+              <span className="text-emerald-700 font-medium">Green</span> = below market est. ·{" "}
+              <span className="text-amber-700 font-medium">Amber</span> = above market est. ·{" "}
+              <span className="text-indigo-500 font-medium">Market Est.</span> = historical avg rate × item qty, built from all past quote sessions — not just the vendors in this comparison. Hover the column for details.
             </p>
           </div>
         )}
@@ -894,8 +962,8 @@ function QuoteSenseContent() {
           <VendorInsights tableData={tableData} vendors={vendors} meta={vendorMeta} />
         )}
 
-        {/* AI Recommendation Section */}
-        {report && (
+        {/* AI Recommendation — only after a successful comparison with matrix data */}
+        {report && tableData.length > 0 && !isErrorReport(report) && (
           <div className="qs-card p-8">
             <h2 className="text-xl font-semibold text-slate-900 mb-1">Expert Recommendation</h2>
             <p className="text-sm text-slate-500 mb-6">AI analysis based on totals, scope, and moving-average baselines.</p>

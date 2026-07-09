@@ -3,7 +3,7 @@
 import React, { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { type ProjectData } from "@/lib/project-types";
+import { type ProjectData, findQuoteById, QUOTE_TIER_LABELS } from "@/lib/project-types";
 import {
   buildTatvaServiceUrl,
   getTatvaServicesForNav,
@@ -34,6 +34,16 @@ export default function ProjectHub({ project }: ProjectHubProps) {
 
   const selectionFull = selectedQuoteIds.size >= MAX_COMPARE_QUOTES;
 
+  // Quote type (Essential / Mid-segment / Luxury) of the current selection — every
+  // new pick must match this so comparisons stay apples-to-apples.
+  const selectedTier = useMemo(() => {
+    for (const id of selectedQuoteIds) {
+      const found = findQuoteById(project, id);
+      if (found?.quote.tier) return found.quote.tier;
+    }
+    return undefined;
+  }, [project, selectedQuoteIds]);
+
   const toggleQuote = useCallback((quoteId: string) => {
     setSelectedQuoteIds((prev) => {
       const next = new Set(prev);
@@ -42,6 +52,25 @@ export default function ProjectHub({ project }: ProjectHubProps) {
         setLimitMessage(null);
         return next;
       }
+
+      const found = findQuoteById(project, quoteId);
+      const newTier = found?.quote.tier;
+      let currentTier: typeof newTier;
+      for (const id of prev) {
+        const t = findQuoteById(project, id)?.quote.tier;
+        if (t) {
+          currentTier = t;
+          break;
+        }
+      }
+
+      if (currentTier && newTier && currentTier !== newTier) {
+        setLimitMessage(
+          `You've selected ${QUOTE_TIER_LABELS[currentTier]} quotes — pick another ${QUOTE_TIER_LABELS[currentTier]} quote to compare like-for-like.`
+        );
+        return prev;
+      }
+
       if (next.size >= MAX_COMPARE_QUOTES) {
         setLimitMessage(MAX_COMPARE_MESSAGE);
         return prev;
@@ -50,7 +79,7 @@ export default function ProjectHub({ project }: ProjectHubProps) {
       setLimitMessage(null);
       return next;
     });
-  }, []);
+  }, [project]);
 
   const clearSelection = useCallback(() => {
     setSelectedQuoteIds(new Set());
@@ -92,12 +121,28 @@ export default function ProjectHub({ project }: ProjectHubProps) {
       const vendor = project.vendors.find((v) => v.id === vendorId);
       if (!vendor || vendor.quotes.length < MIN_COMPARE_QUOTES) return;
 
-      const ids = vendor.quotes.slice(0, MAX_COMPARE_QUOTES).map((q) => q.id);
+      // A vendor can submit quotes of different types (Essential/Mid-segment/Luxury) —
+      // only compare quotes that share the same type as the first one.
+      const firstTier = vendor.quotes.find((q) => q.tier)?.tier;
+      const sameTierQuotes = firstTier
+        ? vendor.quotes.filter((q) => !q.tier || q.tier === firstTier)
+        : vendor.quotes;
+
+      if (!isValidCompareCount(sameTierQuotes.length)) {
+        setLimitMessage(
+          "This vendor's quotes are different types (Essential/Mid-segment/Luxury) — select at least 2 of the same type to compare."
+        );
+        return;
+      }
+
+      const ids = sameTierQuotes.slice(0, MAX_COMPARE_QUOTES).map((q) => q.id);
       setSelectedQuoteIds(new Set(ids));
       setLimitMessage(
-        vendor.quotes.length > MAX_COMPARE_QUOTES
-          ? `Only ${MAX_COMPARE_QUOTES} quotes can be compared — the first ${MAX_COMPARE_QUOTES} are selected.`
-          : null
+        sameTierQuotes.length > MAX_COMPARE_QUOTES
+          ? `Only ${MAX_COMPARE_QUOTES} quotes can be compared — the first ${MAX_COMPARE_QUOTES} of the same type are selected.`
+          : sameTierQuotes.length < vendor.quotes.length
+            ? "Some of this vendor's quotes were a different type and were skipped."
+            : null
       );
       navigateToCompare(ids);
     },
@@ -149,8 +194,9 @@ export default function ProjectHub({ project }: ProjectHubProps) {
       <div className="max-w-4xl mx-auto px-4 md:px-6 pt-6 space-y-2">
         <div className="rounded-xl border border-dashed border-slate-200 bg-white/60 px-4 py-3 text-xs text-slate-500 leading-relaxed">
           <strong className="text-slate-700 font-medium">Compare quotes</strong> — pick{" "}
-          {MIN_COMPARE_QUOTES}–{MAX_COMPARE_QUOTES} proposals (even if a vendor has more), then
-          click <strong className="text-slate-700">Compare quotes</strong>.
+          {MIN_COMPARE_QUOTES}–{MAX_COMPARE_QUOTES} proposals of the{" "}
+          <strong className="text-slate-700">same quote type</strong> (Essential / Mid-segment /
+          Luxury), then click <strong className="text-slate-700">Compare quotes</strong>.
         </div>
         {limitMessage && (
           <div
@@ -222,6 +268,7 @@ export default function ProjectHub({ project }: ProjectHubProps) {
             vendor={vendor}
             selectedQuoteIds={selectedQuoteIds}
             selectionFull={selectionFull}
+            selectedTier={selectedTier}
             onToggleQuote={toggleQuote}
             onCompareVendorQuotes={handleCompareVendorQuotes}
           />

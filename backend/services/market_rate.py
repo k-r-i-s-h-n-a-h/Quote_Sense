@@ -21,11 +21,18 @@ SERVICE_TYPE_LUXURY = "LUXURY"
 _SERVICE_TYPE_ALIASES: dict[str, str] = {
     "essential": SERVICE_TYPE_ESSENTIAL,
     "affordable": SERVICE_TYPE_ESSENTIAL,
+    "budget": SERVICE_TYPE_ESSENTIAL,
     "mid-segment": SERVICE_TYPE_MID_SEGMENT,
     "mid segment": SERVICE_TYPE_MID_SEGMENT,
     "mid_segment": SERVICE_TYPE_MID_SEGMENT,
     "midsegment": SERVICE_TYPE_MID_SEGMENT,
+    "mid level": SERVICE_TYPE_MID_SEGMENT,
+    "mid_level": SERVICE_TYPE_MID_SEGMENT,
+    "midlevel": SERVICE_TYPE_MID_SEGMENT,
+    "mid-level": SERVICE_TYPE_MID_SEGMENT,
+    "standard": SERVICE_TYPE_MID_SEGMENT,
     "luxury": SERVICE_TYPE_LUXURY,
+    "premium": SERVICE_TYPE_LUXURY,
 }
 
 MIN_WEIGHT_FOR_RECOMMEND = 1
@@ -579,29 +586,70 @@ def update_rates_from_dataframe(df, session_id: str, fast: bool = False) -> dict
     return results
 
 
+def quote_number_is_rate_source_already(quote_number: str) -> bool:
+    """
+    Return True if a quote with this number has already been recorded in Supabase.
+    Used to detect re-uploads so we can skip re-applying their rates to the moving average.
+    """
+    if not quote_number or not quote_number.strip():
+        return False
+    try:
+        res = (
+            get_supabase_client()
+            .table("quotes")
+            .select("id")
+            .eq("quote_number", quote_number.strip())
+            .limit(1)
+            .execute()
+        )
+        return bool(res.data)
+    except Exception as e:
+        print(f"⚠️ Could not check duplicate quote_number '{quote_number}': {e}")
+        return False
+
+
 def finalize_session_market_rates(session_id: str, df=None) -> dict:
     """
     Merge this session's rates into market_moving_averages, then mark quotes
     with market_rates_applied_at so scheduled cleanup can delete raw rows later.
+
+    Always fetches from Supabase (ignores any passed-in df) so that:
+    - quote_id linkage is available for duplicate filtering
+    - quotes pre-marked as rate-duplicates (market_rates_applied_at != NULL at insert)
+      are excluded from the moving-average update
     """
     from datetime import datetime, timezone
+    from services.comparator import fetch_data
 
     sid = (session_id or "").strip()
     if not sid:
         return {"ok": False, "error": "session_id is required"}
 
-    if df is None:
-        from services.comparator import fetch_data
+    # Always re-fetch from DB: in-memory compare_df lacks quote_id + pre-set timestamps.
+    db_df = fetch_data(sid)
 
-        df = fetch_data(sid)
+    # Filter out items that belong to quotes already pre-marked as rate-duplicates
+    # (market_rates_applied_at is set at INSERT time when the quote_number already existed).
+    skipped_quotes = 0
+    if "quote_id" in db_df.columns and "market_rates_applied_at" in db_df.columns:
+        dup_mask = db_df["market_rates_applied_at"].notna()
+        if dup_mask.any():
+            dup_quote_ids = db_df.loc[dup_mask, "quote_id"].unique()
+            skipped_quotes = len(dup_quote_ids)
+            db_df = db_df[~dup_mask].copy()
+            print(
+                f"  ⏭️ Skipping {skipped_quotes} duplicate quote(s) from market rate update "
+                f"(same quote_number already in moving average)"
+            )
 
-    bundles = update_rates_from_dataframe(df, sid, fast=False)
+    bundles = update_rates_from_dataframe(db_df, sid, fast=False)
     applied_at = datetime.now(timezone.utc).isoformat()
 
     try:
+        # Mark ALL quotes in session (incl. duplicates) so cleanup can delete raw rows.
         get_supabase_client().table("quotes").update(
             {"market_rates_applied_at": applied_at}
-        ).eq("session_id", sid).execute()
+        ).eq("session_id", sid).is_("market_rates_applied_at", "null").execute()
     except Exception as e:
         print(f"⚠️ Could not set market_rates_applied_at for {sid}: {e}")
         return {
@@ -613,11 +661,12 @@ def finalize_session_market_rates(session_id: str, df=None) -> dict:
 
     print(
         f"  ✅ Market rates finalized for {sid}: "
-        f"{len(bundles)} bundles, applied_at={applied_at}"
+        f"{len(bundles)} bundles, skipped_duplicates={skipped_quotes}, applied_at={applied_at}"
     )
     return {
         "ok": True,
         "session_id": sid,
         "bundles_updated": len(bundles),
+        "skipped_duplicate_quotes": skipped_quotes,
         "applied_at": applied_at,
     }

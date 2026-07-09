@@ -5,9 +5,9 @@ import type { QuoteStatus, QuoteTier, VendorQuote } from "@/lib/project-types";
 import { formatInr, QUOTE_TIER_LABELS } from "@/lib/project-types";
 
 const TIER_STYLE: Record<QuoteTier, string> = {
-  premium: "bg-violet-50 text-violet-700",
-  mid_level: "bg-sky-50 text-sky-700",
-  budget_friendly: "bg-lime-50 text-lime-800",
+  ESSENTIAL: "bg-lime-50 text-lime-800",
+  MID_SEGMENT: "bg-sky-50 text-sky-700",
+  LUXURY: "bg-violet-50 text-violet-700",
 };
 
 const STATUS_STYLE: Record<QuoteStatus, string> = {
@@ -21,6 +21,7 @@ type QuoteRowProps = {
   vendorName: string;
   selected: boolean;
   disabled?: boolean;
+  disabledReason?: string;
   onToggle: () => void;
 };
 
@@ -29,6 +30,7 @@ export function QuoteRow({
   vendorName,
   selected,
   disabled = false,
+  disabledReason,
   onToggle,
 }: QuoteRowProps) {
   return (
@@ -40,7 +42,11 @@ export function QuoteRow({
             ? "border-[#c04a00] bg-orange-50/50 ring-1 ring-[#c04a00]/20 cursor-pointer"
             : "border-slate-100 hover:border-slate-200 hover:bg-slate-50/80 cursor-pointer"
       }`}
-      title={disabled ? "Maximum 3 quotes — deselect one to pick another" : undefined}
+      title={
+        disabled
+          ? disabledReason || "Maximum 3 quotes — deselect one to pick another"
+          : undefined
+      }
     >
       <input
         type="checkbox"
@@ -65,7 +71,9 @@ export function QuoteRow({
             </span>
           )}
         </div>
-        <p className="text-xs text-slate-500 mt-0.5 truncate">{quote.label}</p>
+        {quote.label && (
+          <p className="text-xs text-slate-500 mt-0.5 truncate">{quote.label}</p>
+        )}
         <p className="text-[11px] text-slate-400 mt-0.5">
           {vendorName} · {quote.lineItems} items · {quote.date}
         </p>

@@ -231,9 +231,13 @@ export function priceVsBaseline(
   return diffPct < 0 ? "below" : "above";
 }
 
-/** Moving-average sample size, e.g. "(1 quote)" or "(2 quotes)". */
+/**
+ * Moving-average sample size label.
+ * Shown as "from N past quote(s)" to make clear this is historical data,
+ * not a count of the vendors in the current comparison.
+ */
 export function formatQuoteCountLabel(count: number): string {
   const n = Math.round(Number(count));
   if (!Number.isFinite(n) || n <= 0) return "";
-  return `(${n} ${n === 1 ? "quote" : "quotes"})`;
+  return `from ${n} past ${n === 1 ? "quote" : "quotes"}`;
 }

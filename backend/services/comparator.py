@@ -362,6 +362,18 @@ def run_comparison(session_id, on_matrix_ready=None, df=None, fast_moving_avg=Fa
                 moving_avg = lookup["market_rate"] if lookup else 0.0
                 moving_weight = lookup["weight"] if lookup else 0
 
+            # Compute average quantity across vendors for this specific line item so
+            # we can show market_estimate = rate_per_unit × avg_qty in the Moving Avg
+            # column — making it directly comparable to vendor total amounts.
+            avg_qty = 1.0
+            if moving_avg > 0 and 'quantity' in line_slice.columns:
+                valid_qtys = line_slice['quantity'].dropna()
+                valid_qtys = valid_qtys[valid_qtys > 0]
+                if len(valid_qtys) > 0:
+                    avg_qty = float(valid_qtys.mean())
+
+            market_estimate = round(moving_avg * avg_qty) if moving_avg > 0 else 0
+
             row_dict = {
                 "category": str(category),
                 "sub_service": str(sub_service_name),
@@ -371,9 +383,12 @@ def run_comparison(session_id, on_matrix_ready=None, df=None, fast_moving_avg=Fa
                 "taxonomy": str(sub_service_name),
                 "service_type": service_type,
                 "pricing_method": pricing_method,
-                "moving_average": round(moving_avg),
+                # market_estimate = per-unit rate × avg qty → same unit as vendor amounts
+                "moving_average": market_estimate,
                 "moving_weight": moving_weight,
-                "market_average": round(moving_avg),
+                "market_average": market_estimate,
+                # raw per-unit rate kept for the UI to show as a sub-label (e.g. "₹1,166/sqft")
+                "market_rate_per_unit": round(moving_avg, 2),
                 "_cat_order": float(cat_order.get(category, 1e9)),
                 "_sub_order": float(sub_order.get((category, sub_service_name), 1e9)),
                 "_item_order": float(
@@ -498,6 +513,12 @@ def mongodb_quotes_to_dataframe(quotes_list: list):
 
         vendor_key = f"{company} ({source_filename})"
 
+        # quoteType is set once per quote on the Tatva platform (essential /
+        # midlevel / luxury) — every line item in this quote shares it. This
+        # replaces the old math-derived Mid-segment/Luxury rows: real submitted
+        # quotes now feed market_moving_averages directly, per their own tier.
+        quote_service_type = normalize_service_type(quote_data.get("quoteType"))
+
         for section in quote_data.get("workSummary") or []:
             for service_obj in section.get("services") or []:
                 category_name = (
@@ -515,12 +536,6 @@ def mongodb_quotes_to_dataframe(quotes_list: list):
                     pricing_method = (
                         (work_item.get("pricingMethod") or {}).get("name") or "Unit"
                     )
-                    service_type = (
-                        work_item.get("serviceType")
-                        or work_item.get("type")
-                        or section.get("type")
-                        or DEFAULT_SERVICE_TYPE
-                    )
                     rows.append({
                         "vendor_name": vendor_key,
                         "company": company,
@@ -529,7 +544,7 @@ def mongodb_quotes_to_dataframe(quotes_list: list):
                         "quote_date": quote_date[:10] if len(quote_date) >= 10 else quote_date,
                         "grand_total": grand_total,
                         "client_name": client_detail.get("clientName") or "",
-                        "service_type": str(service_type).strip() or DEFAULT_SERVICE_TYPE,
+                        "service_type": quote_service_type,
                         "service_category": category_name,
                         "sub_service": sub_service_name,
                         "work_title": work_item.get("workTitle") or "",

@@ -839,6 +839,9 @@ def _quote_ids_from_payload(payload: Any) -> list:
 
 def _ingest_quotes_to_supabase(quotes_list: list, session_id: str) -> int:
     """Push quote headers + line items to Supabase. Returns quotes ingested."""
+    from datetime import datetime, timezone
+    from services.market_rate import normalize_service_type, quote_number_is_rate_source_already
+
     ingested = 0
     for quote_entry in quotes_list:
         quote_data = _unwrap_mongodb_quote(quote_entry)
@@ -846,20 +849,36 @@ def _ingest_quotes_to_supabase(quotes_list: list, session_id: str) -> int:
         vendor_name = vendor_detail.get("companyName", "Unknown Vendor")
         meta = _mongodb_quote_metadata(quote_data)
 
+        # quoteType is set once per quote on the Tatva platform (essential /
+        # midlevel / luxury) — every line item inherits it. Real submitted quotes
+        # now feed market_moving_averages directly per their own tier, instead of
+        # the old math-derived Mid-segment/Luxury rows (Essential × multiplier).
+        quote_service_type = normalize_service_type(quote_data.get("quoteType"))
+
         grand_total = 0
         for item in quote_data.get("pricingSummary", []):
             if "grand total" in str(item.get("label", "")).lower():
                 grand_total = item.get("value", 0)
 
+        # Detect re-uploaded quotes; pre-mark to prevent double-counting in moving avg.
+        quote_number = meta["quote_number"]
+        is_rate_duplicate = quote_number_is_rate_source_already(quote_number)
+        if is_rate_duplicate:
+            print(
+                f"  ⚠️ Quote #{quote_number} ({vendor_name}) already in market rates — "
+                "keeping for comparison display but skipping rate re-application."
+            )
+
         quote_res = get_supabase_client().table("quotes").insert({
             "vendor_name": vendor_name,
             "client_name": meta["client_name"],
             "quote_date": meta["quote_date"],
-            "quote_number": meta["quote_number"],
+            "quote_number": quote_number,
             "grand_total": grand_total,
             "session_id": session_id,
             "source_type": "mongodb_integrated",
             "source_filename": meta["source_filename"],
+            "market_rates_applied_at": datetime.now(timezone.utc).isoformat() if is_rate_duplicate else None,
         }).execute()
 
         if not quote_res.data:
@@ -887,6 +906,7 @@ def _ingest_quotes_to_supabase(quotes_list: list, session_id: str) -> int:
                         rate=pricing.get("rate", 0),
                         amount=pricing.get("grandTotal", 0),
                         item_name=work_item.get("workTitle", ""),
+                        service_type=quote_service_type,
                     ))
 
         if items_to_insert:
@@ -942,7 +962,9 @@ async def _run_mongodb_sync_pipeline(session_id: str, quotes_list: list):
 
         try:
             await run_in_threadpool(_ingest_quotes_to_supabase, quotes_list, session_id)
-            await run_in_threadpool(finalize_session_market_rates, session_id, compare_df)
+            # Pass None so finalize always re-fetches from DB — needed for duplicate
+            # quote filtering (pre-marked market_rates_applied_at) and quote_id linkage.
+            await run_in_threadpool(finalize_session_market_rates, session_id, None)
         except Exception as persist_err:
             print(f"⚠️ Supabase persist/finalize failed for {session_id}: {persist_err}")
 

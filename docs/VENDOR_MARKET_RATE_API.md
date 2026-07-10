@@ -9,15 +9,32 @@ CORS is open (`*`) — callable directly from `withtatva.ai`.
 
 ---
 
-## Form field mapping
+## Form field mapping & selection order
 
-| Tatva PM form field | API parameter | Example |
-|---------------------|---------------|---------|
-| Main Service dropdown | `service_category` | `Residential Construction` |
-| Item / SKU / Feature dropdown | `sub_service` | `Site Clearing & Excavation` |
-| Pricing Method dropdown | `pricing_method` | `Per Visit` |
-| Work item type (if available) | `service_type` | `ESSENTIAL` (default) |
-| **Rate (₹)** input | `entered_rate` | `122222` |
+This is the **old flow**, with **Quotation Type** now added as the very first step —
+selected before Main Service, not after. Everything downstream (Main Service →
+Item → Pricing Method → Rate) is unchanged, and still resolves to **one exact
+bundle match** — no scanning across the whole backend.
+
+| Step | Tatva PM form field | API parameter | Example |
+|------|---------------------|----------------|---------|
+| 1 | Quotation Type (Essential / Mid-segment / Luxury) | `service_type` **(required)** | `ESSENTIAL` |
+| 2 | Main Service dropdown | `service_id` (preferred) or `service_category` | `6926b1978ba6a3cfc5a191ce` |
+| 3 | Item / SKU / Feature dropdown | `sub_service` | `Site Clearing & Excavation` |
+| 4 | Pricing Method dropdown | `pricing_method` | `Per Visit` |
+| 5 | **Rate (₹)** input | `entered_rate` | `122222` |
+
+**`service_type` is strict — no default/fallback.** If it's not sent (or blank),
+the API does **not** guess `ESSENTIAL` — it returns "no suggestion"
+(`recommend: false` / `count: 0`) instead. The vendor must pick a quotation
+type before any suggestion is shown, on every endpoint below.
+
+**`service_id` is now supported on the single-bundle endpoints** (`suggest`,
+`lookup`, `recommend`) — not just `by-category`. Send the Tatva PM service
+ObjectId directly; the backend resolves it to the category name server-side
+(same resolver as `by-category`, with the same static-map fallback). You can
+still send `service_category` (name string) instead — both are accepted;
+`service_category` wins if you send both.
 
 **Important:** Send the **Rate (₹)** value, not Amount or Total. Amount includes quantity × rate; market data is per-unit rate for the pricing method.
 
@@ -39,7 +56,21 @@ CORS is open (`*`) — callable directly from `withtatva.ai`.
 
 ### `POST /api/market-rate/suggest`
 
-**Trigger 1 — Pricing Method selected (show market hint only):**
+**Trigger 1 — Pricing Method selected (show market hint only), by `service_id`:**
+
+```http
+POST /api/market-rate/suggest
+Content-Type: application/json
+
+{
+  "service_type": "ESSENTIAL",
+  "service_id": "6926b1978ba6a3cfc5a191ce",
+  "sub_service": "Site Clearing & Excavation",
+  "pricing_method": "Per Visit"
+}
+```
+
+Same call by category name instead of `service_id` also works:
 
 ```http
 POST /api/market-rate/suggest
@@ -61,7 +92,7 @@ Content-Type: application/json
 
 {
   "service_type": "ESSENTIAL",
-  "service_category": "Residential Construction",
+  "service_id": "6926b1978ba6a3cfc5a191ce",
   "sub_service": "Site Clearing & Excavation",
   "pricing_method": "Per Visit",
   "entered_rate": 122222
@@ -97,6 +128,15 @@ Content-Type: application/json
 }
 ```
 
+### Response — `service_type` missing (hide panel — this is not an error)
+
+```json
+{
+  "recommend": false,
+  "message": "service_type is required — vendor must select a quotation type first."
+}
+```
+
 ---
 
 ## Verdict values (UI styling)
@@ -125,9 +165,15 @@ When `entered_rate` is omitted, `verdict` is not returned — show market hint o
 const QUOTESENSE_API = "https://YOUR-QUOTESENSE-BACKEND";
 
 async function fetchMarketSuggestion(workItem) {
+  // service_type is required — no fallback. Don't call this until the vendor
+  // has explicitly picked a Quotation Type.
+  if (!workItem.serviceType) {
+    return { recommend: false, message: "Select a quotation type first." };
+  }
+
   const body = {
-    service_type: workItem.serviceType || "ESSENTIAL",
-    service_category: workItem.mainService,       // Main Service dropdown
+    service_type: workItem.serviceType,           // Quotation Type — pick this first
+    service_id: workItem.mainServiceId,           // Main Service dropdown (Tatva ObjectId)
     sub_service: workItem.subService,             // Item / SKU dropdown
     pricing_method: workItem.pricingMethod,       // Pricing Method dropdown
   };
@@ -179,7 +225,10 @@ GET /api/market-rate/by-category?service_category=Residential%20Construction
 
 Provide **either** `service_id` **or** `service_category` (not both required).
 
-Optional: `service_type=ESSENTIAL` (default)
+**`service_type` is required** — `ESSENTIAL`, `MID_SEGMENT`, or `LUXURY`. There
+is no default/fallback: omit it (or send it blank) and you get
+`{"count": 0, "items": [], "message": "service_type is required..."}` instead
+of a guessed tier.
 
 `service_id` is resolved via Tatva services API (`/admin/api/services`) to the category name stored in market data. If the API is unreachable (e.g. on Render), the backend falls back to `backend/data/tatva_service_ids.json` — all 11 Tatva main services are pre-mapped.
 
@@ -195,9 +244,11 @@ GET /api/market-rate/by-category?service_id=6926b1978ba6a3cfc5a191ce&service_typ
 
 | `service_type` value | Tier |
 |-----------------------|------|
-| `ESSENTIAL` (default) | Essential |
+| `ESSENTIAL` | Essential |
 | `MID_SEGMENT` | Mid-segment / Mid-level |
 | `LUXURY` | Luxury |
+
+No value is assumed if omitted — always send one explicitly.
 
 Aliases like `midlevel`, `mid_level`, `mid-segment`, `premium`, `standard`, `budget` are also normalized server-side, but sending the canonical values above is recommended.
 
@@ -290,6 +341,18 @@ const verdict =
 | `GET /api/market-rate/lookup?...` | Lookup only (no `entered_rate`) |
 | `POST /api/market-rate/recommend` | Same as suggest POST (legacy alias) |
 
+All four accept **either** `service_id` (Tatva PM ObjectId, preferred) **or**
+`service_category` (name string) — same resolver as `by-category`. Each is a
+**single exact-bundle lookup** — one Supabase row match, not a scan of the
+whole `market_moving_averages` table, so it stays fast regardless of how many
+categories/tiers exist.
+
+**`GET` example (query params, no POST body needed):**
+
+```http
+GET /api/market-rate/suggest?service_type=ESSENTIAL&service_id=6926b1978ba6a3cfc5a191ce&sub_service=Wardrobes&pricing_method=Area%20(in%20sqft)&entered_rate=2000
+```
+
 ---
 
 ## Match rules
@@ -302,7 +365,24 @@ service_type + service_category + sub_service + pricing_method
 
 Example bundle: `ESSENTIAL | Interiors | Wardrobes | Area (in sqft)`
 
-No partial/fallback matching — if no row exists, `recommend: false`.
+`service_type` (Quotation Type) is the **first** value the vendor picks, before
+Main Service — but matching itself is still a single combined lookup on all
+four fields together, not a staged/nested search. If `service_id` is sent
+instead of `service_category`, it's resolved to the category name first, then
+matched the same way.
+
+No partial/fallback matching — if no row exists, `recommend: false`. Same for
+missing required fields — you get a `recommend: false` (or `count: 0` for
+`by-category`) response with a clear `message`, never an error, and never a
+guessed value:
+
+```json
+{ "recommend": false, "message": "Unknown service_id." }
+```
+
+```json
+{ "recommend": false, "message": "service_type is required — vendor must select a quotation type first." }
+```
 
 ---
 

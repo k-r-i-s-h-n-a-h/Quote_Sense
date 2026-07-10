@@ -19,7 +19,7 @@ bundle match** — no scanning across the whole backend.
 | Step | Tatva PM form field | API parameter | Example |
 |------|---------------------|----------------|---------|
 | 1 | Quotation Type (Essential / Mid-segment / Luxury) | `service_type` **(required)** | `ESSENTIAL` |
-| 2 | Main Service dropdown | `service_id` (preferred) or `service_category` | `6926b1978ba6a3cfc5a191ce` |
+| 2 | Main Service dropdown | `category_id` **(preferred — always send this, not a name)** | `6926b1978ba6a3cfc5a191ce` |
 | 3 | Item / SKU / Feature dropdown | `sub_service` | `Site Clearing & Excavation` |
 | 4 | Pricing Method dropdown | `pricing_method` | `Per Visit` |
 | 5 | **Rate (₹)** input | `entered_rate` | `122222` |
@@ -29,12 +29,18 @@ the API does **not** guess `ESSENTIAL` — it returns "no suggestion"
 (`recommend: false` / `count: 0`) instead. The vendor must pick a quotation
 type before any suggestion is shown, on every endpoint below.
 
-**`service_id` is now supported on the single-bundle endpoints** (`suggest`,
-`lookup`, `recommend`) — not just `by-category`. Send the Tatva PM service
-ObjectId directly; the backend resolves it to the category name server-side
-(same resolver as `by-category`, with the same static-map fallback). You can
-still send `service_category` (name string) instead — both are accepted;
-`service_category` wins if you send both.
+**`category_id` is the ObjectId of the Main Service** — this is the parameter
+to send, never the category name string. It's accepted on **all** endpoints
+(`by-category`, `suggest`, `lookup`, `recommend`), not just the bulk one. The
+backend resolves it server-side to the category name for the internal lookup
+(same resolver for all endpoints, with a static-map fallback if the Tatva
+services API is briefly unreachable) — you never need to know or send the
+category name yourself.
+
+`service_id` is still accepted as an alias for `category_id` (older
+integrations used that name) — both do exactly the same thing. `service_category`
+(the raw name string) is also still accepted for backward compatibility, but
+**should not be used for new integrations** — always send `category_id`.
 
 **Important:** Send the **Rate (₹)** value, not Amount or Total. Amount includes quantity × rate; market data is per-unit rate for the pricing method.
 
@@ -56,7 +62,7 @@ still send `service_category` (name string) instead — both are accepted;
 
 ### `POST /api/market-rate/suggest`
 
-**Trigger 1 — Pricing Method selected (show market hint only), by `service_id`:**
+**Trigger 1 — Pricing Method selected (show market hint only), by `category_id`:**
 
 ```http
 POST /api/market-rate/suggest
@@ -64,21 +70,7 @@ Content-Type: application/json
 
 {
   "service_type": "ESSENTIAL",
-  "service_id": "6926b1978ba6a3cfc5a191ce",
-  "sub_service": "Site Clearing & Excavation",
-  "pricing_method": "Per Visit"
-}
-```
-
-Same call by category name instead of `service_id` also works:
-
-```http
-POST /api/market-rate/suggest
-Content-Type: application/json
-
-{
-  "service_type": "ESSENTIAL",
-  "service_category": "Residential Construction",
+  "category_id": "6926b1978ba6a3cfc5a191ce",
   "sub_service": "Site Clearing & Excavation",
   "pricing_method": "Per Visit"
 }
@@ -92,7 +84,7 @@ Content-Type: application/json
 
 {
   "service_type": "ESSENTIAL",
-  "service_id": "6926b1978ba6a3cfc5a191ce",
+  "category_id": "6926b1978ba6a3cfc5a191ce",
   "sub_service": "Site Clearing & Excavation",
   "pricing_method": "Per Visit",
   "entered_rate": 122222
@@ -173,7 +165,7 @@ async function fetchMarketSuggestion(workItem) {
 
   const body = {
     service_type: workItem.serviceType,           // Quotation Type — pick this first
-    service_id: workItem.mainServiceId,           // Main Service dropdown (Tatva ObjectId)
+    category_id: workItem.mainServiceId,          // Main Service dropdown — always the ObjectId, never the name
     sub_service: workItem.subService,             // Item / SKU dropdown
     pricing_method: workItem.pricingMethod,       // Pricing Method dropdown
   };
@@ -211,35 +203,31 @@ Call **once** when the user selects **Main Service**. Cache the response and mat
 
 ### `GET /api/market-rate/by-category`
 
-**Preferred — by Tatva PM service ObjectId:**
+**Use `category_id` — the Main Service ObjectId, never a name string:**
 
 ```http
-GET /api/market-rate/by-category?service_id=6926b1978ba6a3cfc5a191ce
+GET /api/market-rate/by-category?category_id=6926b1978ba6a3cfc5a191ce&service_type=ESSENTIAL
 ```
 
-**Alternate — by category name:**
-
-```http
-GET /api/market-rate/by-category?service_category=Residential%20Construction
-```
-
-Provide **either** `service_id` **or** `service_category` (not both required).
+`service_id` (older name, still works as an alias) and `service_category`
+(name string, legacy/backward-compat only) are also accepted, but new
+integrations should send `category_id`.
 
 **`service_type` is required** — `ESSENTIAL`, `MID_SEGMENT`, or `LUXURY`. There
 is no default/fallback: omit it (or send it blank) and you get
 `{"count": 0, "items": [], "message": "service_type is required..."}` instead
 of a guessed tier.
 
-`service_id` is resolved via Tatva services API (`/admin/api/services`) to the category name stored in market data. If the API is unreachable (e.g. on Render), the backend falls back to `backend/data/tatva_service_ids.json` — all 11 Tatva main services are pre-mapped.
+`category_id` is resolved via Tatva services API (`/admin/api/services`) to the category name stored in market data. If the API is unreachable (e.g. on Render), the backend falls back to `backend/data/tatva_service_ids.json` — all 11 Tatva main services are pre-mapped. This resolver will be swapped to Pramod's dedicated category-mapping API once that's available — the `category_id` param and behavior on your side won't change.
 
 ### Quote tiers — Essential / Mid-segment / Luxury
 
 `service_type` selects which quote tier's market data to return. Market rates are tracked **separately per tier**, so call this endpoint once per tier the vendor form supports:
 
 ```http
-GET /api/market-rate/by-category?service_id=6926b1978ba6a3cfc5a191ce&service_type=ESSENTIAL
-GET /api/market-rate/by-category?service_id=6926b1978ba6a3cfc5a191ce&service_type=MID_SEGMENT
-GET /api/market-rate/by-category?service_id=6926b1978ba6a3cfc5a191ce&service_type=LUXURY
+GET /api/market-rate/by-category?category_id=6926b1978ba6a3cfc5a191ce&service_type=ESSENTIAL
+GET /api/market-rate/by-category?category_id=6926b1978ba6a3cfc5a191ce&service_type=MID_SEGMENT
+GET /api/market-rate/by-category?category_id=6926b1978ba6a3cfc5a191ce&service_type=LUXURY
 ```
 
 | `service_type` value | Tier |
@@ -252,7 +240,7 @@ No value is assumed if omitted — always send one explicitly.
 
 Aliases like `midlevel`, `mid_level`, `mid-segment`, `premium`, `standard`, `budget` are also normalized server-side, but sending the canonical values above is recommended.
 
-Cache each tier's response separately (e.g. keyed by `service_id + service_type`) and re-match locally when the vendor switches the quote type — no need to call the API again just because the tier changed if you've already cached all three.
+Cache each tier's response separately (e.g. keyed by `category_id + service_type`) and re-match locally when the vendor switches the quote type — no need to call the API again just because the tier changed if you've already cached all three.
 
 If a tier has no submitted quotes yet for a bundle, that item is simply omitted from `items` (or `recommend: false` for the single-row endpoints) — it isn't an error, it just means there isn't enough real market data for that tier yet.
 
@@ -260,7 +248,7 @@ If a tier has no submitted quotes yet for a bundle, that item is simply omitted 
 
 | Request | Headers | Effect |
 |---------|---------|--------|
-| Bulk (`service_id` only) | `Cache-Control: private, max-age=7200` + `CDN-Cache-Control: no-store` | PM app/browser may cache 2h; **Cloudflare edge stays `DYNAMIC`** (no CDN cache) |
+| Bulk (`category_id` only) | `Cache-Control: private, max-age=7200` + `CDN-Cache-Control: no-store` | PM app/browser may cache 2h; **Cloudflare edge stays `DYNAMIC`** (no CDN cache) |
 | With `entered_rate` | `Cache-Control: private, max-age=300` | 5 min private cache per user/rate |
 | Error / missing params | `Cache-Control: no-store` | Do not cache |
 
@@ -268,10 +256,11 @@ If a tier has no submitted quotes yet for a bundle, that item is simply omitted 
 
 Verify headers: `curl -I` (HEAD) or `curl -s -D - -o /dev/null "<url>"`
 
-**Example response (by service_id):**
+**Example response (by category_id):**
 
 ```json
 {
+  "category_id": "6926b1978ba6a3cfc5a191ce",
   "service_id": "6926b1978ba6a3cfc5a191ce",
   "service_code": "INTERIORS",
   "service_category": "Interiors",
@@ -294,7 +283,7 @@ Verify headers: `curl -I` (HEAD) or `curl -s -D - -o /dev/null "<url>"`
 **With rate entered** — add optional query params for verdict on the active row:
 
 ```http
-GET /api/market-rate/by-category?service_id=6926b1978ba6a3cfc5a191ce&sub_service=Wardrobes&pricing_method=Area%20(in%20sqft)&entered_rate=2000
+GET /api/market-rate/by-category?category_id=6926b1978ba6a3cfc5a191ce&service_type=ESSENTIAL&sub_service=Wardrobes&pricing_method=Area%20(in%20sqft)&entered_rate=2000
 ```
 
 Returns `selected_recommendation` for the active row only (items stay flat):
@@ -341,8 +330,9 @@ const verdict =
 | `GET /api/market-rate/lookup?...` | Lookup only (no `entered_rate`) |
 | `POST /api/market-rate/recommend` | Same as suggest POST (legacy alias) |
 
-All four accept **either** `service_id` (Tatva PM ObjectId, preferred) **or**
-`service_category` (name string) — same resolver as `by-category`. Each is a
+All four accept `category_id` (Tatva PM ObjectId — **preferred, always use this**),
+`service_id` (older alias, same behavior), or `service_category` (name string,
+legacy/backward-compat only) — same resolver as `by-category`. Each is a
 **single exact-bundle lookup** — one Supabase row match, not a scan of the
 whole `market_moving_averages` table, so it stays fast regardless of how many
 categories/tiers exist.
@@ -350,7 +340,7 @@ categories/tiers exist.
 **`GET` example (query params, no POST body needed):**
 
 ```http
-GET /api/market-rate/suggest?service_type=ESSENTIAL&service_id=6926b1978ba6a3cfc5a191ce&sub_service=Wardrobes&pricing_method=Area%20(in%20sqft)&entered_rate=2000
+GET /api/market-rate/suggest?service_type=ESSENTIAL&category_id=6926b1978ba6a3cfc5a191ce&sub_service=Wardrobes&pricing_method=Area%20(in%20sqft)&entered_rate=2000
 ```
 
 ---
@@ -367,9 +357,9 @@ Example bundle: `ESSENTIAL | Interiors | Wardrobes | Area (in sqft)`
 
 `service_type` (Quotation Type) is the **first** value the vendor picks, before
 Main Service — but matching itself is still a single combined lookup on all
-four fields together, not a staged/nested search. If `service_id` is sent
-instead of `service_category`, it's resolved to the category name first, then
-matched the same way.
+four fields together, not a staged/nested search. `category_id` is resolved to
+the category name server-side first, then matched the same way — you should
+never need to pass or know the category name string yourself.
 
 No partial/fallback matching — if no row exists, `recommend: false`. Same for
 missing required fields — you get a `recommend: false` (or `count: 0` for
@@ -377,7 +367,7 @@ missing required fields — you get a `recommend: false` (or `count: 0` for
 guessed value:
 
 ```json
-{ "recommend": false, "message": "Unknown service_id." }
+{ "recommend": false, "message": "Unknown category_id." }
 ```
 
 ```json

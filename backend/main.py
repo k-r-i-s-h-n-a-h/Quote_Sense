@@ -104,26 +104,28 @@ def _missing_service_type_error(*, bulk: bool = False) -> dict:
 
 
 async def _resolve_lookup_category(
-    service_id: Optional[str], service_category: Optional[str]
+    service_id: Optional[str],
+    service_category: Optional[str],
+    category_id: Optional[str] = None,
 ) -> tuple[Optional[str], Optional[dict]]:
     """
     Resolve the category name for the exact-bundle-match endpoints (suggest/lookup/recommend).
 
-    service_category (name string) wins if both are given. Falls back to resolving
-    service_id (Tatva PM ObjectId) the same way /by-category does — Tatva services
-    API first, then the static backend/data/tatva_service_ids.json fallback.
+    service_category (name string) wins if given. Otherwise resolves an ObjectId —
+    service_id or category_id (alias, same thing) — the same way /by-category does:
+    Tatva services API first, then the static backend/data/tatva_service_ids.json fallback.
     Returns (category, None) on success, or (None, error_payload) on failure.
     """
     cat = (service_category or "").strip()
     if cat:
         return cat, None
-    sid = (service_id or "").strip()
+    sid = (service_id or category_id or "").strip()
     if sid:
         resolved = await run_in_threadpool(resolve_service_by_id, sid)
         if not resolved:
-            return None, {"recommend": False, "message": "Unknown service_id."}
+            return None, {"recommend": False, "message": "Unknown category_id."}
         return resolved["service_category"], None
-    return None, {"recommend": False, "message": "Provide service_id or service_category."}
+    return None, {"recommend": False, "message": "Provide category_id or service_category."}
 
 
 app = FastAPI(title="QuoteSense API")
@@ -228,6 +230,7 @@ class MarketRateRequest(BaseModel):
     # No default: quotation type must be explicitly sent, or no suggestion is given.
     service_type: Optional[str] = None
     service_id: Optional[str] = None
+    category_id: Optional[str] = None  # alias for service_id — Tatva PM ObjectId
     service_category: Optional[str] = None
     sub_service: str
     pricing_method: str
@@ -239,6 +242,7 @@ class MarketRateSuggestRequest(BaseModel):
     # No default: quotation type must be explicitly sent, or no suggestion is given.
     service_type: Optional[str] = None
     service_id: Optional[str] = None
+    category_id: Optional[str] = None  # alias for service_id — Tatva PM ObjectId
     service_category: Optional[str] = None
     sub_service: str
     pricing_method: str
@@ -281,6 +285,7 @@ def health():
 async def market_rate_by_category(
     request: Request,
     service_id: Optional[str] = None,
+    category_id: Optional[str] = None,
     service_category: Optional[str] = None,
     service_type: Optional[str] = None,
     sub_service: Optional[str] = None,
@@ -289,9 +294,10 @@ async def market_rate_by_category(
 ):
     """
     Bulk market rates for one Main Service.
-    Prefer service_id (Tatva PM ObjectId); service_category name also accepted.
-    PM calls once when the user selects a service, then matches locally on
-    sub_service + pricing_method without further API calls.
+    Prefer category_id (Tatva PM ObjectId; service_id accepted as an alias);
+    service_category name also accepted. PM calls once when the user selects
+    a service, then matches locally on sub_service + pricing_method without
+    further API calls.
 
     service_type (quotation type) is required — no ESSENTIAL fallback. If the
     vendor hasn't picked a quotation type yet, we return no suggestion at all.
@@ -299,6 +305,7 @@ async def market_rate_by_category(
     Bulk responses are HTTP-cached for 2h; rate-specific verdict responses cache 5m (private).
     """
     rate = entered_rate if entered_rate and entered_rate > 0 else None
+    obj_id = (category_id or service_id or "").strip() or None
 
     if not service_type or not service_type.strip():
         payload = _missing_service_type_error(bulk=True)
@@ -315,15 +322,15 @@ async def market_rate_by_category(
         "entered_rate": rate,
     }
 
-    if service_id:
-        resolved = await run_in_threadpool(resolve_service_by_id, service_id.strip())
+    if obj_id:
+        resolved = await run_in_threadpool(resolve_service_by_id, obj_id)
         if not resolved:
             payload = {
-                "service_id": service_id.strip(),
+                "category_id": obj_id,
                 "service_type": service_type,
                 "count": 0,
                 "items": [],
-                "message": "Unknown service_id.",
+                "message": "Unknown category_id.",
             }
             if request.method == "HEAD":
                 return Response(
@@ -337,7 +344,8 @@ async def market_rate_by_category(
             service_type,
             **list_kwargs,
         )
-        result["service_id"] = resolved["service_id"]
+        result["category_id"] = resolved["service_id"]
+        result["service_id"] = resolved["service_id"]  # kept for backward compatibility
         if resolved.get("service_code"):
             result["service_code"] = resolved["service_code"]
         if request.method == "HEAD":
@@ -365,7 +373,7 @@ async def market_rate_by_category(
         "service_type": service_type,
         "count": 0,
         "items": [],
-        "message": "Provide service_id or service_category.",
+        "message": "Provide category_id or service_category.",
     }
     if request.method == "HEAD":
         return Response(
@@ -381,12 +389,13 @@ async def market_rate_lookup(
     pricing_method: str,
     service_type: Optional[str] = None,
     service_id: Optional[str] = None,
+    category_id: Optional[str] = None,
     service_category: Optional[str] = None,
 ):
     """Return market rate when exact bundle exists; otherwise recommend=false."""
     if not service_type or not service_type.strip():
         return _missing_service_type_error()
-    cat, error = await _resolve_lookup_category(service_id, service_category)
+    cat, error = await _resolve_lookup_category(service_id, service_category, category_id)
     if error:
         return error
     return await run_in_threadpool(
@@ -405,13 +414,14 @@ async def market_rate_suggest_get(
     pricing_method: str,
     service_type: Optional[str] = None,
     service_id: Optional[str] = None,
+    category_id: Optional[str] = None,
     service_category: Optional[str] = None,
     entered_rate: Optional[float] = None,
 ):
     """
     Unified vendor-form endpoint (GET) — single exact-bundle match, no bulk scan.
     Flow: vendor picks quotation type (service_type) first, then Main Service
-    (service_id or service_category) → Item (sub_service) → Pricing Method.
+    (category_id / service_id or service_category) → Item (sub_service) → Pricing Method.
     Call when Pricing Method or Item changes (no rate), or on Rate blur (with entered_rate).
 
     service_type is required — no ESSENTIAL fallback. Until the vendor picks a
@@ -419,7 +429,7 @@ async def market_rate_suggest_get(
     """
     if not service_type or not service_type.strip():
         return _missing_service_type_error()
-    cat, error = await _resolve_lookup_category(service_id, service_category)
+    cat, error = await _resolve_lookup_category(service_id, service_category, category_id)
     if error:
         return error
     return await run_in_threadpool(
@@ -436,8 +446,8 @@ async def market_rate_suggest_get(
 async def market_rate_suggest_post(body: MarketRateSuggestRequest):
     """
     Unified vendor-form endpoint (POST) — preferred for withtatva.ai quote form.
-    Single exact-bundle match (service_type + service_id/service_category + sub_service
-    + pricing_method) — no bulk scan of the whole category.
+    Single exact-bundle match (service_type + category_id/service_id/service_category
+    + sub_service + pricing_method) — no bulk scan of the whole category.
     Omit entered_rate after pricing-method selection; include it on Rate field change/blur.
 
     service_type is required — no ESSENTIAL fallback. Until the vendor picks a
@@ -445,7 +455,9 @@ async def market_rate_suggest_post(body: MarketRateSuggestRequest):
     """
     if not body.service_type or not body.service_type.strip():
         return _missing_service_type_error()
-    cat, error = await _resolve_lookup_category(body.service_id, body.service_category)
+    cat, error = await _resolve_lookup_category(
+        body.service_id, body.service_category, body.category_id
+    )
     if error:
         return error
     rate = body.entered_rate if body.entered_rate and body.entered_rate > 0 else None
@@ -467,7 +479,9 @@ async def market_rate_recommend(body: MarketRateRequest):
     """
     if not body.service_type or not body.service_type.strip():
         return _missing_service_type_error()
-    cat, error = await _resolve_lookup_category(body.service_id, body.service_category)
+    cat, error = await _resolve_lookup_category(
+        body.service_id, body.service_category, body.category_id
+    )
     if error:
         return error
     return await run_in_threadpool(

@@ -8,6 +8,8 @@ import type { ProjectSummary } from "@/lib/project-types";
 import { ProjectTile } from "./ProjectTile";
 import StandalonePdfSection from "./StandalonePdfSection";
 
+const PROJECTS_PER_PAGE = 10;
+
 export default function ProjectDashboard() {
   const { user } = useAuth();
   const displayName = getUserDisplayName(user);
@@ -16,6 +18,7 @@ export default function ProjectDashboard() {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     if (!userId) {
@@ -37,6 +40,7 @@ export default function ProjectDashboard() {
         setError(result.message);
         setProjects([]);
       }
+      setPage(1);
       // #region agent log
       fetch('http://127.0.0.1:7880/ingest/fae56c38-48bc-450d-a803-35ac016bc76b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b7c34a'},body:JSON.stringify({sessionId:'b7c34a',location:'ProjectDashboard.tsx:fetch',message:'projects fetch result',data:{ok:result.ok,status:result.ok?200:('status' in result?result.status:null),count:result.ok?result.projects.length:0,message:result.ok?null:result.message},timestamp:Date.now(),hypothesisId:'H4'})}).catch(()=>{});
       // #endregion
@@ -49,6 +53,13 @@ export default function ProjectDashboard() {
   }, [userId]);
 
   const showProminentPdf = !loading && !error && projects.length === 0;
+
+  const totalPages = Math.max(1, Math.ceil(projects.length / PROJECTS_PER_PAGE));
+  const currentPage = Math.min(page, totalPages);
+  const pagedProjects = projects.slice(
+    (currentPage - 1) * PROJECTS_PER_PAGE,
+    currentPage * PROJECTS_PER_PAGE
+  );
 
   return (
     <div className="bg-[#f8fafc] pb-12">
@@ -97,11 +108,45 @@ export default function ProjectDashboard() {
         )}
 
         {!loading && projects.length > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-4">
-            {projects.map((project) => (
-              <ProjectTile key={project.id} project={project} />
-            ))}
-          </div>
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-4">
+              {pagedProjects.map((project) => (
+                <ProjectTile key={project.id} project={project} />
+              ))}
+            </div>
+
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between mt-6">
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage <= 1}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M15 18l-6-6 6-6" />
+                  </svg>
+                  Previous
+                </button>
+
+                <span className="text-xs text-slate-400">
+                  Page {currentPage} of {totalPages}
+                </span>
+
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={currentPage >= totalPages}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white"
+                >
+                  Next
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M9 18l6-6-6-6" />
+                  </svg>
+                </button>
+              </div>
+            )}
+          </>
         )}
 
         {!loading && (

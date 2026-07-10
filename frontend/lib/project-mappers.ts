@@ -51,6 +51,7 @@ export function unwrapApiList(payload: unknown): RawRecord[] {
     "items",
     "results",
     "data",
+    "docs",
   ] as const;
 
   for (const key of listKeys) {

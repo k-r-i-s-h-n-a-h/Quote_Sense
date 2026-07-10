@@ -325,12 +325,16 @@ def _verdict_label(verdict: str) -> str:
     }.get(verdict, "Unknown")
 
 
-def _verdict_suggestion(verdict: str) -> str:
+def _verdict_suggestion(verdict: str, market_rate: float | None = None) -> str:
     """Short actionable guidance for PM UI chips / banners."""
     if verdict == "low":
         return "Your rate is below market — consider increasing it to avoid underpricing."
     if verdict == "high":
-        return "Your rate is above market — consider lowering it to stay competitive."
+        amount = f"₹{market_rate:,.2f}" if market_rate is not None else "the market average"
+        return (
+            f"Current rates exceed the market average of {amount}. "
+            f"Kindly review your pricing to improve closure rates."
+        )
     return "Your rate is within market range — looks fair and competitive."
 
 
@@ -351,8 +355,8 @@ def _verdict_message(verdict: str, entered_rate: float, market_rate: float, pric
         )
     if verdict == "high":
         return (
-            f"Your rate ₹{entered_rate:,.2f}/{unit} is above market "
-            f"(~₹{market_rate:,.2f}, {weight} quotes). Consider adjusting to stay competitive."
+            f"Current rates exceed the market average of ₹{market_rate:,.2f}/{unit} "
+            f"({weight} quotes). Kindly review your pricing to improve closure rates."
         )
     return (
         f"Your rate ₹{entered_rate:,.2f}/{unit} is within market range "
@@ -529,7 +533,7 @@ def recommend_rate(
         result["entered_rate"] = rate
         result["verdict"] = verdict
         result["verdict_label"] = _verdict_label(verdict)
-        result["suggestion"] = _verdict_suggestion(verdict)
+        result["suggestion"] = _verdict_suggestion(verdict, lookup["market_rate"])
         result["message"] = _verdict_message(
             verdict, rate, lookup["market_rate"], lookup["pricing_method"], lookup["weight"]
         )

@@ -83,7 +83,8 @@ Content-Type: application/json
   "band_high": 9775,
   "entered_rate": 122222,
   "verdict": "high",
-  "message": "Your rate ₹122,222.00/Per Visit is above market (~₹8,500.00, 12 quotes). Consider adjusting to stay competitive."
+  "suggestion": "Current rates exceed the market average of ₹8,500.00. Kindly review your pricing to improve closure rates.",
+  "message": "Current rates exceed the market average of ₹8,500.00/Per Visit (12 quotes). Kindly review your pricing to improve closure rates."
 }
 ```
 
@@ -105,6 +106,12 @@ Content-Type: application/json
 | `low` | Below ~85% of market | Amber — underpricing risk |
 | `fair` | Within market band | Green — OK |
 | `high` | Above ~115% of market | Red — overcharging risk |
+
+When `verdict` is `"high"`, `suggestion` reads:
+
+> Current rates exceed the market average of ₹{market_rate}. Kindly review your pricing to improve closure rates.
+
+This applies for **all three quote tiers** (`ESSENTIAL`, `MID_SEGMENT`, `LUXURY`) — the amount shown is that tier's own market average, not a shared one.
 
 When `entered_rate` is omitted, `verdict` is not returned — show market hint only:
 
@@ -176,6 +183,28 @@ Optional: `service_type=ESSENTIAL` (default)
 
 `service_id` is resolved via Tatva services API (`/admin/api/services`) to the category name stored in market data. If the API is unreachable (e.g. on Render), the backend falls back to `backend/data/tatva_service_ids.json` — all 11 Tatva main services are pre-mapped.
 
+### Quote tiers — Essential / Mid-segment / Luxury
+
+`service_type` selects which quote tier's market data to return. Market rates are tracked **separately per tier**, so call this endpoint once per tier the vendor form supports:
+
+```http
+GET /api/market-rate/by-category?service_id=6926b1978ba6a3cfc5a191ce&service_type=ESSENTIAL
+GET /api/market-rate/by-category?service_id=6926b1978ba6a3cfc5a191ce&service_type=MID_SEGMENT
+GET /api/market-rate/by-category?service_id=6926b1978ba6a3cfc5a191ce&service_type=LUXURY
+```
+
+| `service_type` value | Tier |
+|-----------------------|------|
+| `ESSENTIAL` (default) | Essential |
+| `MID_SEGMENT` | Mid-segment / Mid-level |
+| `LUXURY` | Luxury |
+
+Aliases like `midlevel`, `mid_level`, `mid-segment`, `premium`, `standard`, `budget` are also normalized server-side, but sending the canonical values above is recommended.
+
+Cache each tier's response separately (e.g. keyed by `service_id + service_type`) and re-match locally when the vendor switches the quote type — no need to call the API again just because the tier changed if you've already cached all three.
+
+If a tier has no submitted quotes yet for a bundle, that item is simply omitted from `items` (or `recommend: false` for the single-row endpoints) — it isn't an error, it just means there isn't enough real market data for that tier yet.
+
 **HTTP caching**
 
 | Request | Headers | Effect |
@@ -231,7 +260,7 @@ Returns `selected_recommendation` for the active row only (items stay flat):
     "entered_rate": 2000,
     "verdict": "high",
     "verdict_label": "Above Market",
-    "suggestion": "Your rate is above market — consider lowering it to stay competitive."
+    "suggestion": "Current rates exceed the market average of ₹1,429.11. Kindly review your pricing to improve closure rates."
   }
 }
 ```

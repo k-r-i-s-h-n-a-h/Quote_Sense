@@ -1,13 +1,13 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import Link from "next/link";
 import { useAuth } from "@/lib/auth";
 import { getUserDisplayName } from "@/lib/user-display";
 import { fetchUserProjects, getAuthUserId } from "@/lib/project-api";
 import type { ProjectSummary } from "@/lib/project-types";
 import { ProjectTile } from "./ProjectTile";
 import StandalonePdfSection from "./StandalonePdfSection";
+import { PdfUploadGateButton } from "./PdfUploadGateButton";
 
 export default function ProjectDashboard() {
   const { user } = useAuth();
@@ -65,14 +65,10 @@ export default function ProjectDashboard() {
             </p>
           </div>
 
-          <Link
-            href="/compare"
-            prefetch
-            className="shrink-0 inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-sm font-semibold text-white bg-[#c04a00] hover:bg-[#a84000] transition-colors shadow-sm whitespace-nowrap"
-          >
+          <PdfUploadGateButton className="shrink-0 inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-sm font-semibold text-white bg-[#c04a00] hover:bg-[#a84000] transition-colors shadow-sm whitespace-nowrap">
             <span className="text-base leading-none">📄</span>
             Upload & compare PDFs
-          </Link>
+          </PdfUploadGateButton>
         </div>
       </div>
 

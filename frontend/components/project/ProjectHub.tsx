@@ -181,7 +181,10 @@ export default function ProjectHub({ project }: ProjectHubProps) {
               {project.service.name}
             </span>
             <span className="inline-flex items-center px-3 py-1 rounded-full bg-slate-100 text-slate-600 text-xs font-medium">
-              {project.vendors.length} vendors · {totalQuotes} quotes
+              {project.vendors.length} vendor{project.vendors.length === 1 ? "" : "s"}
+              {totalQuotes > 0
+                ? ` · ${totalQuotes} quote${totalQuotes === 1 ? "" : "s"}`
+                : ""}
             </span>
             <span className="inline-flex items-center px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-medium capitalize">
               {project.status.replace("_", " ")}

@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import Link from "next/link";
+import { PdfUploadGateButton } from "./PdfUploadGateButton";
 
 type StandalonePdfSectionProps = {
   /** When true, show inline after empty projects (not as a distant footer block). */
@@ -37,13 +37,9 @@ export default function StandalonePdfSection({ prominent = false }: StandalonePd
               line items and builds a side-by-side comparison matrix.
             </p>
           </div>
-          <Link
-            href="/compare"
-            prefetch
-            className="shrink-0 inline-flex items-center justify-center px-6 py-3 rounded-xl text-sm font-semibold text-white bg-[#c04a00] hover:bg-[#a84000] transition-colors shadow-sm"
-          >
+          <PdfUploadGateButton className="shrink-0 inline-flex items-center justify-center px-6 py-3 rounded-xl text-sm font-semibold text-white bg-[#c04a00] hover:bg-[#a84000] transition-colors shadow-sm">
             Upload & compare PDFs →
-          </Link>
+          </PdfUploadGateButton>
         </div>
 
         <ul className="mt-5 grid sm:grid-cols-3 gap-3 text-xs text-slate-500">

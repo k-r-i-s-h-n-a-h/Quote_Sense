@@ -16,6 +16,8 @@ import {
 } from "../../lib/compare-matrix";
 import { downloadComparisonPdf } from "../../lib/download-comparison-pdf";
 import { getCompareLane, showPdfUpload } from "../../lib/compare-lane";
+import { STANDALONE_PDF_UPLOAD_ENABLED } from "../../lib/feature-flags";
+import { StandalonePdfCompareGuard } from "../../components/dashboard/PdfUploadGateButton";
 import {
   resolveQuotesForCompare,
   startMongoCompareJob,
@@ -132,6 +134,11 @@ function QuoteSenseContent() {
 
   const isIntegratedLane = lane === "integrated";
   const canShowPdfUpload = showPdfUpload(lane);
+  const standalonePdfLocked =
+    lane === "standalone" &&
+    !STANDALONE_PDF_UPLOAD_ENABLED &&
+    !sessionId &&
+    !tableData.length;
 
   const vendorLabels = useMemo(
     () => buildVendorLabels(vendors, vendorMeta),
@@ -632,6 +639,8 @@ function QuoteSenseContent() {
             />
           </>
         )}
+
+        <StandalonePdfCompareGuard active={standalonePdfLocked} />
 
         {canShowPdfUpload && !sessionId && !tableData.length && (
           <div className="text-center space-y-3 pt-2">

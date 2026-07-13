@@ -43,7 +43,10 @@ export function ProjectTile({ project }: ProjectTileProps) {
       <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
         <span>{project.service.name}</span>
         <span className="font-medium text-slate-700">
-          {project.vendorCount} vendors · {project.quoteCount} quotes
+          {project.vendorCount} vendor{project.vendorCount === 1 ? "" : "s"}
+          {project.quoteCount > 0
+            ? ` · ${project.quoteCount} quote${project.quoteCount === 1 ? "" : "s"}`
+            : ""}
         </span>
       </div>
     </Link>

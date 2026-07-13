@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import TatvaLogo from "./TatvaLogo";
+import { WhatsAppIcon } from "./WhatsAppIcon";
 import { useAuth } from "@/lib/auth";
 
 type LoginModalProps = {
@@ -112,9 +113,16 @@ export default function LoginModal({ open, onClose }: LoginModalProps) {
             <button
               type="submit"
               disabled={!canSend}
-              className="w-full py-3.5 rounded-xl font-semibold text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-gradient-to-b from-slate-500 to-slate-700 hover:from-slate-600 hover:to-slate-800 shadow-sm"
+              className="w-full py-3.5 rounded-xl font-semibold text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-gradient-to-b from-slate-500 to-slate-700 hover:from-slate-600 hover:to-slate-800 shadow-sm inline-flex items-center justify-center gap-2.5"
             >
-              {loading ? "Sending…" : "Send OTP"}
+              {loading ? (
+                "Sending…"
+              ) : (
+                <>
+                  <WhatsAppIcon className="w-5 h-5 text-[#25D366]" />
+                  Get OTP on WhatsApp
+                </>
+              )}
             </button>
           </form>
         ) : (

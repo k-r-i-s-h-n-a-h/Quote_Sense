@@ -1,5 +1,7 @@
 /** Detect how the user entered the compare experience. */
 
+import { STANDALONE_PDF_UPLOAD_ENABLED } from "./feature-flags";
+
 export type CompareLane = "integrated" | "project" | "standalone";
 
 export function getCompareLane(params: {
@@ -30,7 +32,9 @@ export function getCompareLane(params: {
 }
 
 export function showPdfUpload(lane: CompareLane): boolean {
-  return lane === "standalone";
+  // Temporary recovery lock: close the independent PDF door without
+  // changing project / integrated compare flows.
+  return lane === "standalone" && STANDALONE_PDF_UPLOAD_ENABLED;
 }
 
 export function showProjectNav(lane: CompareLane): boolean {

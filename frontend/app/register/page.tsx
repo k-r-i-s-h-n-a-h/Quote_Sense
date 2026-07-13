@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import AuthPageLayout, { inputClass } from "@/components/AuthPageLayout";
+import { WhatsAppIcon } from "@/components/WhatsAppIcon";
 import { useAuth } from "@/lib/auth";
 
 export default function RegisterPage() {
@@ -122,9 +123,16 @@ export default function RegisterPage() {
           <button
             type="submit"
             disabled={!canSend}
-            className="w-full py-3.5 rounded-xl font-semibold text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-gradient-to-b from-[#c04a00] to-[#9a3a00] hover:from-[#d45500] hover:to-[#a84000] shadow-sm"
+            className="w-full py-3.5 rounded-xl font-semibold text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-gradient-to-b from-[#c04a00] to-[#9a3a00] hover:from-[#d45500] hover:to-[#a84000] shadow-sm inline-flex items-center justify-center gap-2.5"
           >
-            {loading ? "Sending…" : "Send OTP"}
+            {loading ? (
+              "Sending…"
+            ) : (
+              <>
+                <WhatsAppIcon className="w-5 h-5 text-white" />
+                Get OTP on WhatsApp
+              </>
+            )}
           </button>
         </form>
       ) : (

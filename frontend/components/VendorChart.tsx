@@ -75,7 +75,7 @@ export default function VendorChart({
     return data.map((row) => {
       const info = labels[row.vendor];
       const company = truncateLabel(info.company, 18);
-      // Second line: variant and/or quote number for separation.
+      // Second line: material/option variant and quote number (never both as the same id).
       const secondBits: string[] = [];
       if (info.variant) secondBits.push(truncateLabel(info.variant, 16));
       if (info.quoteNumber) secondBits.push(`#${info.quoteNumber}`);

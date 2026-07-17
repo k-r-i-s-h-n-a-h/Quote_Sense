@@ -100,8 +100,19 @@ export function buildVendorLabels(
     const company = companies[i];
     const quoteNumber = (meta?.[vendor]?.quote_number || "").trim();
     const quoteDate = (meta?.[vendor]?.quote_date || "").trim();
-    const variant =
+    let variant =
       counts[company] > 1 ? variants[i] || cleanedFiles[i] || "" : "";
+
+    // Filenames often embed the quote number (e.g. "... QMXMB8E.pdf").
+    // Drop that from the variant so charts/matrix don't show "QMXMB8E #QMXMB8E".
+    if (quoteNumber && variant) {
+      const q = quoteNumber.toLowerCase();
+      const tokens = variant.split(/\s+/).filter(Boolean);
+      const filtered = tokens.filter(
+        (tok) => tok.replace(/^#/, "").toLowerCase() !== q
+      );
+      variant = filtered.join(" ").trim();
+    }
 
     const label = variant ? `${company} — ${variant}` : company;
 

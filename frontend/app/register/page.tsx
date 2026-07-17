@@ -16,6 +16,7 @@ export default function RegisterPage() {
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
   const nameRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -27,6 +28,12 @@ export default function RegisterPage() {
   useEffect(() => {
     nameRef.current?.focus();
   }, []);
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = window.setTimeout(() => setResendCooldown((s) => s - 1), 1000);
+    return () => window.clearTimeout(timer);
+  }, [resendCooldown]);
 
   if (isLoading || isAuthenticated) {
     return (
@@ -49,7 +56,21 @@ export default function RegisterPage() {
     setLoading(true);
     const ok = await sendOtp(cleanedPhone);
     setLoading(false);
-    if (ok) setOtp("");
+    if (ok) {
+      setOtp("");
+      setResendCooldown(30);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (cleanedPhone.length < 10 || loading || resendCooldown > 0) return;
+    setLoading(true);
+    const ok = await sendOtp(cleanedPhone);
+    setLoading(false);
+    if (ok) {
+      setOtp("");
+      setResendCooldown(30);
+    }
   };
 
   const handleVerifyOtp = async (e: React.FormEvent) => {
@@ -163,16 +184,30 @@ export default function RegisterPage() {
           >
             {loading ? "Creating account…" : "Create account"}
           </button>
-          <button
-            type="button"
-            onClick={() => {
-              clearOtpState();
-              setOtp("");
-            }}
-            className="w-full text-sm text-slate-500 hover:text-[#c04a00] transition-colors"
-          >
-            Edit details
-          </button>
+          <div className="flex items-center justify-center gap-3 text-sm">
+            <button
+              type="button"
+              onClick={handleResendOtp}
+              disabled={loading || resendCooldown > 0}
+              className="text-[#c04a00] hover:underline transition-colors disabled:opacity-50 disabled:no-underline disabled:cursor-not-allowed"
+            >
+              {resendCooldown > 0 ? `Resend OTP in ${resendCooldown}s` : "Resend OTP"}
+            </button>
+            <span className="text-slate-300" aria-hidden>
+              ·
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                clearOtpState();
+                setOtp("");
+                setResendCooldown(0);
+              }}
+              className="text-slate-500 hover:text-[#c04a00] transition-colors"
+            >
+              Edit details
+            </button>
+          </div>
         </form>
       )}
 

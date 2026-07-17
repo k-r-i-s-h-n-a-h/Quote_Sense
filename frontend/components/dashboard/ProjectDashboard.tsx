@@ -9,14 +9,30 @@ import { ProjectTile } from "./ProjectTile";
 import StandalonePdfSection from "./StandalonePdfSection";
 import { PdfUploadGateButton } from "./PdfUploadGateButton";
 
+type DashboardError = {
+  message: string;
+  status: number;
+};
+
+function isAuthSessionError(error: DashboardError): boolean {
+  const message = error.message.toLowerCase();
+  return (
+    error.status === 401 ||
+    error.status === 403 ||
+    message.includes("token") ||
+    message.includes("unauthorized") ||
+    message.includes("forbidden")
+  );
+}
+
 export default function ProjectDashboard() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const displayName = getUserDisplayName(user);
   const userId = getAuthUserId(user);
 
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<DashboardError | null>(null);
 
   useEffect(() => {
     if (!userId) {
@@ -35,12 +51,9 @@ export default function ProjectDashboard() {
       if (result.ok) {
         setProjects(result.projects);
       } else {
-        setError(result.message);
+        setError({ message: result.message, status: result.status });
         setProjects([]);
       }
-      // #region agent log
-      fetch('http://127.0.0.1:7880/ingest/fae56c38-48bc-450d-a803-35ac016bc76b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b7c34a'},body:JSON.stringify({sessionId:'b7c34a',location:'ProjectDashboard.tsx:fetch',message:'projects fetch result',data:{ok:result.ok,status:result.ok?200:('status' in result?result.status:null),count:result.ok?result.projects.length:0,message:result.ok?null:result.message},timestamp:Date.now(),hypothesisId:'H4'})}).catch(()=>{});
-      // #endregion
       setLoading(false);
     })();
 
@@ -50,6 +63,7 @@ export default function ProjectDashboard() {
   }, [userId]);
 
   const showProminentPdf = !loading && !error && projects.length === 0;
+  const sessionError = error ? isAuthSessionError(error) : false;
 
   return (
     <div className="bg-[#f8fafc] pb-12">
@@ -86,11 +100,37 @@ export default function ProjectDashboard() {
           </div>
         )}
 
-        {!loading && error && (
-          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {error}
-            <p className="text-xs text-red-600/80 mt-1">
-              Ensure you are logged in and TatvaOps APIs are reachable.
+        {!loading && error && sessionError && (
+          <div className="rounded-2xl border border-orange-100 bg-white px-6 py-6 shadow-sm">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+              <div>
+                <p className="text-sm font-semibold text-slate-900">
+                  Your session has expired
+                </p>
+                <p className="text-sm text-slate-500 mt-1 max-w-xl">
+                  Please sign in again to securely load your TatvaOps projects.
+                  Your quote comparison tools are still available below.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  logout();
+                  window.location.href = "/login";
+                }}
+                className="inline-flex items-center justify-center rounded-xl bg-[#c04a00] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#a84000] transition-colors"
+              >
+                Sign in again
+              </button>
+            </div>
+          </div>
+        )}
+
+        {!loading && error && !sessionError && (
+          <div className="rounded-2xl border border-amber-100 bg-white px-6 py-5 text-sm text-slate-700 shadow-sm">
+            We could not load your projects right now.
+            <p className="text-xs text-slate-500 mt-1">
+              Please try again in a moment. If this continues, contact support.
             </p>
           </div>
         )}

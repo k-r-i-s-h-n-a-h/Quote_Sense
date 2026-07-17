@@ -7,7 +7,7 @@
     "dev:turbo": "USE_TURBOPACK=1 bash scripts/dev.sh",
     "dev:webpack": "bash scripts/dev.sh",
     "dev:built": "next build --webpack && next start --hostname 127.0.0.1 --port 3000",
-    "dev:clean": "pkill -9 -f 'node_modules/.bin/next' 2>/dev/null; rm -rf .next && bash scripts/dev.sh",
+    "dev:clean": "pkill -9 -f 'node_modules/.bin/next' 2>/dev/null || true; rm -rf .next && bash scripts/dev.sh",
     "preview": "npm run build && npm run start",
     "build": "next build --webpack",
     "start": "next start",

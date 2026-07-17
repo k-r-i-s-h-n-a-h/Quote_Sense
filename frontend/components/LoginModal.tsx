@@ -15,12 +15,14 @@ export default function LoginModal({ open, onClose }: LoginModalProps) {
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
   const phoneRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (open) {
       setPhone("");
       setOtp("");
+      setResendCooldown(0);
       clearOtpState();
       setTimeout(() => phoneRef.current?.focus(), 100);
     }
@@ -39,29 +41,49 @@ export default function LoginModal({ open, onClose }: LoginModalProps) {
     };
   }, [open, onClose]);
 
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = window.setTimeout(() => setResendCooldown((s) => s - 1), 1000);
+    return () => window.clearTimeout(timer);
+  }, [resendCooldown]);
+
   if (!open) return null;
+
+  const cleanedPhone = phone.replace(/\D/g, "");
 
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
-    const cleaned = phone.replace(/\D/g, "");
-    if (cleaned.length < 10) return;
+    if (cleanedPhone.length < 10) return;
     setLoading(true);
-    const ok = await sendOtp(cleaned);
+    const ok = await sendOtp(cleanedPhone);
     setLoading(false);
-    if (ok) setOtp("");
+    if (ok) {
+      setOtp("");
+      setResendCooldown(30);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (cleanedPhone.length < 10 || loading || resendCooldown > 0) return;
+    setLoading(true);
+    const ok = await sendOtp(cleanedPhone);
+    setLoading(false);
+    if (ok) {
+      setOtp("");
+      setResendCooldown(30);
+    }
   };
 
   const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
-    const cleaned = phone.replace(/\D/g, "");
     if (!otp.trim()) return;
     setLoading(true);
-    const ok = await verifyOtp(cleaned, otp.trim());
+    const ok = await verifyOtp(cleanedPhone, otp.trim());
     setLoading(false);
     if (ok) onClose();
   };
 
-  const canSend = phone.replace(/\D/g, "").length >= 10 && !loading;
+  const canSend = cleanedPhone.length >= 10 && !loading;
 
   return (
     <div
@@ -128,7 +150,7 @@ export default function LoginModal({ open, onClose }: LoginModalProps) {
         ) : (
           <form onSubmit={handleVerifyOtp} className="space-y-4">
             <p className="text-sm text-slate-500 text-center mb-1">
-              OTP sent to <span className="font-medium text-slate-700">+91 {phone.replace(/\D/g, "")}</span>
+              OTP sent to <span className="font-medium text-slate-700">+91 {cleanedPhone}</span>
             </p>
             <input
               type="text"
@@ -147,16 +169,30 @@ export default function LoginModal({ open, onClose }: LoginModalProps) {
             >
               {loading ? "Verifying…" : "Verify & Sign In"}
             </button>
-            <button
-              type="button"
-              onClick={() => {
-                clearOtpState();
-                setOtp("");
-              }}
-              className="w-full text-sm text-slate-500 hover:text-[#c04a00] transition-colors"
-            >
-              Change phone number
-            </button>
+            <div className="flex items-center justify-center gap-3 text-sm">
+              <button
+                type="button"
+                onClick={handleResendOtp}
+                disabled={loading || resendCooldown > 0}
+                className="text-[#c04a00] hover:underline transition-colors disabled:opacity-50 disabled:no-underline disabled:cursor-not-allowed"
+              >
+                {resendCooldown > 0 ? `Resend OTP in ${resendCooldown}s` : "Resend OTP"}
+              </button>
+              <span className="text-slate-300" aria-hidden>
+                ·
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  clearOtpState();
+                  setOtp("");
+                  setResendCooldown(0);
+                }}
+                className="text-slate-500 hover:text-[#c04a00] transition-colors"
+              >
+                Change phone number
+              </button>
+            </div>
           </form>
         )}
 

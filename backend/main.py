@@ -136,9 +136,28 @@ app = FastAPI(title="QuoteSense API")
 # FIXED: We added both port 3000 and 3001 to ensure Next.js never gets blocked!
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        # Local
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+
+        # QuoteSense frontends (Vercel) — replace with your real URLs
+        "https://quotesense.withtatva.ai",
+        "https://devquotesense.withtatva.ai",
+        "https://testquotesense.withtatva.ai",
+        # custom domains if any:
+        # "https://quotesense.withtatva.ai",
+
+        # Tatva PM / vendor form
+        "https://devops.withtatva.ai",
+        "https://testops.withtatva.ai",
+        "https://ops.withtatva.ai"
+        # add staging/test Tatva hosts if different, e.g.:
+        # "https://staging.withtatva.ai",
+        # "https://dev.withtatva.ai",
+    ],
     allow_credentials=False,
-    allow_methods=["*"],
+    allow_methods=["GET"],
     allow_headers=["*"],
 )
 

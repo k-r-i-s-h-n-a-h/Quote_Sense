@@ -51,6 +51,7 @@ from services.market_rate import (
     finalize_session_market_rates,
     list_market_rates_by_category,
     recommend_rate,
+    resolve_service_type,
 )
 from services.tatva_services import resolve_service_by_id
 
@@ -93,11 +94,13 @@ def _market_rate_by_category_response(
 
 def _missing_service_type_error(*, bulk: bool = False) -> dict:
     """
-    No fallback: service_type (quotation type) must be explicitly sent.
-    If the caller doesn't send it, we do NOT assume ESSENTIAL — we return
-    "nothing to suggest" instead of silently guessing the tier.
+    No fallback: quotation type must be explicitly sent (service_type string
+    and/or quote_type_id ObjectId mapped from env).
     """
-    message = "service_type is required — vendor must select a quotation type first."
+    message = (
+        "quotation type is required — send service_type or quote_type_id "
+        "(vendor must select Essential / Mid-segment / Luxury first)."
+    )
     if bulk:
         return {"service_type": None, "count": 0, "items": [], "message": message}
     return {"recommend": False, "message": message}
@@ -227,8 +230,9 @@ def _quote_line_item(
 
 
 class MarketRateRequest(BaseModel):
-    # No default: quotation type must be explicitly sent, or no suggestion is given.
+    # Quotation type: send service_type (ESSENTIAL/…) and/or quote_type_id (Tatva ObjectId).
     service_type: Optional[str] = None
+    quote_type_id: Optional[str] = None  # Tatva PM quotation-type ObjectId (from env map)
     service_id: Optional[str] = None
     category_id: Optional[str] = None  # alias for service_id — Tatva PM ObjectId
     service_category: Optional[str] = None
@@ -239,14 +243,27 @@ class MarketRateRequest(BaseModel):
 
 class MarketRateSuggestRequest(BaseModel):
     """Vendor quote form (withtatva.ai) — exact bundle match for market guidance."""
-    # No default: quotation type must be explicitly sent, or no suggestion is given.
     service_type: Optional[str] = None
+    quote_type_id: Optional[str] = None
     service_id: Optional[str] = None
     category_id: Optional[str] = None  # alias for service_id — Tatva PM ObjectId
     service_category: Optional[str] = None
     sub_service: str
     pricing_method: str
     entered_rate: Optional[float] = None
+
+
+def _require_service_type(
+    service_type: Optional[str] = None,
+    quote_type_id: Optional[str] = None,
+    *,
+    bulk: bool = False,
+) -> tuple[Optional[str], Optional[dict]]:
+    """Resolve quotation type; return (type, None) or (None, error_payload)."""
+    resolved = resolve_service_type(service_type, quote_type_id)
+    if not resolved:
+        return None, _missing_service_type_error(bulk=bulk)
+    return resolved, None
 
 
 class ChatRequest(BaseModel):
@@ -288,6 +305,7 @@ async def market_rate_by_category(
     category_id: Optional[str] = None,
     service_category: Optional[str] = None,
     service_type: Optional[str] = None,
+    quote_type_id: Optional[str] = None,
     sub_service: Optional[str] = None,
     pricing_method: Optional[str] = None,
     entered_rate: Optional[float] = None,
@@ -299,22 +317,24 @@ async def market_rate_by_category(
     a service, then matches locally on sub_service + pricing_method without
     further API calls.
 
-    service_type (quotation type) is required — no ESSENTIAL fallback. If the
-    vendor hasn't picked a quotation type yet, we return no suggestion at all.
+    Quotation type is required via service_type and/or quote_type_id (ObjectId
+    mapped from env) — no ESSENTIAL fallback.
 
     Bulk responses are HTTP-cached for 2h; rate-specific verdict responses cache 5m (private).
     """
     rate = entered_rate if entered_rate and entered_rate > 0 else None
     obj_id = (category_id or service_id or "").strip() or None
 
-    if not service_type or not service_type.strip():
-        payload = _missing_service_type_error(bulk=True)
+    resolved_type, type_err = _require_service_type(
+        service_type, quote_type_id, bulk=True
+    )
+    if type_err:
         if request.method == "HEAD":
             return Response(
                 status_code=200,
                 headers=_market_rate_by_category_cache_control(rate, error=True),
             )
-        return _market_rate_by_category_response(payload, rate, error=True)
+        return _market_rate_by_category_response(type_err, rate, error=True)
 
     list_kwargs = {
         "sub_service": sub_service,
@@ -327,7 +347,7 @@ async def market_rate_by_category(
         if not resolved:
             payload = {
                 "category_id": obj_id,
-                "service_type": service_type,
+                "service_type": resolved_type,
                 "count": 0,
                 "items": [],
                 "message": "Unknown category_id.",
@@ -341,7 +361,7 @@ async def market_rate_by_category(
         result = await run_in_threadpool(
             list_market_rates_by_category,
             resolved["service_category"],
-            service_type,
+            resolved_type,
             **list_kwargs,
         )
         result["category_id"] = resolved["service_id"]
@@ -359,7 +379,7 @@ async def market_rate_by_category(
         result = await run_in_threadpool(
             list_market_rates_by_category,
             service_category,
-            service_type,
+            resolved_type,
             **list_kwargs,
         )
         if request.method == "HEAD":
@@ -370,7 +390,7 @@ async def market_rate_by_category(
         return _market_rate_by_category_response(result, rate)
 
     payload = {
-        "service_type": service_type,
+        "service_type": resolved_type,
         "count": 0,
         "items": [],
         "message": "Provide category_id or service_category.",
@@ -388,19 +408,21 @@ async def market_rate_lookup(
     sub_service: str,
     pricing_method: str,
     service_type: Optional[str] = None,
+    quote_type_id: Optional[str] = None,
     service_id: Optional[str] = None,
     category_id: Optional[str] = None,
     service_category: Optional[str] = None,
 ):
     """Return market rate when exact bundle exists; otherwise recommend=false."""
-    if not service_type or not service_type.strip():
-        return _missing_service_type_error()
+    resolved_type, type_err = _require_service_type(service_type, quote_type_id)
+    if type_err:
+        return type_err
     cat, error = await _resolve_lookup_category(service_id, service_category, category_id)
     if error:
         return error
     return await run_in_threadpool(
         recommend_rate,
-        service_type,
+        resolved_type,
         cat,
         sub_service,
         pricing_method,
@@ -413,6 +435,7 @@ async def market_rate_suggest_get(
     sub_service: str,
     pricing_method: str,
     service_type: Optional[str] = None,
+    quote_type_id: Optional[str] = None,
     service_id: Optional[str] = None,
     category_id: Optional[str] = None,
     service_category: Optional[str] = None,
@@ -420,21 +443,18 @@ async def market_rate_suggest_get(
 ):
     """
     Unified vendor-form endpoint (GET) — single exact-bundle match, no bulk scan.
-    Flow: vendor picks quotation type (service_type) first, then Main Service
-    (category_id / service_id or service_category) → Item (sub_service) → Pricing Method.
-    Call when Pricing Method or Item changes (no rate), or on Rate blur (with entered_rate).
-
-    service_type is required — no ESSENTIAL fallback. Until the vendor picks a
-    quotation type, this returns recommend:false (no suggestion).
+    Quotation type via service_type and/or quote_type_id (env-mapped ObjectId).
+    Call with entered_rate on Rate blur; banner only when rate is above base.
     """
-    if not service_type or not service_type.strip():
-        return _missing_service_type_error()
+    resolved_type, type_err = _require_service_type(service_type, quote_type_id)
+    if type_err:
+        return type_err
     cat, error = await _resolve_lookup_category(service_id, service_category, category_id)
     if error:
         return error
     return await run_in_threadpool(
         recommend_rate,
-        service_type,
+        resolved_type,
         cat,
         sub_service,
         pricing_method,
@@ -446,15 +466,11 @@ async def market_rate_suggest_get(
 async def market_rate_suggest_post(body: MarketRateSuggestRequest):
     """
     Unified vendor-form endpoint (POST) — preferred for withtatva.ai quote form.
-    Single exact-bundle match (service_type + category_id/service_id/service_category
-    + sub_service + pricing_method) — no bulk scan of the whole category.
-    Omit entered_rate after pricing-method selection; include it on Rate field change/blur.
-
-    service_type is required — no ESSENTIAL fallback. Until the vendor picks a
-    quotation type, this returns recommend:false (no suggestion).
+    Include entered_rate on Rate blur. Only recommend=true when above base rate.
     """
-    if not body.service_type or not body.service_type.strip():
-        return _missing_service_type_error()
+    resolved_type, type_err = _require_service_type(body.service_type, body.quote_type_id)
+    if type_err:
+        return type_err
     cat, error = await _resolve_lookup_category(
         body.service_id, body.service_category, body.category_id
     )
@@ -463,7 +479,7 @@ async def market_rate_suggest_post(body: MarketRateSuggestRequest):
     rate = body.entered_rate if body.entered_rate and body.entered_rate > 0 else None
     return await run_in_threadpool(
         recommend_rate,
-        body.service_type,
+        resolved_type,
         cat,
         body.sub_service,
         body.pricing_method,
@@ -474,11 +490,12 @@ async def market_rate_suggest_post(body: MarketRateSuggestRequest):
 @app.post("/api/market-rate/recommend")
 async def market_rate_recommend(body: MarketRateRequest):
     """
-    Compare entered raw rate against stored market average for the bundle (single exact match).
-    service_type is required — no ESSENTIAL fallback.
+    Compare entered raw rate against stored market average for the bundle.
+    Quotation type via service_type and/or quote_type_id — no ESSENTIAL fallback.
     """
-    if not body.service_type or not body.service_type.strip():
-        return _missing_service_type_error()
+    resolved_type, type_err = _require_service_type(body.service_type, body.quote_type_id)
+    if type_err:
+        return type_err
     cat, error = await _resolve_lookup_category(
         body.service_id, body.service_category, body.category_id
     )
@@ -486,7 +503,7 @@ async def market_rate_recommend(body: MarketRateRequest):
         return error
     return await run_in_threadpool(
         recommend_rate,
-        body.service_type,
+        resolved_type,
         cat,
         body.sub_service,
         body.pricing_method,
@@ -494,41 +511,76 @@ async def market_rate_recommend(body: MarketRateRequest):
     )
 
 
-@app.on_event("startup")
-async def _startup_diagnostics():
-    """Probe local environment once at boot — writes to debug log for diagnosis."""
-    diag = env_diagnostics()
+def _probe_supabase_tables() -> dict:
+    """Sync Supabase probes — must never run on the event loop without a timeout."""
     supabase_ok = False
     sessions_ok = False
     supabase_err = None
     sessions_err = None
+    try:
+        get_supabase_client().table("market_moving_averages").select("id").limit(1).execute()
+        supabase_ok = True
+    except Exception as e:
+        supabase_err = str(e)
+    try:
+        get_supabase_client().table("market_moving_avg_sessions").select("id").limit(1).execute()
+        sessions_ok = True
+    except Exception as e:
+        sessions_err = str(e)
+    return {
+        "market_moving_averages_ok": supabase_ok,
+        "market_moving_avg_sessions_ok": sessions_ok,
+        "market_moving_averages_err": supabase_err,
+        "market_moving_avg_sessions_err": sessions_err,
+    }
 
-    if diag["supabase_configured"]:
-        try:
-            get_supabase_client().table("market_moving_averages").select("id").limit(1).execute()
-            supabase_ok = True
-        except Exception as e:
-            supabase_err = str(e)
 
-        try:
-            get_supabase_client().table("market_moving_avg_sessions").select("id").limit(1).execute()
-            sessions_ok = True
-        except Exception as e:
-            sessions_err = str(e)
+@app.on_event("startup")
+async def _startup_diagnostics():
+    """
+    Log env status immediately; probe Supabase in the background with a timeout.
 
+    Blocking HTTP here used to hang forever when Supabase/network was slow,
+    leaving port 8001 in CLOSED and curl/browser with connection refused/timeout.
+    """
+    diag = env_diagnostics()
     _agent_debug_log(
         "main.py:startup",
-        "backend startup diagnostics",
-        {
-            **diag,
-            "market_moving_averages_ok": supabase_ok,
-            "market_moving_avg_sessions_ok": sessions_ok,
-            "market_moving_averages_err": supabase_err,
-            "market_moving_avg_sessions_err": sessions_err,
-            "python_ok": True,
-        },
+        "backend startup diagnostics (env only)",
+        {**diag, "python_ok": True},
         hypothesis_id="E",
     )
+    if not diag.get("supabase_configured"):
+        return
+
+    async def _bg_probe() -> None:
+        try:
+            probe = await asyncio.wait_for(
+                run_in_threadpool(_probe_supabase_tables),
+                timeout=5.0,
+            )
+        except asyncio.TimeoutError:
+            probe = {
+                "market_moving_averages_ok": False,
+                "market_moving_avg_sessions_ok": False,
+                "market_moving_averages_err": "timeout after 5s",
+                "market_moving_avg_sessions_err": "timeout after 5s",
+            }
+        except Exception as e:
+            probe = {
+                "market_moving_averages_ok": False,
+                "market_moving_avg_sessions_ok": False,
+                "market_moving_averages_err": str(e),
+                "market_moving_avg_sessions_err": str(e),
+            }
+        _agent_debug_log(
+            "main.py:startup",
+            "backend supabase probe",
+            {**diag, **probe, "python_ok": True},
+            hypothesis_id="E",
+        )
+
+    asyncio.create_task(_bg_probe())
 
 
 async def _run_compare_pipeline(session_id, saved_files):

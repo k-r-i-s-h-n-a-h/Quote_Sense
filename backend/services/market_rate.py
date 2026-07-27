@@ -35,9 +35,15 @@ _SERVICE_TYPE_ALIASES: dict[str, str] = {
     "premium": SERVICE_TYPE_LUXURY,
 }
 
-MIN_WEIGHT_FOR_RECOMMEND = 1
+# Seed / base-rate rows use weight=0 until finalized quotes arrive.
+MIN_WEIGHT_FOR_RECOMMEND = 0
 LOW_THRESHOLD = 0.85
 HIGH_THRESHOLD = 1.15
+
+ABOVE_MARKET_MESSAGE = (
+    "Current rates exceed the market average of {amount}. "
+    "Kindly review your pricing to improve closure rates."
+)
 
 # Vendors sometimes fill Rate = 1 as a form placeholder on line items priced
 # "On Actuals" / "Per Project" — the real total lives in Amount instead. A rate
@@ -111,10 +117,15 @@ def normalize_service_type(value: Any) -> str:
     text = normalize_text(value, "")
     if not text:
         return DEFAULT_SERVICE_TYPE
+    # Tatva PM quotation-type ObjectId (from env — never hardcode IDs here).
+    by_id = _quote_type_id_map().get(text.lower())
+    if by_id:
+        return by_id
     canonical = _SERVICE_TYPE_ALIASES.get(text.lower().replace("_", " ").replace("-", " "))
     if canonical:
         return canonical
-    if text.lower().replace("-", "_").replace(" ", "_") == "MID_SEGMENT":
+    collapsed = text.lower().replace("-", "_").replace(" ", "_")
+    if collapsed == "mid_segment":
         return SERVICE_TYPE_MID_SEGMENT
     if text.upper() in (
         SERVICE_TYPE_ESSENTIAL,
@@ -123,6 +134,72 @@ def normalize_service_type(value: Any) -> str:
     ):
         return text.upper()
     return text
+
+
+def _quote_type_id_map() -> dict[str, str]:
+    """Map Tatva quote-type ObjectIds from env → ESSENTIAL / MID_SEGMENT / LUXURY."""
+    import os
+
+    mapping: dict[str, str] = {}
+    pairs = (
+        ("TATVA_QUOTE_TYPE_ESSENTIAL_ID", SERVICE_TYPE_ESSENTIAL),
+        ("TATVA_QUOTE_TYPE_MID_SEGMENT_ID", SERVICE_TYPE_MID_SEGMENT),
+        ("TATVA_QUOTE_TYPE_LUXURY_ID", SERVICE_TYPE_LUXURY),
+    )
+    for env_key, service_type in pairs:
+        raw = (os.getenv(env_key) or "").strip()
+        if raw:
+            mapping[raw.lower()] = service_type
+    return mapping
+
+
+def resolve_service_type(
+    service_type: Any = None,
+    quote_type_id: Any = None,
+) -> str | None:
+    """
+    Resolve quotation type from service_type string and/or quote_type_id ObjectId.
+    Returns None if neither resolves (caller should not fall back to ESSENTIAL).
+    """
+    for raw in (quote_type_id, service_type):
+        text = normalize_text(raw, "")
+        if not text:
+            continue
+        by_id = _quote_type_id_map().get(text.lower())
+        if by_id:
+            return by_id
+        # Avoid DEFAULT fallback when empty aliases — only accept known types / aliases.
+        lowered = text.lower().replace("_", " ").replace("-", " ")
+        if lowered in _SERVICE_TYPE_ALIASES:
+            return _SERVICE_TYPE_ALIASES[lowered]
+        collapsed = text.lower().replace("-", "_").replace(" ", "_")
+        if collapsed == "mid_segment":
+            return SERVICE_TYPE_MID_SEGMENT
+        upper = text.upper()
+        if upper in (
+            SERVICE_TYPE_ESSENTIAL,
+            SERVICE_TYPE_MID_SEGMENT,
+            SERVICE_TYPE_LUXURY,
+        ):
+            return upper
+    return None
+
+
+def _canonical_sub_service_names(raw: Any) -> list[str]:
+    """Map free-text sub_service → PM catalog name(s); fall back to normalized raw."""
+    try:
+        from services.sub_service_catalog import resolve_sub_services
+    except ImportError:
+        resolve_sub_services = None  # type: ignore
+
+    text = normalize_text(raw, "")
+    if not text:
+        return []
+    if resolve_sub_services:
+        resolved = resolve_sub_services(text)
+        if resolved:
+            return resolved
+    return [text]
 
 
 def bundle_key(
@@ -183,24 +260,37 @@ def lookup_market_rate(
     pricing_method: str,
 ) -> dict | None:
     """Return market rate row for an exact bundle match, or None."""
-    key = bundle_key(service_type, service_category, sub_service, pricing_method)
-    row = fetch_market_rate_row(key)
-    if not row:
-        return None
+    st = normalize_service_type(service_type)
+    cat = normalize_text(service_category, "Other")
+    pm = normalize_pricing_method(pricing_method)
 
-    rate = float(row.get("rate_moving_average") or row.get("moving_average") or 0)
-    weight = int(row.get("weight") or 0)
-    if rate <= MIN_VALID_RATE or weight < MIN_WEIGHT_FOR_RECOMMEND:
-        return None
+    for name in _canonical_sub_service_names(sub_service):
+        key = bundle_key(st, cat, name, pm)
+        # Prefer exact catalog casing stored in DB.
+        key["sub_service"] = name
+        row = fetch_market_rate_row(key)
+        if not row:
+            continue
 
-    return {
-        "service_type": key["service_type"],
-        "service_category": key["service_category"],
-        "sub_service": key["sub_service"],
-        "pricing_method": key["pricing_method"],
-        "market_rate": round(rate, 2),
-        "weight": weight,
-    }
+        rate = float(row.get("rate_moving_average") or row.get("moving_average") or 0)
+        weight = int(row.get("weight") or 0)
+        if rate <= MIN_VALID_RATE or weight < MIN_WEIGHT_FOR_RECOMMEND:
+            continue
+
+        return {
+            "service_type": key["service_type"],
+            "service_category": key["service_category"],
+            "sub_service": name,
+            "pricing_method": key["pricing_method"],
+            "market_rate": round(rate, 2),
+            "weight": weight,
+        }
+    return None
+
+
+def _above_market_message(market_rate: float) -> str:
+    amount = f"₹{market_rate:,.2f}"
+    return ABOVE_MARKET_MESSAGE.format(amount=amount)
 
 
 def _session_already_applied(session_id: str, item_id: str) -> bool:
@@ -400,24 +490,22 @@ def _slim_selected_recommendation(
     """Verdict payload for the active work-item row only."""
     if not full.get("recommend"):
         return {
+            "recommend": False,
             "sub_service": sub_service,
             "pricing_method": pricing_method,
-            "suggestion": full.get("message", "No market data for this item and pricing method yet."),
         }
 
     slim: dict = {
-        "sub_service": sub_service,
-        "pricing_method": pricing_method,
+        "recommend": True,
+        "sub_service": full.get("sub_service", sub_service),
+        "pricing_method": full.get("pricing_method", pricing_method),
         "market_rate": full["market_rate"],
-        "weight": full["weight"],
-        "band_low": full["band_low"],
-        "band_high": full["band_high"],
-        "suggestion": full["suggestion"],
+        "weight": full.get("weight", 0),
+        "verdict": full.get("verdict", "high"),
+        "message": full.get("message", ""),
     }
-    if full.get("entered_rate"):
+    if full.get("entered_rate") is not None:
         slim["entered_rate"] = full["entered_rate"]
-        slim["verdict"] = full["verdict"]
-        slim["verdict_label"] = full["verdict_label"]
     return slim
 
 
@@ -509,7 +597,13 @@ def recommend_rate(
     pricing_method: str,
     entered_rate: float | None = None,
 ) -> dict:
-    """Lookup-only when entered_rate is None; include verdict when rate is provided."""
+    """
+    Vendor form guidance against golden base rates.
+
+    - No entered_rate → no UI banner (recommend=false).
+    - entered_rate <= base → intended behaviour, silent (recommend=false).
+    - entered_rate > base (even ₹1) → recommend=true with a single message.
+    """
     lookup = lookup_market_rate(service_type, service_category, sub_service, pricing_method)
     if not lookup:
         return {
@@ -517,33 +611,46 @@ def recommend_rate(
             "message": "No market data for this item and pricing method yet.",
         }
 
-    result = {
+    base = float(lookup["market_rate"])
+
+    if entered_rate is None or float(entered_rate) <= 0:
+        # Preload / pricing-method selected — do not notify the vendor yet.
+        return {
+            "recommend": False,
+            "service_type": lookup["service_type"],
+            "service_category": lookup["service_category"],
+            "sub_service": lookup["sub_service"],
+            "pricing_method": lookup["pricing_method"],
+            "market_rate": base,
+            "weight": lookup["weight"],
+        }
+
+    rate = float(entered_rate)
+    if rate <= base:
+        # At or below base rate — intended; no recommendation banner.
+        return {
+            "recommend": False,
+            "service_type": lookup["service_type"],
+            "service_category": lookup["service_category"],
+            "sub_service": lookup["sub_service"],
+            "pricing_method": lookup["pricing_method"],
+            "market_rate": base,
+            "weight": lookup["weight"],
+            "entered_rate": rate,
+        }
+
+    return {
         "recommend": True,
-        **lookup,
-        "band_low": round(lookup["market_rate"] * LOW_THRESHOLD, 2),
-        "band_high": round(lookup["market_rate"] * HIGH_THRESHOLD, 2),
-        "market_hint": _market_hint_message(
-            lookup["market_rate"], lookup["pricing_method"], lookup["weight"]
-        ),
+        "service_type": lookup["service_type"],
+        "service_category": lookup["service_category"],
+        "sub_service": lookup["sub_service"],
+        "pricing_method": lookup["pricing_method"],
+        "market_rate": base,
+        "weight": lookup["weight"],
+        "entered_rate": rate,
+        "verdict": "high",
+        "message": _above_market_message(base),
     }
-
-    if entered_rate is not None and float(entered_rate) > 0:
-        rate = float(entered_rate)
-        verdict = _verdict(rate, lookup["market_rate"])
-        result["entered_rate"] = rate
-        result["verdict"] = verdict
-        result["verdict_label"] = _verdict_label(verdict)
-        result["suggestion"] = _verdict_suggestion(verdict, lookup["market_rate"])
-        result["message"] = _verdict_message(
-            verdict, rate, lookup["market_rate"], lookup["pricing_method"], lookup["weight"]
-        )
-    else:
-        result["suggestion"] = _fair_range_message(
-            result["band_low"], result["band_high"], lookup["pricing_method"]
-        )
-        result["message"] = result["market_hint"]
-
-    return result
 
 
 def update_rates_from_dataframe(df, session_id: str, fast: bool = False) -> dict[tuple, tuple[float, int]]:

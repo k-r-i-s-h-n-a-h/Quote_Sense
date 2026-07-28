@@ -128,12 +128,9 @@ export default function MarketRatePanel({
       {data.message && (
         <p className={`mt-3 text-sm leading-relaxed ${styles.text}`}>{data.message}</p>
       )}
-      {data.band_low != null && data.band_high != null && (
-        <p className="mt-2 text-xs text-slate-600">
-          Typical range: ₹{data.band_low.toLocaleString("en-IN")} – ₹
-          {data.band_high.toLocaleString("en-IN")} / {unit}
-        </p>
-      )}
+      <p className="mt-2 text-xs text-slate-600">
+        Recommended base: ₹{data.market_rate.toLocaleString("en-IN")} / {unit}
+      </p>
     </aside>
   );
 }

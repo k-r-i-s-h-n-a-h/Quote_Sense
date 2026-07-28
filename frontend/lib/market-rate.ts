@@ -7,8 +7,6 @@ export type MarketRateLookup = {
   pricing_method?: string;
   market_rate?: number;
   weight?: number;
-  band_low?: number;
-  band_high?: number;
   entered_rate?: number;
   verdict?: "low" | "fair" | "high";
 };

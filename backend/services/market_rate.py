@@ -37,11 +37,9 @@ _SERVICE_TYPE_ALIASES: dict[str, str] = {
 
 # Seed / base-rate rows use weight=0 until finalized quotes arrive.
 MIN_WEIGHT_FOR_RECOMMEND = 0
-LOW_THRESHOLD = 0.85
-HIGH_THRESHOLD = 1.15
 
 ABOVE_MARKET_MESSAGE = (
-    "Current rates exceed the market average of {amount}. "
+    "Current rates exceed the recommended base rate of {amount}. "
     "Kindly review your pricing to improve closure rates."
 )
 
@@ -109,8 +107,25 @@ def normalize_text(value: Any, fallback: str = "") -> str:
     return text
 
 
+# Spreadsheet / PM label variants → canonical DB pricing_method string.
+_PRICING_METHOD_ALIASES: dict[str, str] = {
+    "area (sqft)": "Area (sqft)",
+    "area (in sqft)": "Area (sqft)",
+    "area in sqft": "Area (sqft)",
+    "sqft": "Area (sqft)",
+    "area (sqft)/per unit": "Area (sqft)/Per Unit",
+    "area (in sqmm)": "Area (in sqmm)",
+    "area(in sqmm)": "Area (in sqmm)",
+    "area(in sqm)": "Area(in sqm)",
+    "area (in sqm)": "Area(in sqm)",
+}
+
+
 def normalize_pricing_method(value: Any) -> str:
-    return normalize_text(value, "Unit")
+    text = normalize_text(value, "Unit")
+    if not text:
+        return "Unit"
+    return _PRICING_METHOD_ALIASES.get(text.casefold(), text)
 
 
 def normalize_service_type(value: Any) -> str:
@@ -400,66 +415,82 @@ def update_rate_moving_average(
 
 
 def _verdict(entered_rate: float, market_rate: float) -> str:
-    if entered_rate < market_rate * LOW_THRESHOLD:
+    """Compare entered rate to recommended base only (no ±% band)."""
+    entered = round(float(entered_rate), 2)
+    base = round(float(market_rate), 2)
+    if entered < base:
         return "low"
-    if entered_rate > market_rate * HIGH_THRESHOLD:
+    if entered > base:
         return "high"
     return "fair"
 
 
 def _verdict_label(verdict: str) -> str:
     return {
-        "low": "Below Market",
-        "fair": "Fair Price",
-        "high": "Above Market",
+        "low": "At or Below Base",
+        "fair": "At Base Rate",
+        "high": "Above Base Rate",
     }.get(verdict, "Unknown")
 
 
 def _verdict_suggestion(verdict: str, market_rate: float | None = None) -> str:
     """Short actionable guidance for PM UI chips / banners."""
-    if verdict == "low":
-        return "Your rate is below market — consider increasing it to avoid underpricing."
     if verdict == "high":
-        amount = f"₹{market_rate:,.2f}" if market_rate is not None else "the market average"
+        amount = (
+            f"₹{market_rate:,.2f}"
+            if market_rate is not None
+            else "the recommended base rate"
+        )
         return (
-            f"Current rates exceed the market average of {amount}. "
+            f"Current rates exceed the recommended base rate of {amount}. "
             f"Kindly review your pricing to improve closure rates."
         )
-    return "Your rate is within market range — looks fair and competitive."
+    if verdict == "low":
+        return "Your rate is at or below the recommended base — no suggestion."
+    return "Your rate matches the recommended base — no suggestion."
 
 
-def _fair_range_message(band_low: float, band_high: float, pricing_method: str) -> str:
+def _base_rate_message(market_rate: float, pricing_method: str) -> str:
     unit = pricing_method or "unit"
     return (
-        f"Fair market range: ₹{band_low:,.2f} – ₹{band_high:,.2f}/{unit}. "
-        f"Enter your rate to see if it's low, fair, or high."
+        f"Recommended base rate: ₹{market_rate:,.2f}/{unit}. "
+        f"Suggestion appears only when the entered rate is above this base."
     )
 
 
 def _verdict_message(verdict: str, entered_rate: float, market_rate: float, pricing_method: str, weight: int) -> str:
     unit = pricing_method or "unit"
-    if verdict == "low":
-        return (
-            f"Your rate ₹{entered_rate:,.2f}/{unit} is below market "
-            f"(~₹{market_rate:,.2f}, {weight} quotes). You may be underpricing."
-        )
     if verdict == "high":
         return (
-            f"Current rates exceed the market average of ₹{market_rate:,.2f}/{unit} "
-            f"({weight} quotes). Kindly review your pricing to improve closure rates."
+            f"Current rates exceed the recommended base rate of ₹{market_rate:,.2f}/{unit}. "
+            f"Kindly review your pricing to improve closure rates."
+        )
+    if verdict == "low":
+        return (
+            f"Your rate ₹{entered_rate:,.2f}/{unit} is below the recommended base "
+            f"(₹{market_rate:,.2f}/{unit}) — no suggestion."
         )
     return (
-        f"Your rate ₹{entered_rate:,.2f}/{unit} is within market range "
-        f"(~₹{market_rate:,.2f}, {weight} quotes)."
+        f"Your rate ₹{entered_rate:,.2f}/{unit} matches the recommended base "
+        f"(₹{market_rate:,.2f}/{unit}) — no suggestion."
     )
 
 
 def _market_hint_message(market_rate: float, pricing_method: str, weight: int) -> str:
     pm = pricing_method or "unit"
-    return (
-        f"Market rate: ~₹{market_rate:,.2f}/{pm} "
-        f"({weight} quote{'s' if weight != 1 else ''})"
-    )
+    return f"Recommended base rate: ₹{market_rate:,.2f}/{pm}"
+
+
+def _label_ids(sub_service: str, pricing_method: str) -> dict:
+    """Attach Tatva ObjectIds when the static catalog knows the labels."""
+    from services.tatva_catalog import resolve_pricing_method_id, resolve_sub_service_id
+
+    return {
+        "sub_service_id": resolve_sub_service_id(sub_service),
+        "sub_service_label": sub_service,
+        "pricing_id": resolve_pricing_method_id(pricing_method),
+        "pricing_method_label": pricing_method,
+    }
 
 
 def _slim_bulk_item(
@@ -467,18 +498,13 @@ def _slim_bulk_item(
     pricing_method: str,
     market_rate: float,
     weight: int,
-    band_low: float,
-    band_high: float,
 ) -> dict:
-    """Flat item row for PM bulk cache — no nested objects or repeated category keys."""
+    """Flat item row for PM bulk cache — labels + ObjectIds when known."""
     return {
-        "sub_service": sub_service,
-        "pricing_method": pricing_method,
+        **_label_ids(sub_service, pricing_method),
         "market_rate": market_rate,
         "weight": weight,
-        "band_low": band_low,
-        "band_high": band_high,
-        "suggestion": _fair_range_message(band_low, band_high, pricing_method),
+        "suggestion": _base_rate_message(market_rate, pricing_method),
     }
 
 
@@ -488,17 +514,16 @@ def _slim_selected_recommendation(
     full: dict,
 ) -> dict:
     """Verdict payload for the active work-item row only."""
+    labels = _label_ids(
+        full.get("sub_service_label") or full.get("sub_service") or sub_service,
+        full.get("pricing_method_label") or full.get("pricing_method") or pricing_method,
+    )
     if not full.get("recommend"):
-        return {
-            "recommend": False,
-            "sub_service": sub_service,
-            "pricing_method": pricing_method,
-        }
+        return {"recommend": False, **labels}
 
     slim: dict = {
         "recommend": True,
-        "sub_service": full.get("sub_service", sub_service),
-        "pricing_method": full.get("pricing_method", pricing_method),
+        **labels,
         "market_rate": full["market_rate"],
         "weight": full.get("weight", 0),
         "verdict": full.get("verdict", "high"),
@@ -561,11 +586,14 @@ def list_market_rates_by_category(
         sub = normalize_text(row.get("sub_service"), "General")
         pm = normalize_pricing_method(row.get("pricing_method"))
         rounded_rate = round(rate, 2)
-        band_low = round(rate * LOW_THRESHOLD, 2)
-        band_high = round(rate * HIGH_THRESHOLD, 2)
-        items.append(_slim_bulk_item(sub, pm, rounded_rate, weight, band_low, band_high))
+        items.append(_slim_bulk_item(sub, pm, rounded_rate, weight))
 
-    items.sort(key=lambda x: (x["sub_service"].lower(), x["pricing_method"].lower()))
+    items.sort(
+        key=lambda x: (
+            (x.get("sub_service_label") or "").lower(),
+            (x.get("pricing_method_label") or "").lower(),
+        )
+    )
     result = {
         "service_category": cat,
         "service_type": st,
@@ -598,11 +626,12 @@ def recommend_rate(
     entered_rate: float | None = None,
 ) -> dict:
     """
-    Vendor form guidance against golden base rates.
+    Vendor form guidance against spreadsheet recommended base rates.
 
     - No entered_rate → no UI banner (recommend=false).
-    - entered_rate <= base → intended behaviour, silent (recommend=false).
-    - entered_rate > base (even ₹1) → recommend=true with a single message.
+    - entered_rate <= base → silent (recommend=false).
+    - entered_rate > base (even ₹1 above) → recommend=true.
+    No ±% interval / band — compare to the single base only.
     """
     lookup = lookup_market_rate(service_type, service_category, sub_service, pricing_method)
     if not lookup:
@@ -611,42 +640,29 @@ def recommend_rate(
             "message": "No market data for this item and pricing method yet.",
         }
 
-    base = float(lookup["market_rate"])
+    base = round(float(lookup["market_rate"]), 2)
+    labels = _label_ids(lookup["sub_service"], lookup["pricing_method"])
+    common = {
+        "service_type": lookup["service_type"],
+        "service_category": lookup["service_category"],
+        **labels,
+        "market_rate": base,
+        "weight": lookup["weight"],
+    }
 
     if entered_rate is None or float(entered_rate) <= 0:
         # Preload / pricing-method selected — do not notify the vendor yet.
-        return {
-            "recommend": False,
-            "service_type": lookup["service_type"],
-            "service_category": lookup["service_category"],
-            "sub_service": lookup["sub_service"],
-            "pricing_method": lookup["pricing_method"],
-            "market_rate": base,
-            "weight": lookup["weight"],
-        }
+        return {"recommend": False, **common}
 
-    rate = float(entered_rate)
-    if rate <= base:
-        # At or below base rate — intended; no recommendation banner.
-        return {
-            "recommend": False,
-            "service_type": lookup["service_type"],
-            "service_category": lookup["service_category"],
-            "sub_service": lookup["sub_service"],
-            "pricing_method": lookup["pricing_method"],
-            "market_rate": base,
-            "weight": lookup["weight"],
-            "entered_rate": rate,
-        }
+    rate = round(float(entered_rate), 2)
+    verdict = _verdict(rate, base)
+    if verdict != "high":
+        # At or below recommended base — no suggestion.
+        return {"recommend": False, **common, "entered_rate": rate, "verdict": verdict}
 
     return {
         "recommend": True,
-        "service_type": lookup["service_type"],
-        "service_category": lookup["service_category"],
-        "sub_service": lookup["sub_service"],
-        "pricing_method": lookup["pricing_method"],
-        "market_rate": base,
-        "weight": lookup["weight"],
+        **common,
         "entered_rate": rate,
         "verdict": "high",
         "message": _above_market_message(base),

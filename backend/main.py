@@ -95,10 +95,11 @@ def _market_rate_by_category_response(
 def _missing_service_type_error(*, bulk: bool = False) -> dict:
     """
     No fallback: quotation type must be explicitly sent (service_type string
-    and/or quote_type_id ObjectId mapped from env).
+    and/or category_id / quote_type_id ObjectId mapped from env).
     """
     message = (
-        "quotation type is required — send service_type or quote_type_id "
+        "quotation type is required — send category_id (quote type ObjectId) "
+        "or service_type / quote_type_id "
         "(vendor must select Essential / Mid-segment / Luxury first)."
     )
     if bulk:
@@ -110,25 +111,40 @@ async def _resolve_lookup_category(
     service_id: Optional[str],
     service_category: Optional[str],
     category_id: Optional[str] = None,
-) -> tuple[Optional[str], Optional[dict]]:
+    quote_type_id: Optional[str] = None,
+) -> tuple[Optional[str], Optional[str], Optional[dict]]:
     """
-    Resolve the category name for the exact-bundle-match endpoints (suggest/lookup/recommend).
+    Resolve main-service category name for suggest/lookup/recommend.
 
-    service_category (name string) wins if given. Otherwise resolves an ObjectId —
-    service_id or category_id (alias, same thing) — the same way /by-category does:
-    Tatva services API first, then the static backend/data/tatva_service_ids.json fallback.
-    Returns (category, None) on success, or (None, error_payload) on failure.
+    New PM contract:
+      service_id  → main service ObjectId
+      category_id → quotation-type ObjectId (Essential / Mid / Luxury)
+
+    Returns (service_category_name, quote_type_object_id, error_payload).
     """
+    from services.tatva_catalog import split_service_and_category_ids
+
+    svc_id, qt_id = split_service_and_category_ids(
+        service_id=service_id,
+        category_id=category_id,
+        quote_type_id=quote_type_id,
+    )
+
     cat = (service_category or "").strip()
     if cat:
-        return cat, None
-    sid = (service_id or category_id or "").strip()
-    if sid:
-        resolved = await run_in_threadpool(resolve_service_by_id, sid)
+        return cat, qt_id, None
+    if svc_id:
+        resolved = await run_in_threadpool(resolve_service_by_id, svc_id)
         if not resolved:
-            return None, {"recommend": False, "message": "Unknown category_id."}
-        return resolved["service_category"], None
-    return None, {"recommend": False, "message": "Provide category_id or service_category."}
+            return None, qt_id, {
+                "recommend": False,
+                "message": "Unknown service_id.",
+            }
+        return resolved["service_category"], qt_id, None
+    return None, qt_id, {
+        "recommend": False,
+        "message": "Provide service_id or service_category.",
+    }
 
 
 app = FastAPI(title="QuoteSense API")
@@ -249,27 +265,61 @@ def _quote_line_item(
 
 
 class MarketRateRequest(BaseModel):
-    # Quotation type: send service_type (ESSENTIAL/…) and/or quote_type_id (Tatva ObjectId).
+    # Quotation type: category_id (new) / quote_type_id (legacy) / service_type string.
     service_type: Optional[str] = None
-    quote_type_id: Optional[str] = None  # Tatva PM quotation-type ObjectId (from env map)
-    service_id: Optional[str] = None
-    category_id: Optional[str] = None  # alias for service_id — Tatva PM ObjectId
+    quote_type_id: Optional[str] = None  # legacy alias for category_id (quote type)
+    service_id: Optional[str] = None  # main service ObjectId (Interiors, …)
+    category_id: Optional[str] = None  # quotation-type ObjectId (Essential / Mid / Luxury)
     service_category: Optional[str] = None
-    sub_service: str
-    pricing_method: str
+    sub_service: Optional[str] = None
+    pricing_method: Optional[str] = None
+    sub_service_id: Optional[str] = None
+    pricing_id: Optional[str] = None
     entered_rate: Optional[float] = None
 
 
 class MarketRateSuggestRequest(BaseModel):
     """Vendor quote form (withtatva.ai) — exact bundle match for market guidance."""
     service_type: Optional[str] = None
-    quote_type_id: Optional[str] = None
-    service_id: Optional[str] = None
-    category_id: Optional[str] = None  # alias for service_id — Tatva PM ObjectId
+    quote_type_id: Optional[str] = None  # legacy alias for category_id (quote type)
+    service_id: Optional[str] = None  # main service ObjectId
+    category_id: Optional[str] = None  # quotation-type ObjectId
     service_category: Optional[str] = None
-    sub_service: str
-    pricing_method: str
+    sub_service: Optional[str] = None
+    pricing_method: Optional[str] = None
+    sub_service_id: Optional[str] = None
+    pricing_id: Optional[str] = None
     entered_rate: Optional[float] = None
+
+
+def _resolve_work_item_labels(
+    sub_service: Optional[str] = None,
+    pricing_method: Optional[str] = None,
+    sub_service_id: Optional[str] = None,
+    pricing_id: Optional[str] = None,
+) -> tuple[Optional[str], Optional[str], Optional[dict]]:
+    """Resolve labels from ObjectIds and/or names. Returns (sub, pm, error)."""
+    from services.tatva_catalog import resolve_item_labels
+
+    sub_label, pm_label = resolve_item_labels(
+        sub_service=sub_service,
+        pricing_method=pricing_method,
+        sub_service_id=sub_service_id,
+        pricing_id=pricing_id,
+    )
+    if not sub_label or not pm_label:
+        return None, None, {
+            "recommend": False,
+            "message": (
+                "Provide sub_service + pricing_method labels, "
+                "or known sub_service_id + pricing_id ObjectIds."
+            ),
+            "sub_service_id": (sub_service_id or "").strip() or None,
+            "pricing_id": (pricing_id or "").strip() or None,
+            "sub_service_label": sub_label,
+            "pricing_method_label": pm_label,
+        }
+    return sub_label, pm_label, None
 
 
 def _require_service_type(
@@ -327,25 +377,32 @@ async def market_rate_by_category(
     quote_type_id: Optional[str] = None,
     sub_service: Optional[str] = None,
     pricing_method: Optional[str] = None,
+    sub_service_id: Optional[str] = None,
+    pricing_id: Optional[str] = None,
     entered_rate: Optional[float] = None,
 ):
     """
     Bulk market rates for one Main Service.
-    Prefer category_id (Tatva PM ObjectId; service_id accepted as an alias);
-    service_category name also accepted. PM calls once when the user selects
-    a service, then matches locally on sub_service + pricing_method without
-    further API calls.
 
-    Quotation type is required via service_type and/or quote_type_id (ObjectId
-    mapped from env) — no ESSENTIAL fallback.
+    PM contract:
+      service_id   → main service ObjectId (Interiors, …)
+      category_id  → quotation-type ObjectId (Essential / Mid / Luxury)
+      quote_type_id → legacy alias for category_id
+      service_type  → optional string ESSENTIAL / MID_SEGMENT / LUXURY
 
-    Bulk responses are HTTP-cached for 2h; rate-specific verdict responses cache 5m (private).
+    Legacy: category_id that matches a known service ObjectId still resolves as service.
     """
+    from services.tatva_catalog import split_service_and_category_ids
+
     rate = entered_rate if entered_rate and entered_rate > 0 else None
-    obj_id = (category_id or service_id or "").strip() or None
+    svc_id, qt_id = split_service_and_category_ids(
+        service_id=service_id,
+        category_id=category_id,
+        quote_type_id=quote_type_id,
+    )
 
     resolved_type, type_err = _require_service_type(
-        service_type, quote_type_id, bulk=True
+        service_type, qt_id, bulk=True
     )
     if type_err:
         if request.method == "HEAD":
@@ -355,21 +412,31 @@ async def market_rate_by_category(
             )
         return _market_rate_by_category_response(type_err, rate, error=True)
 
+    sub_label, pm_label = sub_service, pricing_method
+    if sub_service_id or pricing_id or sub_service or pricing_method:
+        resolved_sub, resolved_pm, _ = _resolve_work_item_labels(
+            sub_service, pricing_method, sub_service_id, pricing_id
+        )
+        # Only use resolved labels when both present; otherwise leave unset for bulk-only.
+        if resolved_sub and resolved_pm:
+            sub_label, pm_label = resolved_sub, resolved_pm
+
     list_kwargs = {
-        "sub_service": sub_service,
-        "pricing_method": pricing_method,
+        "sub_service": sub_label,
+        "pricing_method": pm_label,
         "entered_rate": rate,
     }
 
-    if obj_id:
-        resolved = await run_in_threadpool(resolve_service_by_id, obj_id)
+    if svc_id:
+        resolved = await run_in_threadpool(resolve_service_by_id, svc_id)
         if not resolved:
             payload = {
-                "category_id": obj_id,
+                "service_id": svc_id,
+                "category_id": qt_id,
                 "service_type": resolved_type,
                 "count": 0,
                 "items": [],
-                "message": "Unknown category_id.",
+                "message": "Unknown service_id.",
             }
             if request.method == "HEAD":
                 return Response(
@@ -383,8 +450,9 @@ async def market_rate_by_category(
             resolved_type,
             **list_kwargs,
         )
-        result["category_id"] = resolved["service_id"]
-        result["service_id"] = resolved["service_id"]  # kept for backward compatibility
+        result["service_id"] = resolved["service_id"]
+        if qt_id:
+            result["category_id"] = qt_id
         if resolved.get("service_code"):
             result["service_code"] = resolved["service_code"]
         if request.method == "HEAD":
@@ -401,6 +469,8 @@ async def market_rate_by_category(
             resolved_type,
             **list_kwargs,
         )
+        if qt_id:
+            result["category_id"] = qt_id
         if request.method == "HEAD":
             return Response(
                 status_code=200,
@@ -410,9 +480,10 @@ async def market_rate_by_category(
 
     payload = {
         "service_type": resolved_type,
+        "category_id": qt_id,
         "count": 0,
         "items": [],
-        "message": "Provide category_id or service_category.",
+        "message": "Provide service_id or service_category.",
     }
     if request.method == "HEAD":
         return Response(
@@ -424,59 +495,77 @@ async def market_rate_by_category(
 
 @app.get("/api/market-rate/lookup")
 async def market_rate_lookup(
-    sub_service: str,
-    pricing_method: str,
     service_type: Optional[str] = None,
     quote_type_id: Optional[str] = None,
     service_id: Optional[str] = None,
     category_id: Optional[str] = None,
     service_category: Optional[str] = None,
+    sub_service: Optional[str] = None,
+    pricing_method: Optional[str] = None,
+    sub_service_id: Optional[str] = None,
+    pricing_id: Optional[str] = None,
 ):
     """Return market rate when exact bundle exists; otherwise recommend=false."""
-    resolved_type, type_err = _require_service_type(service_type, quote_type_id)
-    if type_err:
-        return type_err
-    cat, error = await _resolve_lookup_category(service_id, service_category, category_id)
+    cat, qt_id, error = await _resolve_lookup_category(
+        service_id, service_category, category_id, quote_type_id
+    )
     if error:
         return error
+    resolved_type, type_err = _require_service_type(service_type, qt_id)
+    if type_err:
+        return type_err
+    sub_label, pm_label, item_err = _resolve_work_item_labels(
+        sub_service, pricing_method, sub_service_id, pricing_id
+    )
+    if item_err:
+        return item_err
     return await run_in_threadpool(
         recommend_rate,
         resolved_type,
         cat,
-        sub_service,
-        pricing_method,
+        sub_label,
+        pm_label,
         None,
     )
 
 
 @app.get("/api/market-rate/suggest")
 async def market_rate_suggest_get(
-    sub_service: str,
-    pricing_method: str,
     service_type: Optional[str] = None,
     quote_type_id: Optional[str] = None,
     service_id: Optional[str] = None,
     category_id: Optional[str] = None,
     service_category: Optional[str] = None,
+    sub_service: Optional[str] = None,
+    pricing_method: Optional[str] = None,
+    sub_service_id: Optional[str] = None,
+    pricing_id: Optional[str] = None,
     entered_rate: Optional[float] = None,
 ):
     """
     Unified vendor-form endpoint (GET) — single exact-bundle match, no bulk scan.
-    Quotation type via service_type and/or quote_type_id (env-mapped ObjectId).
-    Call with entered_rate on Rate blur; banner only when rate is above base.
+    Prefer sub_service_id + pricing_id; labels still work as fallback.
+    Banner only when entered_rate is above the recommended base rate.
     """
-    resolved_type, type_err = _require_service_type(service_type, quote_type_id)
-    if type_err:
-        return type_err
-    cat, error = await _resolve_lookup_category(service_id, service_category, category_id)
+    cat, qt_id, error = await _resolve_lookup_category(
+        service_id, service_category, category_id, quote_type_id
+    )
     if error:
         return error
+    resolved_type, type_err = _require_service_type(service_type, qt_id)
+    if type_err:
+        return type_err
+    sub_label, pm_label, item_err = _resolve_work_item_labels(
+        sub_service, pricing_method, sub_service_id, pricing_id
+    )
+    if item_err:
+        return item_err
     return await run_in_threadpool(
         recommend_rate,
         resolved_type,
         cat,
-        sub_service,
-        pricing_method,
+        sub_label,
+        pm_label,
         entered_rate if entered_rate and entered_rate > 0 else None,
     )
 
@@ -485,23 +574,28 @@ async def market_rate_suggest_get(
 async def market_rate_suggest_post(body: MarketRateSuggestRequest):
     """
     Unified vendor-form endpoint (POST) — preferred for withtatva.ai quote form.
-    Include entered_rate on Rate blur. Only recommend=true when above base rate.
+    Include entered_rate on Rate blur. recommend=true only when rate > base.
     """
-    resolved_type, type_err = _require_service_type(body.service_type, body.quote_type_id)
-    if type_err:
-        return type_err
-    cat, error = await _resolve_lookup_category(
-        body.service_id, body.service_category, body.category_id
+    cat, qt_id, error = await _resolve_lookup_category(
+        body.service_id, body.service_category, body.category_id, body.quote_type_id
     )
     if error:
         return error
+    resolved_type, type_err = _require_service_type(body.service_type, qt_id)
+    if type_err:
+        return type_err
+    sub_label, pm_label, item_err = _resolve_work_item_labels(
+        body.sub_service, body.pricing_method, body.sub_service_id, body.pricing_id
+    )
+    if item_err:
+        return item_err
     rate = body.entered_rate if body.entered_rate and body.entered_rate > 0 else None
     return await run_in_threadpool(
         recommend_rate,
         resolved_type,
         cat,
-        body.sub_service,
-        body.pricing_method,
+        sub_label,
+        pm_label,
         rate,
     )
 
@@ -510,24 +604,138 @@ async def market_rate_suggest_post(body: MarketRateSuggestRequest):
 async def market_rate_recommend(body: MarketRateRequest):
     """
     Compare entered raw rate against stored market average for the bundle.
-    Quotation type via service_type and/or quote_type_id — no ESSENTIAL fallback.
+    Quotation type via category_id / quote_type_id / service_type — no ESSENTIAL fallback.
     """
-    resolved_type, type_err = _require_service_type(body.service_type, body.quote_type_id)
-    if type_err:
-        return type_err
-    cat, error = await _resolve_lookup_category(
-        body.service_id, body.service_category, body.category_id
+    cat, qt_id, error = await _resolve_lookup_category(
+        body.service_id, body.service_category, body.category_id, body.quote_type_id
     )
     if error:
         return error
+    resolved_type, type_err = _require_service_type(body.service_type, qt_id)
+    if type_err:
+        return type_err
+    sub_label, pm_label, item_err = _resolve_work_item_labels(
+        body.sub_service, body.pricing_method, body.sub_service_id, body.pricing_id
+    )
+    if item_err:
+        return item_err
     return await run_in_threadpool(
         recommend_rate,
         resolved_type,
         cat,
-        body.sub_service,
-        body.pricing_method,
+        sub_label,
+        pm_label,
         body.entered_rate,
     )
+
+
+@app.post("/api/market-rate/sync-catalog")
+async def market_rate_sync_catalog(
+    request: Request,
+    payload: Any = Body(default=None),
+    project_id: Optional[str] = None,
+    authorization: Optional[str] = Header(None),
+):
+    """
+    Fill sub_service_id / pricing_id catalogs used by /by-category and /suggest.
+
+    Three ways:
+      A) POST explicit maps from PM (preferred when quotes API is empty):
+           { "sub_services": {"Wardrobe":"<oid>"}, "pricing_methods": {"Area (sqft)":"<oid>"} }
+      B) POST Tatva project-quotes JSON (workItems with nested _id fields)
+      C) POST ?project_id=... + Authorization: Bearer <jwt> (backend fetches quotes)
+    """
+    from services.tatva_catalog import (
+        apply_catalog_maps,
+        harvest_ids_from_quotes,
+        payload_looks_like_catalog_maps,
+    )
+
+    query_project_id = project_id or request.query_params.get("project_id")
+    auth_header = authorization or request.headers.get("authorization")
+
+    # A) Explicit label → ObjectId maps from PM
+    if payload_looks_like_catalog_maps(payload):
+        stats = await run_in_threadpool(
+            apply_catalog_maps,
+            payload.get("sub_services") if isinstance(payload, dict) else None,
+            payload.get("pricing_methods") if isinstance(payload, dict) else None,
+        )
+        if stats.get("registered_sub_services", 0) == 0 and stats.get(
+            "registered_pricing_methods", 0
+        ) == 0:
+            return {
+                "ok": False,
+                "message": (
+                    "No valid ObjectIds registered. Each value must be a 24-char hex Mongo id."
+                ),
+                **stats,
+            }
+        return {
+            "ok": True,
+            "source": "catalog_maps",
+            "message": (
+                f"Catalog updated from explicit maps "
+                f"({stats.get('registered_sub_services', 0)} sub-services, "
+                f"{stats.get('registered_pricing_methods', 0)} pricing methods)."
+            ),
+            **stats,
+        }
+
+    # B/C) Quotes payload or fetch by project_id
+    harvest_input: Any = payload
+    parsed = _parse_quotes_payload(payload)
+    fetched_empty = False
+    if not parsed and isinstance(payload, (dict, list)) and payload not in (None, {}, []):
+        harvest_input = payload
+    elif parsed:
+        harvest_input = parsed
+    elif query_project_id and auth_header:
+        harvest_input = await run_in_threadpool(
+            fetch_project_quotes, query_project_id, auth_header
+        )
+        if not harvest_input:
+            fetched_empty = True
+    else:
+        harvest_input = []
+
+    if not harvest_input:
+        if fetched_empty:
+            return {
+                "ok": False,
+                "message": (
+                    f"Tatva quotes API returned 0 quotes for project_id={query_project_id}. "
+                    "Ask PM why GET /vendor/api/vendor/quotes/project/{id}?quotationShare=true "
+                    "is empty, or POST an explicit catalog map / paste quote JSON with workItems."
+                ),
+                "project_id": query_project_id,
+                "quotes": 0,
+            }
+        return {
+            "ok": False,
+            "message": (
+                "Provide one of: (1) {sub_services, pricing_methods} id maps, "
+                "(2) Tatva quote JSON with workItems, "
+                "(3) project_id + Authorization to fetch quotes."
+            ),
+        }
+
+    stats = await run_in_threadpool(harvest_ids_from_quotes, harvest_input)
+    if stats.get("quotes", 0) == 0 and stats.get("work_items", 0) == 0:
+        return {
+            "ok": False,
+            "message": "No work items with subService/pricingMethod found in payload.",
+            **stats,
+        }
+    return {
+        "ok": True,
+        "source": "quotes",
+        "message": (
+            f"Catalog updated from {stats.get('quotes', 0)} quotes "
+            f"({stats.get('work_items', 0)} work items)."
+        ),
+        **stats,
+    }
 
 
 def _probe_supabase_tables() -> dict:
@@ -834,6 +1042,8 @@ async def sync_mongodb_quotes(payload: Any=Body(...), session_id: str = None): #
                     category_name = service_obj.get("serviceId", {}).get("name", "General")
                     
                     for work_item in service_obj.get("workItems", []):
+                        from services.tatva_catalog import register_from_work_item
+                        register_from_work_item(work_item)
                         # Mapping subService -> name
                         sub_service_name = work_item.get("subService", {}).get("name", work_item.get("workTitle"))
                         
@@ -942,6 +1152,8 @@ async def sync_mongodb_quotes(payload: Any = Body(...), session_id: str = None):
                     category_name = service_obj.get("serviceId", {}).get("name", "General")
                     
                     for work_item in service_obj.get("workItems", []):
+                        from services.tatva_catalog import register_from_work_item
+                        register_from_work_item(work_item)
                         # subService -> name
                         sub_service_name = work_item.get("subService", {}).get("name", work_item.get("workTitle"))
                         
@@ -1065,6 +1277,8 @@ def _ingest_quotes_to_supabase(quotes_list: list, session_id: str) -> int:
             for service_obj in section.get("services", []):
                 category_name = service_obj.get("serviceId", {}).get("name", "General")
                 for work_item in service_obj.get("workItems", []):
+                    from services.tatva_catalog import register_from_work_item
+                    register_from_work_item(work_item)
                     sub_service_name = work_item.get("subService", {}).get("name", "General Service")
                     pricing_list = work_item.get("pricingInput", [])
                     pricing = pricing_list[0] if pricing_list else {}
@@ -1092,6 +1306,17 @@ async def _run_mongodb_sync_pipeline(session_id: str, quotes_list: list):
     """Background worker: compare in-memory from payloads, persist to Supabase after."""
     total = len(quotes_list)
     try:
+        # Learn Tatva ObjectIds from quote payloads so market-rate responses include them.
+        from services.tatva_catalog import harvest_ids_from_quotes
+
+        harvested = await run_in_threadpool(harvest_ids_from_quotes, quotes_list)
+        print(
+            f"📇 Catalog harvest: {harvested.get('work_items', 0)} work items → "
+            f"{harvested.get('sub_services', 0)} sub-services, "
+            f"{harvested.get('pricing_methods', 0)} pricing methods "
+            f"(+{harvested.get('new_sub_services', 0)} / +{harvested.get('new_pricing_methods', 0)} new)"
+        )
+
         _set_progress(
             session_id,
             status="processing",

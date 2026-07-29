@@ -1,6 +1,6 @@
 /** Shared project / quote types for dashboard + compare UI. */
 
-export type QuoteStatus = "draft" | "submitted" | "revised";
+export type QuoteStatus = "draft" | "submitted" | "revised" | "finalized";
 
 /** Quote type as set on the Tatva PM platform (matches backend service_type). */
 export type QuoteTier = "ESSENTIAL" | "MID_SEGMENT" | "LUXURY";
@@ -37,7 +37,7 @@ export type ProjectData = {
   service: TatvaService;
   projectCode: string;
   clientName: string;
-  status: "in_progress" | "quotes_received" | "comparing";
+  status: "in_progress" | "quotes_received" | "comparing" | "completed";
   brief: string;
   vendors: ProjectVendor[];
 };
@@ -48,6 +48,8 @@ export type ProjectSummary = Pick<
 > & {
   vendorCount: number;
   quoteCount: number;
+  /** Quote-level only — does not change project.status. */
+  finalizedQuoteCount: number;
   updatedAt: string;
 };
 
@@ -150,6 +152,11 @@ export function toProjectSummary(
   project: ProjectData,
   updatedAt?: string
 ): ProjectSummary {
+  const quoteCount = project.vendors.reduce((n, v) => n + v.quotes.length, 0);
+  const finalizedQuoteCount = project.vendors.reduce(
+    (n, v) => n + v.quotes.filter((q) => q.status === "finalized").length,
+    0
+  );
   return {
     id: project.id,
     title: project.title,
@@ -159,7 +166,8 @@ export function toProjectSummary(
     status: project.status,
     brief: project.brief,
     vendorCount: project.vendors.length,
-    quoteCount: project.vendors.reduce((n, v) => n + v.quotes.length, 0),
+    quoteCount,
+    finalizedQuoteCount,
     updatedAt:
       updatedAt ??
       project.vendors[0]?.quotes[0]?.date ??

@@ -482,7 +482,7 @@ def _market_hint_message(market_rate: float, pricing_method: str, weight: int) -
 
 
 def _label_ids(sub_service: str, pricing_method: str) -> dict:
-    """Attach Tatva ObjectIds when the static catalog knows the labels."""
+    """Attach Tatva ObjectIds when the catalog (live or static) knows the labels."""
     from services.tatva_catalog import resolve_pricing_method_id, resolve_sub_service_id
 
     return {
@@ -541,8 +541,23 @@ def list_market_rates_by_category(
     sub_service: str | None = None,
     pricing_method: str | None = None,
     entered_rate: float | None = None,
+    service_id: str | None = None,
 ) -> dict:
     """Return all recommendable bundles for one service category (PM bulk-load)."""
+    # Refresh ObjectId maps from Tatva admin catalogs (cached) so new items
+    # tomorrow get ids without a redeploy. Falls back to static JSON if no token.
+    try:
+        from services.tatva_catalog import ensure_live_catalog
+
+        ensure_live_catalog(
+            service_id=service_id,
+            service_category=service_category,
+            force=False,
+            persist=False,
+        )
+    except Exception as e:
+        print(f"⚠️ Live Tatva catalog refresh skipped: {e}")
+
     cat = normalize_text(service_category, "")
     if not cat:
         return {
@@ -633,6 +648,13 @@ def recommend_rate(
     - entered_rate > base (even ₹1 above) → recommend=true.
     No ±% interval / band — compare to the single base only.
     """
+    try:
+        from services.tatva_catalog import ensure_live_catalog
+
+        ensure_live_catalog(service_category=service_category, force=False, persist=False)
+    except Exception as e:
+        print(f"⚠️ Live Tatva catalog refresh skipped (suggest): {e}")
+
     lookup = lookup_market_rate(service_type, service_category, sub_service, pricing_method)
     if not lookup:
         return {

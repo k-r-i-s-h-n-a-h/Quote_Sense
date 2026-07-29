@@ -2,8 +2,16 @@
 Tatva PM ObjectId catalogs for market-rate API responses.
 
 Maps human labels ↔ Mongo ObjectIds so PM can filter by id (preferred)
-or label (fallback). Static JSON is the seed; Mongo quote ingest learns
-more IDs at runtime and persists them when the filesystem is writable.
+or label (fallback).
+
+Sources (in order):
+  1. Live Tatva admin catalogs (cached) — preferred for new IDs tomorrow
+  2. Static JSON seed files
+  3. Learned IDs from quote workItems / explicit sync-catalog maps
+
+Live endpoints (auth via TATVA_API_KEY → x-api-key header):
+  GET {TATVA_API_BASE}/admin/api/admin/quote-subservices?serviceId=…
+  GET {TATVA_API_BASE}/admin/api/admin/pricing-methods
 """
 
 from __future__ import annotations
@@ -11,7 +19,18 @@ from __future__ import annotations
 import json
 import os
 import re
+import ssl
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
 from pathlib import Path
+from typing import Any
+
+try:
+    import certifi
+except ImportError:
+    certifi = None
 
 _DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 _SUB_FILE = _DATA_DIR / "tatva_sub_service_ids.json"
@@ -28,6 +47,25 @@ _PM_LABEL_ALIASES: dict[str, tuple[str, ...]] = {
     "area(in sqm)": ("Area(in sqm)", "Area (in sqm)", "Area in sqm"),
     "area (in sqm)": ("Area(in sqm)", "Area (in sqm)", "Area in sqm"),
     "area (in sqmm)": ("Area (in sqmm)", "Area(in sqmm)"),
+    "area (sqft)/per unit": ("Area (sqft)/Per Unit", "Area (in sqft)", "Area (sqft)"),
+}
+
+# Seed label ↔ Tatva admin catalog name (same ObjectId).
+_SUB_LABEL_ALIASES: dict[str, tuple[str, ...]] = {
+    "wardrobe": ("Wardrobe", "Wardrobes"),
+    "wardrobes": ("Wardrobe", "Wardrobes"),
+    "tv unit": ("TV Unit", "TV Units"),
+    "tv units": ("TV Unit", "TV Units"),
+    "crockery unit": ("Crockery Unit", "Crockery Units"),
+    "crockery units": ("Crockery Unit", "Crockery Units"),
+    "vanity unit": ("Vanity Unit", "Vanity Units"),
+    "vanity units": ("Vanity Unit", "Vanity Units"),
+    "middle unit": ("Middle unit", "Middle Unit"),
+    "loft": ("Loft", "Loft & Door Type"),
+    "tandem channel": ("Tandem channels", "Tandem Channels"),
+    "tandem channels": ("Tandem channels", "Tandem Channels"),
+    "bottle pullout": ("Bottle Pullouts", "Bottle Pullout"),
+    "bottle pullouts": ("Bottle Pullouts", "Bottle Pullout"),
 }
 
 _sub_by_label: dict[str, str] | None = None
@@ -35,6 +73,10 @@ _pm_by_label: dict[str, str] | None = None
 _sub_by_id: dict[str, str] | None = None
 _pm_by_id: dict[str, str] | None = None
 _service_ids: set[str] | None = None
+
+# Live-fetch cache keys → last successful refresh time.
+_LIVE_AT: dict[str, float] = {}
+_DEFAULT_LIVE_TTL_SEC = 3600
 
 
 def _load_label_map(path: Path) -> dict[str, str]:
@@ -151,7 +193,15 @@ def is_object_id(value: str | None) -> bool:
 def resolve_sub_service_id(label: str | None) -> str | None:
     _ensure_maps_loaded()
     key = (label or "").strip().casefold()
-    return _sub_by_label.get(key) if key and _sub_by_label is not None else None
+    if not key or _sub_by_label is None:
+        return None
+    if key in _sub_by_label:
+        return _sub_by_label[key]
+    for alias in _SUB_LABEL_ALIASES.get(key, ()):
+        oid = _sub_by_label.get(alias.casefold())
+        if oid:
+            return oid
+    return None
 
 
 def resolve_pricing_method_id(label: str | None) -> str | None:
@@ -238,11 +288,13 @@ def register_sub_service(label: str | None, object_id: str | None, *, persist: b
     _ensure_maps_loaded()
     assert _sub_by_label is not None and _sub_by_id is not None
     key = name.casefold()
-    if _sub_by_label.get(key) == oid and _sub_by_id.get(oid.lower()) == name:
-        return
+    changed = _sub_by_label.get(key) != oid or _sub_by_id.get(oid.lower()) != name
     _sub_by_label[key] = oid
     _sub_by_id[oid.lower()] = name
-    if persist:
+    for alias in _SUB_LABEL_ALIASES.get(key, ()):
+        _sub_by_label[alias.casefold()] = oid
+        changed = True
+    if changed and persist:
         _persist_label_map(_SUB_FILE, _sub_by_label, _sub_by_id)
 
 
@@ -448,3 +500,320 @@ def split_service_and_category_ids(
             out_quote = out_quote or cid
 
     return out_service, out_quote
+
+
+def _tatva_api_base() -> str:
+    return os.getenv("TATVA_API_BASE", "https://devopsapi.withtatva.ai").rstrip("/")
+
+
+def _live_ttl_sec() -> float:
+    raw = (os.getenv("TATVA_CATALOG_CACHE_TTL") or "").strip()
+    try:
+        return max(60.0, float(raw)) if raw else float(_DEFAULT_LIVE_TTL_SEC)
+    except ValueError:
+        return float(_DEFAULT_LIVE_TTL_SEC)
+
+
+def _ssl_context() -> ssl.SSLContext:
+    if certifi is not None:
+        return ssl.create_default_context(cafile=certifi.where())
+    return ssl.create_default_context()
+
+
+def _admin_auth_headers() -> dict[str, str] | None:
+    """
+    Auth for Tatva admin catalog GETs.
+
+    Preferred (PM service key):
+      TATVA_API_KEY → header x-api-key
+
+    Legacy fallback (login JWT):
+      TATVA_ADMIN_TOKEN / TATVA_CATALOG_BEARER → Authorization: Bearer …
+    """
+    headers: dict[str, str] = {"Accept": "application/json"}
+
+    api_key = (os.getenv("TATVA_API_KEY") or "").strip()
+    if api_key:
+        headers["x-api-key"] = api_key
+        return headers
+
+    token = (
+        os.getenv("TATVA_ADMIN_TOKEN")
+        or os.getenv("TATVA_CATALOG_BEARER")
+        or ""
+    ).strip()
+    if not token:
+        return None
+    if not token.lower().startswith("bearer "):
+        token = f"Bearer {token}"
+    headers["Authorization"] = token
+    return headers
+
+
+def _catalog_auth_missing_message() -> str:
+    return (
+        "TATVA_API_KEY is not set (preferred: x-api-key). "
+        "Legacy: TATVA_ADMIN_TOKEN / TATVA_CATALOG_BEARER."
+    )
+
+
+def _http_get_json(url: str, headers: dict[str, str]) -> Any | None:
+    req = urllib.request.Request(url, headers=headers, method="GET")
+    try:
+        with urllib.request.urlopen(req, timeout=30, context=_ssl_context()) as resp:
+            body = resp.read().decode("utf-8")
+            return json.loads(body) if body else None
+    except (urllib.error.HTTPError, urllib.error.URLError, json.JSONDecodeError, TimeoutError) as e:
+        print(f"⚠️ Tatva catalog GET failed ({url}): {e}")
+        return None
+
+
+def _unwrap_catalog_list(payload: Any) -> list[dict]:
+    """Accept common Tatva list wrappers: data[], data.docs, items, results."""
+    if isinstance(payload, list):
+        return [x for x in payload if isinstance(x, dict)]
+    if not isinstance(payload, dict):
+        return []
+    for key in ("data", "items", "results", "docs", "subServices", "pricingMethods"):
+        val = payload.get(key)
+        if isinstance(val, list):
+            return [x for x in val if isinstance(x, dict)]
+        if isinstance(val, dict):
+            for nested_key in ("docs", "items", "results", "data"):
+                nested = val.get(nested_key)
+                if isinstance(nested, list):
+                    return [x for x in nested if isinstance(x, dict)]
+    return []
+
+
+def _entry_name_and_id(entry: dict) -> tuple[str | None, str | None]:
+    name = (
+        entry.get("name")
+        or entry.get("label")
+        or entry.get("title")
+        or entry.get("subServiceName")
+        or entry.get("pricingMethodName")
+    )
+    oid = entry.get("_id") or entry.get("id")
+    name_s = str(name or "").strip() or None
+    oid_s = str(oid or "").strip() or None
+    if oid_s and not is_object_id(oid_s):
+        oid_s = None
+    return name_s, oid_s
+
+
+def _cache_fresh(key: str) -> bool:
+    at = _LIVE_AT.get(key)
+    if at is None:
+        return False
+    return (time.time() - at) < _live_ttl_sec()
+
+
+def _mark_cache(key: str) -> None:
+    _LIVE_AT[key] = time.time()
+
+
+def fetch_pricing_methods_from_tatva(*, force: bool = False, persist: bool = False) -> dict[str, Any]:
+    """
+    GET /admin/api/admin/pricing-methods → register name→_id in memory.
+    """
+    cache_key = "pricing_methods"
+    if not force and _cache_fresh(cache_key):
+        _ensure_maps_loaded()
+        return {
+            "ok": True,
+            "cached": True,
+            "registered": 0,
+            "pricing_methods": len(_pm_by_label or {}),
+        }
+
+    headers = _admin_auth_headers()
+    if not headers:
+        return {
+            "ok": False,
+            "cached": False,
+            "registered": 0,
+            "message": _catalog_auth_missing_message(),
+        }
+
+    path = (
+        os.getenv("TATVA_PRICING_METHODS_PATH")
+        or "/admin/api/admin/pricing-methods"
+    ).strip()
+    if not path.startswith("/"):
+        path = "/" + path
+    url = f"{_tatva_api_base()}{path}"
+    payload = _http_get_json(url, headers)
+    if payload is None:
+        return {
+            "ok": False,
+            "cached": False,
+            "registered": 0,
+            "message": "Failed to fetch pricing-methods from Tatva.",
+            "url": url,
+        }
+
+    before = len(_pm_map())
+    registered = 0
+    for entry in _unwrap_catalog_list(payload):
+        name, oid = _entry_name_and_id(entry)
+        if not name or not oid:
+            continue
+        register_pricing_method(name, oid, persist=False)
+        registered += 1
+
+    if persist and registered:
+        _ensure_maps_loaded()
+        assert _pm_by_label is not None and _pm_by_id is not None
+        _persist_label_map(_PM_FILE, _pm_by_label, _pm_by_id)
+
+    _mark_cache(cache_key)
+    return {
+        "ok": True,
+        "cached": False,
+        "registered": registered,
+        "pricing_methods": len(_pm_by_label or {}),
+        "new": max(0, len(_pm_by_label or {}) - before),
+        "url": url,
+    }
+
+
+def fetch_sub_services_from_tatva(
+    service_id: str,
+    *,
+    force: bool = False,
+    persist: bool = False,
+) -> dict[str, Any]:
+    """
+    GET /admin/api/admin/quote-subservices?serviceId=… → register name→_id.
+    """
+    sid = (service_id or "").strip()
+    if not sid:
+        return {"ok": False, "registered": 0, "message": "service_id is required."}
+
+    cache_key = f"sub_services:{sid}"
+    if not force and _cache_fresh(cache_key):
+        _ensure_maps_loaded()
+        return {
+            "ok": True,
+            "cached": True,
+            "registered": 0,
+            "service_id": sid,
+            "sub_services": len(_sub_by_label or {}),
+        }
+
+    headers = _admin_auth_headers()
+    if not headers:
+        return {
+            "ok": False,
+            "cached": False,
+            "registered": 0,
+            "service_id": sid,
+            "message": _catalog_auth_missing_message(),
+        }
+
+    path = (
+        os.getenv("TATVA_SUBSERVICES_PATH")
+        or "/admin/api/admin/quote-subservices"
+    ).strip()
+    if not path.startswith("/"):
+        path = "/" + path
+    qs = urllib.parse.urlencode({"serviceId": sid, "page": "1", "limit": "500"})
+    url = f"{_tatva_api_base()}{path}?{qs}"
+    payload = _http_get_json(url, headers)
+    if payload is None:
+        return {
+            "ok": False,
+            "cached": False,
+            "registered": 0,
+            "service_id": sid,
+            "message": "Failed to fetch quote-subservices from Tatva.",
+            "url": url,
+        }
+
+    before = len(_sub_map())
+    registered = 0
+    for entry in _unwrap_catalog_list(payload):
+        name, oid = _entry_name_and_id(entry)
+        if not name or not oid:
+            continue
+        register_sub_service(name, oid, persist=False)
+        registered += 1
+
+    if persist and registered:
+        _ensure_maps_loaded()
+        assert _sub_by_label is not None and _sub_by_id is not None
+        _persist_label_map(_SUB_FILE, _sub_by_label, _sub_by_id)
+
+    _mark_cache(cache_key)
+    return {
+        "ok": True,
+        "cached": False,
+        "registered": registered,
+        "service_id": sid,
+        "sub_services": len(_sub_by_label or {}),
+        "new": max(0, len(_sub_by_label or {}) - before),
+        "url": url,
+    }
+
+
+def service_id_for_category(service_category: str | None) -> str | None:
+    """Reverse-lookup main service ObjectId from static service map (by category name)."""
+    cat = (service_category or "").strip().casefold()
+    if not cat:
+        return None
+    try:
+        raw = json.loads(_SERVICE_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(raw, dict):
+        return None
+    for sid, entry in raw.items():
+        if not isinstance(entry, dict):
+            continue
+        name = str(entry.get("service_category") or "").strip().casefold()
+        if name == cat and is_object_id(str(sid)):
+            return str(sid).strip()
+    return None
+
+
+def ensure_live_catalog(
+    *,
+    service_id: str | None = None,
+    service_category: str | None = None,
+    force: bool = False,
+    persist: bool = False,
+) -> dict[str, Any]:
+    """
+    Refresh in-memory ObjectId maps from Tatva admin catalogs.
+
+    Call before /by-category so responses include sub_service_id / pricing_id.
+    Cache TTL defaults to 1h (TATVA_CATALOG_CACHE_TTL) so new Tatva items
+    appear after the next refresh without a redeploy.
+    """
+    sid = (service_id or "").strip() or None
+    if not sid and service_category:
+        sid = service_id_for_category(service_category)
+
+    pm = fetch_pricing_methods_from_tatva(force=force, persist=persist)
+    sub: dict[str, Any] = {"ok": True, "skipped": True, "registered": 0}
+    if sid:
+        sub = fetch_sub_services_from_tatva(sid, force=force, persist=persist)
+    else:
+        sub = {
+            "ok": False,
+            "skipped": True,
+            "registered": 0,
+            "message": "No service_id — skipped quote-subservices fetch.",
+        }
+
+    _ensure_maps_loaded()
+    return {
+        "ok": bool(pm.get("ok")) or bool(sub.get("ok")),
+        "service_id": sid,
+        "pricing_methods": pm,
+        "sub_services": sub,
+        "catalog_sub_services": len(_sub_by_label or {}),
+        "catalog_pricing_methods": len(_pm_by_label or {}),
+        "has_catalog_auth": _admin_auth_headers() is not None,
+    }

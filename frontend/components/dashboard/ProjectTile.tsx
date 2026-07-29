@@ -9,6 +9,7 @@ const STATUS_STYLE: Record<ProjectSummary["status"], string> = {
   in_progress: "bg-blue-50 text-blue-700",
   quotes_received: "bg-emerald-50 text-emerald-700",
   comparing: "bg-amber-50 text-amber-700",
+  completed: "bg-violet-50 text-violet-700",
 };
 
 type ProjectTileProps = {
@@ -27,8 +28,9 @@ export function ProjectTile({ project }: ProjectTileProps) {
         </span>
         <span
           className={`text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full capitalize ${STATUS_STYLE[project.status]}`}
+          title="Project status"
         >
-          {project.status.replace("_", " ")}
+          {project.status.replaceAll("_", " ")}
         </span>
       </div>
 
@@ -40,12 +42,15 @@ export function ProjectTile({ project }: ProjectTileProps) {
       </h3>
       <p className="text-xs text-slate-500 mt-2 line-clamp-2 flex-1">{project.brief}</p>
 
-      <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+      <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500 gap-2">
         <span>{project.service.name}</span>
-        <span className="font-medium text-slate-700">
+        <span className="font-medium text-slate-700 text-right">
           {project.vendorCount} vendor{project.vendorCount === 1 ? "" : "s"}
           {project.quoteCount > 0
             ? ` · ${project.quoteCount} quote${project.quoteCount === 1 ? "" : "s"}`
+            : ""}
+          {project.finalizedQuoteCount > 0
+            ? ` · ${project.finalizedQuoteCount} finalized`
             : ""}
         </span>
       </div>

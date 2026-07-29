@@ -448,6 +448,7 @@ async def market_rate_by_category(
             list_market_rates_by_category,
             resolved["service_category"],
             resolved_type,
+            service_id=resolved["service_id"],
             **list_kwargs,
         )
         result["service_id"] = resolved["service_id"]
@@ -639,22 +640,56 @@ async def market_rate_sync_catalog(
     """
     Fill sub_service_id / pricing_id catalogs used by /by-category and /suggest.
 
-    Three ways:
-      A) POST explicit maps from PM (preferred when quotes API is empty):
+    Four ways:
+      A) POST ?live=1&service_id=… — fetch Tatva admin catalogs (needs TATVA_API_KEY)
+      B) POST explicit maps from PM:
            { "sub_services": {"Wardrobe":"<oid>"}, "pricing_methods": {"Area (sqft)":"<oid>"} }
-      B) POST Tatva project-quotes JSON (workItems with nested _id fields)
-      C) POST ?project_id=... + Authorization: Bearer <jwt> (backend fetches quotes)
+      C) POST Tatva project-quotes JSON (workItems with nested _id fields)
+      D) POST ?project_id=... + Authorization: Bearer <jwt> (backend fetches quotes)
     """
     from services.tatva_catalog import (
         apply_catalog_maps,
+        ensure_live_catalog,
         harvest_ids_from_quotes,
         payload_looks_like_catalog_maps,
     )
 
     query_project_id = project_id or request.query_params.get("project_id")
     auth_header = authorization or request.headers.get("authorization")
+    live = (request.query_params.get("live") or "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+    live_service_id = (
+        request.query_params.get("service_id")
+        or (payload.get("service_id") if isinstance(payload, dict) else None)
+    )
 
-    # A) Explicit label → ObjectId maps from PM
+    # A) Live Tatva admin catalogs
+    if live:
+        stats = await run_in_threadpool(
+            ensure_live_catalog,
+            service_id=str(live_service_id).strip() if live_service_id else None,
+            force=True,
+            persist=True,
+        )
+        ok = bool(stats.get("ok")) and (
+            (stats.get("pricing_methods") or {}).get("ok")
+            or (stats.get("sub_services") or {}).get("ok")
+        )
+        return {
+            "ok": ok,
+            "source": "tatva_admin_live",
+            "message": (
+                "Catalog refreshed from Tatva admin APIs."
+                if ok
+                else "Live catalog refresh failed — set TATVA_API_KEY and check paths."
+            ),
+            **stats,
+        }
+
+    # B) Explicit label → ObjectId maps from PM
     if payload_looks_like_catalog_maps(payload):
         stats = await run_in_threadpool(
             apply_catalog_maps,

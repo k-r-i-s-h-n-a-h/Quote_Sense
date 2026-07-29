@@ -68,10 +68,43 @@ Auth: none.
 
 Match locally with `sub_service_id` + `pricing_id` when present; otherwise `sub_service_label` + `pricing_method_label`.
 
-### Filling ObjectIds (QuoteSense catalog)
+### Filling ObjectIds (live Tatva catalogs — preferred)
 
-Market-rate seeds store **labels only**. ObjectIds come from Tatva
-(`workItems[].subService._id`, `workItems[].pricingMethod._id`).
+QuoteSense resolves `sub_service_id` / `pricing_id` from Tatva admin APIs
+(cached ~1h), so new items added tomorrow appear after the next refresh
+**without** editing static JSON or redeploying.
+
+Set on Render / local `.env`:
+
+```bash
+TATVA_API_BASE=https://devopsapi.withtatva.ai
+TATVA_API_KEY=<PM service key>
+```
+
+APIs used automatically on `/by-category`:
+
+```text
+GET {TATVA_API_BASE}/admin/api/admin/quote-subservices?serviceId={service_id}
+GET {TATVA_API_BASE}/admin/api/admin/pricing-methods
+x-api-key: {TATVA_API_KEY}
+```
+
+Force refresh + persist to disk:
+
+```bash
+curl -X POST "https://tatvaops-quotesense.onrender.com/api/market-rate/sync-catalog?live=1&service_id=6926b1978ba6a3cfc5a191ce"
+```
+
+Static JSON (`backend/data/tatva_*_ids.json`) remains a **fallback** when the
+API key is missing or Tatva is down.
+
+**Aliases:** seed labels like `Wardrobe` / `Area (sqft)` map to Tatva names
+`Wardrobes` / `Area (in sqft)` when the live catalog uses those spellings.
+
+**Still null?** Only when Tatva has no matching catalog row for that seed label
+(e.g. a spreadsheet item not in PM’s quote-subservices list).
+
+### Filling ObjectIds (manual / quotes harvest)
 
 **Preferred when quotes API returns empty — ask PM for a label→id map, then:**
 

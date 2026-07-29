@@ -154,6 +154,15 @@ export default function ProjectHub({ project }: ProjectHubProps) {
     [project.vendors]
   );
 
+  const finalizedQuotes = useMemo(
+    () =>
+      project.vendors.reduce(
+        (n, v) => n + v.quotes.filter((q) => q.status === "finalized").length,
+        0
+      ),
+    [project.vendors]
+  );
+
   return (
     <div className="min-h-screen bg-[#f8fafc] pb-28">
       {/* Project header */}
@@ -185,9 +194,23 @@ export default function ProjectHub({ project }: ProjectHubProps) {
               {totalQuotes > 0
                 ? ` · ${totalQuotes} quote${totalQuotes === 1 ? "" : "s"}`
                 : ""}
+              {finalizedQuotes > 0
+                ? ` · ${finalizedQuotes} finalized`
+                : ""}
             </span>
-            <span className="inline-flex items-center px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-medium capitalize">
-              {project.status.replace("_", " ")}
+            <span
+              className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium capitalize ${
+                project.status === "completed"
+                  ? "bg-violet-50 text-violet-800"
+                  : project.status === "comparing"
+                    ? "bg-amber-50 text-amber-700"
+                    : project.status === "quotes_received"
+                      ? "bg-emerald-50 text-emerald-700"
+                      : "bg-blue-50 text-blue-700"
+              }`}
+              title="Project lifecycle status — independent of quote finalize"
+            >
+              {project.status.replaceAll("_", " ")}
             </span>
           </div>
         </div>

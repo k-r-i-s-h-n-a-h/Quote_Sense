@@ -14,6 +14,7 @@ const STATUS_STYLE: Record<QuoteStatus, string> = {
   draft: "bg-slate-100 text-slate-600",
   submitted: "bg-emerald-50 text-emerald-700",
   revised: "bg-amber-50 text-amber-700",
+  finalized: "bg-violet-50 text-violet-800",
 };
 
 type QuoteRowProps = {
@@ -60,6 +61,7 @@ export function QuoteRow({
           <span className="font-semibold text-slate-900 text-sm">#{quote.quoteNumber}</span>
           <span
             className={`text-[10px] font-medium uppercase tracking-wide px-1.5 py-0.5 rounded ${STATUS_STYLE[quote.status]}`}
+            title="Quote status"
           >
             {quote.status}
           </span>

@@ -101,15 +101,25 @@ function resolveService(name: string): TatvaService {
   return { id: slug, name: name || "General", icon: serviceIconForName(name) };
 }
 
-function mapProjectStatus(raw: string, hasVendors = false): ProjectData["status"] {
+function isFinalizeFlag(raw: RawRecord): boolean {
+  const v = raw.isFinalizeQuote ?? raw.isFinalizedQuote ?? raw.finalizeQuote;
+  return v === true || v === "true" || v === 1 || v === "1";
+}
+
+function mapProjectStatus(raw: string, hasQuotesOrVendors = false): ProjectData["status"] {
+  /** Project lifecycle only — never derived from quote isFinalizeQuote. */
   const s = raw.toLowerCase().replace(/\s+/g, "_");
+  if (s.includes("complete") || s.includes("closed") || s.includes("done")) {
+    return "completed";
+  }
   if (s.includes("compar")) return "comparing";
   if (s.includes("quote") || s.includes("received") || s.includes("submitted")) {
     return "quotes_received";
   }
-  if (hasVendors && (s.includes("progress") || s.includes("created"))) {
+  if (hasQuotesOrVendors && (s.includes("progress") || s.includes("created") || !s)) {
     return "quotes_received";
   }
+  if (hasQuotesOrVendors) return "quotes_received";
   return "in_progress";
 }
 
@@ -160,8 +170,10 @@ function formatQuoteDate(raw: unknown): string {
   return s;
 }
 
-function mapQuoteStatus(raw: string): QuoteStatus {
+function mapQuoteStatus(raw: string, finalized = false): QuoteStatus {
+  if (finalized) return "finalized";
   const s = raw.toLowerCase();
+  if (s.includes("finaliz") || s.includes("complete")) return "finalized";
   if (s.includes("draft")) return "draft";
   if (s.includes("revis")) return "revised";
   return "submitted";
@@ -311,13 +323,14 @@ export function mapApiProject(raw: RawRecord): ProjectData {
 
 export function mapApiQuote(raw: RawRecord): VendorQuote {
   const tier = mapQuoteTier(raw);
+  const finalized = isFinalizeFlag(raw);
   return {
     id: asString(raw._id || raw.id),
     quoteNumber: asString(raw.quoteNumber, "—"),
     label: quoteLabel(raw),
     amount: extractGrandTotal(raw),
     date: formatQuoteDate(raw.quoteDate || raw.createdAt),
-    status: mapQuoteStatus(asString(raw.status, "submitted")),
+    status: mapQuoteStatus(asString(raw.status, "submitted"), finalized),
     lineItems: countLineItems(raw),
     tier,
   };
@@ -368,7 +381,11 @@ export function mapApiProjectsList(payload: unknown): ProjectSummary[] {
     const quotes = unwrapApiList(raw.quotes);
     if (quotes.length > 0) {
       project.vendors = groupQuotesByVendor(quotes);
-      project.status = "quotes_received";
+      // Quotes present → project is at least quotes_received, unless Tatva already
+      // marked the project completed/comparing. Never use isFinalizeQuote here.
+      if (project.status === "in_progress") {
+        project.status = "quotes_received";
+      }
     }
     return toProjectSummary(project, formatProjectDate(raw.updatedAt || raw.createdAt));
   });
@@ -397,7 +414,9 @@ export function buildProjectWithQuotes(
   const quoteVendors = groupQuotesByVendor(quotes);
   if (quoteVendors.length > 0) {
     base.vendors = quoteVendors;
-    base.status = "quotes_received";
+    if (base.status === "in_progress") {
+      base.status = "quotes_received";
+    }
   } else if (base.vendors.length === 0 && projectRaw) {
     base.vendors = mapAssignedVendors(projectRaw);
   }
@@ -411,7 +430,14 @@ export function buildProjectWithQuotes(
     const projectRef = asRecord(firstQuote.projectId);
     if (projectRef) {
       base.projectCode = asString(projectRef.projectId, base.projectCode);
-      base.status = mapProjectStatus(asString(projectRef.status, base.status));
+      // Only fall back to nested project status when we have no project document.
+      // Never let quote payload (or isFinalizeQuote) rewrite project lifecycle status.
+      if (!projectRaw && asString(projectRef.status)) {
+        base.status = mapProjectStatus(
+          asString(projectRef.status),
+          quoteVendors.length > 0
+        );
+      }
     }
     const title = asString(firstQuote.projectTitle);
     if (title) {
@@ -420,5 +446,6 @@ export function buildProjectWithQuotes(
     }
   }
 
+  // Quote finalize flags only affect VendorQuote.status ("finalized"), never project.status.
   return base;
 }

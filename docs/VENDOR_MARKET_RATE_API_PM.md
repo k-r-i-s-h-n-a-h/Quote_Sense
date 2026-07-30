@@ -166,6 +166,13 @@ On rate blur: if `entered_rate > market_rate` (recommended base from the sheet),
 
 No ±% interval / band — compare to the single spreadsheet base rate only.
 
+### Freezing base rates (ops)
+
+Set `MARKET_RATE_UPDATES_ENABLED=false` on the backend (Render + local `.env`) so
+compare/finalize **do not** rewrite `market_moving_averages` / session logs.
+Recommendations still read the seeded bases. Set back to `true` when you want
+finalized/compare rates to update the moving average again.
+
 Prefer `sub_service_id` + `pricing_id` when the form has ObjectIds; labels still work.
 
 ---

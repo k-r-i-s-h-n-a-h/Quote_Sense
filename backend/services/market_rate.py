@@ -9,6 +9,7 @@ Values are raw per-unit rates — GST is the vendor's choice, not normalized her
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 from services.env_config import get_supabase_client
@@ -42,6 +43,19 @@ ABOVE_MARKET_MESSAGE = (
     "Current rates exceed the recommended base rate of {amount}. "
     "Kindly review your pricing to improve closure rates."
 )
+
+
+def market_rate_updates_enabled() -> bool:
+    """
+    When false, compare/finalize must not rewrite market_moving_averages
+    (keeps spreadsheet base rates frozen). Recommendations still read the table.
+
+    Env: MARKET_RATE_UPDATES_ENABLED=false|0|no  → frozen
+         unset / true / 1 / yes                 → updates allowed (default)
+    """
+    raw = (os.getenv("MARKET_RATE_UPDATES_ENABLED") or "true").strip().lower()
+    return raw in ("1", "true", "yes", "on")
+
 
 # Vendors sometimes fill Rate = 1 as a form placeholder on line items priced
 # "On Actuals" / "Per Project" — the real total lives in Amount instead. A rate
@@ -353,6 +367,15 @@ def update_rate_moving_average(
     """Merge session batch of raw rates into stored weighted moving average."""
     key = bundle_key(service_type, service_category, sub_service, pricing_method)
     label = f"{key['sub_service']} / {key['pricing_method']}"
+
+    # Frozen base rates: read existing seed, never write averages or sessions.
+    if not market_rate_updates_enabled():
+        existing = fetch_market_rate_row(key)
+        if existing:
+            rate = float(existing.get("rate_moving_average") or existing.get("moving_average") or 0)
+            return rate, int(existing.get("weight") or 0)
+        return 0.0, 0
+
     positive = [float(r) for r in batch_rates if r and float(r) > 0]
     batch_weight = len(positive)
 
@@ -773,6 +796,19 @@ def finalize_session_market_rates(session_id: str, df=None) -> dict:
     sid = (session_id or "").strip()
     if not sid:
         return {"ok": False, "error": "session_id is required"}
+
+    if not market_rate_updates_enabled():
+        print(
+            f"ℹ️ MARKET_RATE_UPDATES_ENABLED=false — skipping average update "
+            f"for session {sid} (seed base rates stay frozen)."
+        )
+        return {
+            "ok": True,
+            "session_id": sid,
+            "skipped": True,
+            "reason": "MARKET_RATE_UPDATES_ENABLED=false",
+            "bundles_updated": 0,
+        }
 
     # Always re-fetch from DB: in-memory compare_df lacks quote_id + pre-set timestamps.
     db_df = fetch_data(sid)

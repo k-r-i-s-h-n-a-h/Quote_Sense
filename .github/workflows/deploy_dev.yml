@@ -18,6 +18,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       #- name: Normalize commit author to the Vercel account
        # run: |
@@ -38,6 +40,43 @@ jobs:
       - name: Verify production build
         working-directory: ./frontend
         run: npm run build
+
+      # ==========================================================
+      # SONARQUBE CODE ANALYSIS
+      # The application source code is inside the frontend folder.
+      # ==========================================================
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@v8.2.1
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
+        with:
+          projectBaseDir: frontend
+          args: >
+            -Dsonar.projectKey=Quotesense-Dev
+            -Dsonar.projectName=Quotesense-Dev
+            -Dsonar.sources=.
+            -Dsonar.sourceEncoding=UTF-8
+            -Dsonar.exclusions=node_modules/**,.next/**,.vercel/**,coverage/**,dist/**,build/**,public/**
+
+      # ==========================================================
+      # SONARQUBE QUALITY GATE
+      # Deployment stops here if the Quality Gate fails.
+      # ==========================================================
+      - name: SonarQube Quality Gate Check
+        id: sonarqube-quality-gate-check
+        uses: SonarSource/sonarqube-quality-gate-action@v1.2.0
+        timeout-minutes: 5
+        with:
+          pollingTimeoutSec: 300
+          scanMetadataReportFile: frontend/.scannerwork/report-task.txt
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
+
+      - name: Show SonarQube Quality Gate Status
+        run: |
+          echo "Quality Gate status: ${{ steps.sonarqube-quality-gate-check.outputs.quality-gate-status }}"
 
       - name: Install Vercel CLI
         run: npm install --global vercel@latest

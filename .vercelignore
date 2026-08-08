@@ -1,0 +1,13 @@
+# Keep Vercel uploads small when deploying from the monorepo root
+# (QA project Root Directory = frontend).
+backend
+docs
+supabase
+.github
+.cursor
+**/node_modules
+**/.next
+**/.venv
+**/venv
+**/.git
+*.log

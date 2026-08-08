@@ -88,7 +88,8 @@ jobs:
           echo "Quality Gate status: ${{ steps.sonarqube-quality-gate-check.outputs.quality-gate-status }}"
 
       - name: Install Vercel CLI
-        run: npm install --global vercel@latest
+        # Align with Vercel API requirement (>= 47.2.2); pin for reproducible CI.
+        run: npm install --global vercel@47.2.2
 
       - name: Sync Tatva API URL on Vercel
         working-directory: ./frontend
@@ -98,4 +99,4 @@ jobs:
 
       - name: Deploy to Vercel
         working-directory: ./frontend
-        run: vercel deploy --prod --token=$VERCEL_TOKEN
+        run: vercel deploy --prod --yes --token=$VERCEL_TOKEN

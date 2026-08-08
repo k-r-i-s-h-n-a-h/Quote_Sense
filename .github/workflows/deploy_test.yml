@@ -37,8 +37,9 @@ jobs:
         run: npm run build
 
       - name: Install Vercel CLI
-        # Pin CLI — @latest has hung in CI for this project.
-        run: npm install --global vercel@41.3.2
+        # Vercel API requires CLI >= 47.2.2; keep a pin (not @latest) for CI stability.
+        # Always pass --yes so non-interactive runs do not hang on prod confirm.
+        run: npm install --global vercel@47.2.2
 
       # QA project Root Directory = "frontend" → run vercel from repo root.
       # --yes is mandatory in CI (no TTY); otherwise deploy waits forever.

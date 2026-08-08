@@ -17,6 +17,7 @@ export default function LoginModal({ open, onClose }: LoginModalProps) {
   const [loading, setLoading] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
   const phoneRef = useRef<HTMLInputElement>(null);
+  const verifyingRef = useRef(false);
 
   useEffect(() => {
     if (open) {
@@ -74,13 +75,31 @@ export default function LoginModal({ open, onClose }: LoginModalProps) {
     }
   };
 
+  const submitOtp = async (code: string) => {
+    const trimmed = code.replace(/\D/g, "").slice(0, 6);
+    if (trimmed.length !== 6 || verifyingRef.current) return;
+    verifyingRef.current = true;
+    setLoading(true);
+    try {
+      const ok = await verifyOtp(cleanedPhone, trimmed);
+      if (ok) onClose();
+    } finally {
+      setLoading(false);
+      verifyingRef.current = false;
+    }
+  };
+
   const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!otp.trim()) return;
-    setLoading(true);
-    const ok = await verifyOtp(cleanedPhone, otp.trim());
-    setLoading(false);
-    if (ok) onClose();
+    await submitOtp(otp);
+  };
+
+  const handleOtpChange = (value: string) => {
+    const digits = value.replace(/\D/g, "").slice(0, 6);
+    setOtp(digits);
+    if (digits.length === 6) {
+      void submitOtp(digits);
+    }
   };
 
   const canSend = cleanedPhone.length >= 10 && !loading;
@@ -155,20 +174,18 @@ export default function LoginModal({ open, onClose }: LoginModalProps) {
             <input
               type="text"
               inputMode="numeric"
+              autoComplete="one-time-code"
               maxLength={6}
               placeholder="Enter 6-digit OTP"
               value={otp}
-              onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
+              onChange={(e) => handleOtpChange(e.target.value)}
+              disabled={loading}
               autoFocus
-              className="w-full px-4 py-3.5 border border-slate-200 rounded-xl text-slate-800 text-center text-lg tracking-[0.3em] placeholder:text-slate-400 placeholder:tracking-normal placeholder:text-base focus:outline-none focus:ring-2 focus:ring-[#c04a00]/30 focus:border-[#c04a00] transition-all"
+              className="w-full px-4 py-3.5 border border-slate-200 rounded-xl text-slate-800 text-center text-lg tracking-[0.3em] placeholder:text-slate-400 placeholder:tracking-normal placeholder:text-base focus:outline-none focus:ring-2 focus:ring-[#c04a00]/30 focus:border-[#c04a00] transition-all disabled:opacity-70"
             />
-            <button
-              type="submit"
-              disabled={otp.length < 4 || loading}
-              className="w-full py-3.5 rounded-xl font-semibold text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-gradient-to-b from-[#c04a00] to-[#9a3a00] hover:from-[#d45500] hover:to-[#a84000] shadow-sm"
-            >
-              {loading ? "Verifying…" : "Verify & Sign In"}
-            </button>
+            <p className="text-xs text-slate-500 text-center">
+              {loading ? "Verifying…" : "Sign-in runs automatically after 6 digits"}
+            </p>
             <div className="flex items-center justify-center gap-3 text-sm">
               <button
                 type="button"

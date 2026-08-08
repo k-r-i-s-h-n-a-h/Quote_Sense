@@ -6,6 +6,7 @@ import {
 import type { ProjectData, ProjectSummary } from "./project-types";
 import { getAuthToken, getAuthUserId } from "./auth";
 import { cacheProjectQuotePayloads } from "./compare-payload-cache";
+import { applyFinalizedQuotesInBackground } from "./market-rate-apply";
 import {
   findProjectRawByRef,
   isMongoObjectId,
@@ -111,6 +112,9 @@ export async function fetchProjectWithQuotes(
     projectCode: publicRef,
     mongoId,
   });
+
+  // User-selected finalized quote(s) only → market_moving_averages (not compare).
+  applyFinalizedQuotesInBackground(rawQuotes);
 
   return { ok: true, project };
 }

@@ -47,8 +47,9 @@ ABOVE_MARKET_MESSAGE = (
 
 def market_rate_updates_enabled() -> bool:
     """
-    When false, compare/finalize must not rewrite market_moving_averages
-    (keeps spreadsheet base rates frozen). Recommendations still read the table.
+    When false, finalized-quote MA writers must not rewrite market_moving_averages
+    (keeps seed base rates frozen). Recommendations still read the table.
+    Compare sessions never write MA — only isFinalizeQuote payloads do.
 
     Env: MARKET_RATE_UPDATES_ENABLED=false|0|no  → frozen
          unset / true / 1 / yes                 → updates allowed (default)
@@ -761,7 +762,7 @@ def update_rates_from_dataframe(df, session_id: str, fast: bool = False) -> dict
 def quote_number_is_rate_source_already(quote_number: str) -> bool:
     """
     Return True if a quote with this number has already been recorded in Supabase.
-    Used to detect re-uploads so we can skip re-applying their rates to the moving average.
+    Used on re-ingest so staging cleanup can skip double bookkeeping for the same number.
     """
     if not quote_number or not quote_number.strip():
         return False
@@ -780,78 +781,204 @@ def quote_number_is_rate_source_already(quote_number: str) -> bool:
         return False
 
 
+def _unwrap_quote_dict(quote_entry: Any) -> dict:
+    if not isinstance(quote_entry, dict):
+        return {}
+    inner = quote_entry.get("data") or quote_entry.get("quote")
+    if isinstance(inner, dict) and (
+        "quoteNumber" in inner
+        or "vendorDetail" in inner
+        or "workSummary" in inner
+        or "isFinalizeQuote" in inner
+        or "isFinalizedQuote" in inner
+        or "is_finalized" in inner
+        or "isFinalized" in inner
+    ):
+        return inner
+    return quote_entry
+
+
+def is_finalize_quote_flag(quote_entry: Any) -> bool:
+    """True when Tatva/platform marks this payload as the user-selected final quote."""
+    raw = _unwrap_quote_dict(quote_entry)
+    # camelCase (Tatva UI) + snake_case (some APIs) + short aliases
+    for key in (
+        "isFinalizeQuote",
+        "isFinalizedQuote",
+        "isFinalized",
+        "finalizeQuote",
+        "is_finalize_quote",
+        "is_finalized_quote",
+        "is_finalized",
+        "finalized",
+    ):
+        v = raw.get(key)
+        if v is True or v == 1 or v == "1" or str(v).strip().lower() == "true":
+            return True
+    return False
+
+
+def finalized_quote_session_id(quote_entry: Any) -> str:
+    """Stable session key so the same finalized quote is never applied twice."""
+    raw = _unwrap_quote_dict(quote_entry)
+    quote_number = str(raw.get("quoteNumber") or "").lstrip("#").strip()
+    quote_id = str(raw.get("_id") or raw.get("id") or "").strip()
+    key = quote_number or quote_id or "unknown"
+    return f"finalize:{key}"
+
+
+def finalize_quote_already_applied_to_ma(quote_entry: Any) -> bool:
+    """Check market_moving_avg_sessions for a prior apply of this finalized quote."""
+    sid = finalized_quote_session_id(quote_entry)
+    if not _sessions_table_available():
+        return False
+    try:
+        res = (
+            get_supabase_client()
+            .table("market_moving_avg_sessions")
+            .select("id")
+            .eq("session_id", sid)
+            .limit(1)
+            .execute()
+        )
+        return bool(res.data)
+    except Exception:
+        return False
+
+
+def apply_finalized_quotes_to_market_rates(
+    quotes_list: list | None,
+    *,
+    source: str = "finalize-quote",
+) -> dict:
+    """
+    Merge rates into market_moving_averages for quotes the user selected as final
+    (isFinalizeQuote / isFinalizedQuote / finalizeQuote).
+
+    Compare sessions only stage/compare selected quotes — they must not call this
+    for every row; only payloads that carry the finalize flag are eligible.
+    """
+    if not market_rate_updates_enabled():
+        print(
+            f"ℹ️ MARKET_RATE_UPDATES_ENABLED=false — skipping finalized-quote MA "
+            f"apply (source={source})."
+        )
+        return {
+            "ok": True,
+            "skipped": True,
+            "reason": "MARKET_RATE_UPDATES_ENABLED=false",
+            "quotes_considered": 0,
+            "quotes_applied": 0,
+            "bundles_updated": 0,
+        }
+
+    entries = list(quotes_list or [])
+    finalized = [q for q in entries if is_finalize_quote_flag(q)]
+    if not finalized:
+        return {
+            "ok": True,
+            "skipped": True,
+            "reason": "no_finalized_quotes",
+            "quotes_considered": len(entries),
+            "quotes_applied": 0,
+            "bundles_updated": 0,
+        }
+
+    from services.comparator import mongodb_quotes_to_dataframe
+
+    applied: list[dict] = []
+    skipped_already: list[str] = []
+    total_bundles = 0
+    errors: list[str] = []
+
+    for quote_entry in finalized:
+        raw = _unwrap_quote_dict(quote_entry)
+        label = str(raw.get("quoteNumber") or raw.get("_id") or "quote").strip()
+        sid = finalized_quote_session_id(quote_entry)
+
+        if finalize_quote_already_applied_to_ma(quote_entry):
+            skipped_already.append(label)
+            print(f"  ⏭️ Finalized quote #{label} already in MA — skip re-apply")
+            continue
+
+        try:
+            df = mongodb_quotes_to_dataframe([quote_entry])
+            bundles = update_rates_from_dataframe(df, sid, fast=False)
+            total_bundles += len(bundles)
+            applied.append(
+                {
+                    "quote_number": str(raw.get("quoteNumber") or "").lstrip("#").strip(),
+                    "quote_id": str(raw.get("_id") or raw.get("id") or "").strip(),
+                    "session_id": sid,
+                    "bundles_updated": len(bundles),
+                }
+            )
+            print(
+                f"  ✅ Finalized quote #{label} → market MA "
+                f"({len(bundles)} bundles, session={sid}, source={source})"
+            )
+        except Exception as e:
+            msg = f"{label}: {e}"
+            errors.append(msg)
+            print(f"⚠️ Could not apply finalized quote #{label} to MA: {e}")
+
+    return {
+        "ok": len(errors) == 0,
+        "source": source,
+        "quotes_considered": len(entries),
+        "finalized_found": len(finalized),
+        "quotes_applied": len(applied),
+        "skipped_already_applied": skipped_already,
+        "bundles_updated": total_bundles,
+        "applied": applied,
+        "errors": errors,
+    }
+
+
 def finalize_session_market_rates(session_id: str, df=None) -> dict:
     """
-    Merge this session's rates into market_moving_averages, then mark quotes
-    with market_rates_applied_at so scheduled cleanup can delete raw rows later.
+    After a compare session finishes: mark staging quote rows for cleanup only.
 
-    Always fetches from Supabase (ignores any passed-in df) so that:
-    - quote_id linkage is available for duplicate filtering
-    - quotes pre-marked as rate-duplicates (market_rates_applied_at != NULL at insert)
-      are excluded from the moving-average update
+    Does NOT update market_moving_averages. Compare uses only the quotes the user
+    selected for that session (e.g. 3 of N); those rates stay compare/display-only.
+
+    Market averages are updated solely via apply_finalized_quotes_to_market_rates()
+    when a quote carries isFinalizeQuote.
     """
     from datetime import datetime, timezone
-    from services.comparator import fetch_data
 
     sid = (session_id or "").strip()
     if not sid:
         return {"ok": False, "error": "session_id is required"}
 
-    if not market_rate_updates_enabled():
-        print(
-            f"ℹ️ MARKET_RATE_UPDATES_ENABLED=false — skipping average update "
-            f"for session {sid} (seed base rates stay frozen)."
-        )
-        return {
-            "ok": True,
-            "session_id": sid,
-            "skipped": True,
-            "reason": "MARKET_RATE_UPDATES_ENABLED=false",
-            "bundles_updated": 0,
-        }
-
-    # Always re-fetch from DB: in-memory compare_df lacks quote_id + pre-set timestamps.
-    db_df = fetch_data(sid)
-
-    # Filter out items that belong to quotes already pre-marked as rate-duplicates
-    # (market_rates_applied_at is set at INSERT time when the quote_number already existed).
-    skipped_quotes = 0
-    if "quote_id" in db_df.columns and "market_rates_applied_at" in db_df.columns:
-        dup_mask = db_df["market_rates_applied_at"].notna()
-        if dup_mask.any():
-            dup_quote_ids = db_df.loc[dup_mask, "quote_id"].unique()
-            skipped_quotes = len(dup_quote_ids)
-            db_df = db_df[~dup_mask].copy()
-            print(
-                f"  ⏭️ Skipping {skipped_quotes} duplicate quote(s) from market rate update "
-                f"(same quote_number already in moving average)"
-            )
-
-    bundles = update_rates_from_dataframe(db_df, sid, fast=False)
+    # Intentionally ignore df and never call update_rates_from_dataframe here.
+    _ = df
     applied_at = datetime.now(timezone.utc).isoformat()
 
     try:
-        # Mark ALL quotes in session (incl. duplicates) so cleanup can delete raw rows.
         get_supabase_client().table("quotes").update(
             {"market_rates_applied_at": applied_at}
         ).eq("session_id", sid).is_("market_rates_applied_at", "null").execute()
     except Exception as e:
-        print(f"⚠️ Could not set market_rates_applied_at for {sid}: {e}")
+        print(f"⚠️ Could not set market_rates_applied_at for compare session {sid}: {e}")
         return {
             "ok": False,
             "session_id": sid,
-            "bundles_updated": len(bundles),
+            "bundles_updated": 0,
             "error": str(e),
+            "market_rates_written": False,
         }
 
     print(
-        f"  ✅ Market rates finalized for {sid}: "
-        f"{len(bundles)} bundles, skipped_duplicates={skipped_quotes}, applied_at={applied_at}"
+        f"  ✅ Compare session {sid} staging marked for cleanup "
+        f"(no MA write; only finalized quotes update market averages), "
+        f"applied_at={applied_at}"
     )
     return {
         "ok": True,
         "session_id": sid,
-        "bundles_updated": len(bundles),
-        "skipped_duplicate_quotes": skipped_quotes,
+        "bundles_updated": 0,
+        "market_rates_written": False,
         "applied_at": applied_at,
+        "reason": "compare_session_cleanup_only",
     }

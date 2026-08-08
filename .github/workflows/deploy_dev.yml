@@ -41,9 +41,14 @@ jobs:
         working-directory: ./frontend
         run: npm run build
 
+      - name: Run frontend unit tests with coverage
+        working-directory: ./frontend
+        run: npm run test:coverage
+
       # ==========================================================
       # SONARQUBE CODE ANALYSIS
       # The application source code is inside the frontend folder.
+      # Coverage comes from vitest (lcov) so Sonar is not stuck at 0%.
       # ==========================================================
       - name: SonarQube Scan
         uses: SonarSource/sonarqube-scan-action@v8.2.1
@@ -56,8 +61,11 @@ jobs:
             -Dsonar.projectKey=Quotesense-Dev
             -Dsonar.projectName=Quotesense-Dev
             -Dsonar.sources=.
+            -Dsonar.tests=lib/__tests__
+            -Dsonar.test.inclusions=**/*.test.ts,**/*.test.tsx
+            -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
             -Dsonar.sourceEncoding=UTF-8
-            -Dsonar.exclusions=node_modules/**,.next/**,.vercel/**,coverage/**,dist/**,build/**,public/**
+            -Dsonar.exclusions=node_modules/**,.next/**,.vercel/**,coverage/**,dist/**,build/**,public/**,**/*.test.ts,**/*.test.tsx,vitest.config.ts
 
       # ==========================================================
       # SONARQUBE QUALITY GATE

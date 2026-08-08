@@ -48,6 +48,7 @@ from services.env_config import env_diagnostics, get_supabase_client
 from services.tatva_fetch import fetch_project_quotes, filter_quotes_by_ids
 from services.market_rate import (
     DEFAULT_SERVICE_TYPE,
+    apply_finalized_quotes_to_market_rates,
     finalize_session_market_rates,
     list_market_rates_by_category,
     recommend_rate,
@@ -630,6 +631,39 @@ async def market_rate_recommend(body: MarketRateRequest):
     )
 
 
+@app.post("/api/market-rate/apply-finalized")
+async def market_rate_apply_finalized(payload: Any = Body(default=None)):
+    """
+    Apply market_moving_averages updates from user-finalized quote payload(s) only.
+
+    Body: one quote object, a list, or { "quotes": [...] }.
+    Only entries with isFinalizeQuote / isFinalizedQuote / finalizeQuote=true are used.
+    Idempotent per quote number (session key finalize:<quoteNumber>).
+    """
+    quotes: list = []
+    if isinstance(payload, list):
+        quotes = payload
+    elif isinstance(payload, dict):
+        raw = payload.get("quotes") or payload.get("data") or payload.get("items")
+        if isinstance(raw, list):
+            quotes = raw
+        elif payload:
+            quotes = [payload]
+    if not quotes:
+        return {
+            "ok": False,
+            "status": "error",
+            "message": "POST one or more Tatva quote payloads (must include isFinalizeQuote).",
+        }
+
+    result = await run_in_threadpool(
+        lambda: apply_finalized_quotes_to_market_rates(
+            quotes, source="api-apply-finalized"
+        )
+    )
+    return {"status": "success" if result.get("ok") else "partial", **result}
+
+
 @app.post("/api/market-rate/sync-catalog")
 async def market_rate_sync_catalog(
     request: Request,
@@ -912,9 +946,10 @@ async def _run_compare_pipeline(session_id, saved_files):
             return
 
         try:
+            # Staging cleanup only — compare never writes market_moving_averages.
             await run_in_threadpool(finalize_session_market_rates, session_id, None)
         except Exception as finalize_err:
-            print(f"⚠️ Market rate finalize failed for {session_id}: {finalize_err}")
+            print(f"⚠️ Compare session cleanup failed for {session_id}: {finalize_err}")
 
         _set_progress(
             session_id,
@@ -1270,9 +1305,7 @@ def _ingest_quotes_to_supabase(quotes_list: list, session_id: str) -> int:
         meta = _mongodb_quote_metadata(quote_data)
 
         # quoteType is set once per quote on the Tatva platform (essential /
-        # midlevel / luxury) — every line item inherits it. Real submitted quotes
-        # now feed market_moving_averages directly per their own tier, instead of
-        # the old math-derived Mid-segment/Luxury rows (Essential × multiplier).
+        # midlevel / luxury) — every line item inherits it for compare display.
         quote_service_type = normalize_service_type(quote_data.get("quoteType"))
 
         grand_total = 0
@@ -1280,13 +1313,14 @@ def _ingest_quotes_to_supabase(quotes_list: list, session_id: str) -> int:
             if "grand total" in str(item.get("label", "")).lower():
                 grand_total = item.get("value", 0)
 
-        # Detect re-uploaded quotes; pre-mark to prevent double-counting in moving avg.
+        # Detect re-uploaded quote numbers for staging bookkeeping only.
+        # Market MA is only written for isFinalizeQuote payloads elsewhere.
         quote_number = meta["quote_number"]
         is_rate_duplicate = quote_number_is_rate_source_already(quote_number)
         if is_rate_duplicate:
             print(
-                f"  ⚠️ Quote #{quote_number} ({vendor_name}) already in market rates — "
-                "keeping for comparison display but skipping rate re-application."
+                f"  ⚠️ Quote #{quote_number} ({vendor_name}) already staged before — "
+                "keeping for comparison display."
             )
 
         quote_res = get_supabase_client().table("quotes").insert({
@@ -1395,11 +1429,17 @@ async def _run_mongodb_sync_pipeline(session_id: str, quotes_list: list):
 
         try:
             await run_in_threadpool(_ingest_quotes_to_supabase, quotes_list, session_id)
-            # Pass None so finalize always re-fetches from DB — needed for duplicate
-            # quote filtering (pre-marked market_rates_applied_at) and quote_id linkage.
+            # Compare staging cleanup only — never write MA from the full session.
             await run_in_threadpool(finalize_session_market_rates, session_id, None)
+            # If any payload in this request is already the user-finalized quote,
+            # merge only those into market_moving_averages (deduped by quote number).
+            await run_in_threadpool(
+                lambda: apply_finalized_quotes_to_market_rates(
+                    quotes_list, source="compare-session-payload"
+                )
+            )
         except Exception as persist_err:
-            print(f"⚠️ Supabase persist/finalize failed for {session_id}: {persist_err}")
+            print(f"⚠️ Supabase persist/cleanup/finalize-MA failed for {session_id}: {persist_err}")
 
         _set_progress(
             session_id,

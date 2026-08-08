@@ -230,11 +230,12 @@ def _generate_recommendation(summary_prompt, chart_data):
         ex.shutdown(wait=False)
 
 
-def run_comparison(session_id, on_matrix_ready=None, df=None, fast_moving_avg=False):
+def run_comparison(session_id, on_matrix_ready=None, df=None, fast_moving_avg=True):
     """Build the comparison matrix, then generate the recommendation.
 
     If ``df`` is provided (MongoDB/Tatva payload lane), skip the Supabase fetch.
-    ``fast_moving_avg`` uses in-session averages only — no per-row Supabase writes.
+    ``fast_moving_avg`` (default True) uses in-session / seed lookups only —
+    no market_moving_averages writes. MA updates only run from finalized quotes.
     """
     try:
         if df is None:
@@ -514,9 +515,8 @@ def mongodb_quotes_to_dataframe(quotes_list: list):
         vendor_key = f"{company} ({source_filename})"
 
         # quoteType is set once per quote on the Tatva platform (essential /
-        # midlevel / luxury) — every line item in this quote shares it. This
-        # replaces the old math-derived Mid-segment/Luxury rows: real submitted
-        # quotes now feed market_moving_averages directly, per their own tier.
+        # midlevel / luxury) — every line item in this quote shares it for compare.
+        # Market averages update only from isFinalizeQuote via apply_finalized_*.
         quote_service_type = normalize_service_type(quote_data.get("quoteType"))
 
         for section in quote_data.get("workSummary") or []:

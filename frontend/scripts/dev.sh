@@ -21,7 +21,8 @@ DEBUG_LOG="/Users/krishnahonnikhere/Desktop/tatvaops-quotesense/.cursor/debug-da
 _ts() { echo $(($(date +%s) * 1000)); }
 _dbg() {
   local hid="$1" msg="$2" data="$3"
-  printf '%s\n' "{\"sessionId\":\"da6531\",\"runId\":\"startup\",\"hypothesisId\":\"$hid\",\"location\":\"dev.sh\",\"message\":\"$msg\",\"data\":$data,\"timestamp\":$(_ts)}" >> "$DEBUG_LOG" 2>/dev/null || true
+  # Never break startup if .cursor logs are not writable
+  { printf '%s\n' "{\"sessionId\":\"da6531\",\"runId\":\"startup\",\"hypothesisId\":\"$hid\",\"location\":\"dev.sh\",\"message\":\"$msg\",\"data\":$data,\"timestamp\":$(_ts)}" >> "$DEBUG_LOG"; } 2>/dev/null || true
 }
 # #endregion
 

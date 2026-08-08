@@ -18,6 +18,7 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
   const nameRef = useRef<HTMLInputElement>(null);
+  const verifyingRef = useRef(false);
 
   useEffect(() => {
     if (!isLoading && isAuthenticated) {
@@ -73,16 +74,34 @@ export default function RegisterPage() {
     }
   };
 
+  const submitOtp = async (code: string) => {
+    const trimmed = code.replace(/\D/g, "").slice(0, 6);
+    if (trimmed.length !== 6 || verifyingRef.current) return;
+    verifyingRef.current = true;
+    setLoading(true);
+    try {
+      const ok = await verifyOtp(cleanedPhone, trimmed, {
+        name: name.trim(),
+        email: email.trim(),
+      });
+      if (ok) router.replace("/");
+    } finally {
+      setLoading(false);
+      verifyingRef.current = false;
+    }
+  };
+
   const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!otp.trim()) return;
-    setLoading(true);
-    const ok = await verifyOtp(cleanedPhone, otp.trim(), {
-      name: name.trim(),
-      email: email.trim(),
-    });
-    setLoading(false);
-    if (ok) router.replace("/");
+    await submitOtp(otp);
+  };
+
+  const handleOtpChange = (value: string) => {
+    const digits = value.replace(/\D/g, "").slice(0, 6);
+    setOtp(digits);
+    if (digits.length === 6) {
+      void submitOtp(digits);
+    }
   };
 
   return (
@@ -169,21 +188,19 @@ export default function RegisterPage() {
               id="otp"
               type="text"
               inputMode="numeric"
+              autoComplete="one-time-code"
               maxLength={6}
               placeholder="Enter 6-digit OTP"
               value={otp}
-              onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
+              onChange={(e) => handleOtpChange(e.target.value)}
+              disabled={loading}
               autoFocus
               className={`${inputClass} text-center text-lg tracking-[0.3em]`}
             />
+            <p className="mt-2 text-xs text-slate-500 text-center">
+              {loading ? "Creating account…" : "Account is created automatically after 6 digits"}
+            </p>
           </div>
-          <button
-            type="submit"
-            disabled={otp.length < 4 || loading}
-            className="w-full py-3.5 rounded-xl font-semibold text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-gradient-to-b from-[#c04a00] to-[#9a3a00] hover:from-[#d45500] hover:to-[#a84000] shadow-sm"
-          >
-            {loading ? "Creating account…" : "Create account"}
-          </button>
           <div className="flex items-center justify-center gap-3 text-sm">
             <button
               type="button"

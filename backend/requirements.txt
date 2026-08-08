@@ -8,3 +8,6 @@ uvicorn
 python-multipart
 tabulate
 google-genai
+pytest
+pytest-cov
+httpx

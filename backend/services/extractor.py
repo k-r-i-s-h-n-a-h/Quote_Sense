@@ -77,14 +77,13 @@ def push_to_supabase(structured_data, filename, session_id):
 
     quote_number = str(structured_data.get("quote_number", "") or "").lstrip("#").strip()
 
-    # If this quote_number was already ingested in a previous session, pre-set
-    # market_rates_applied_at so finalize_session_market_rates skips it — preventing
-    # the same quote's rates from inflating the moving-average weight a second time.
+    # If this quote_number was already staged in a previous session, pre-set
+    # market_rates_applied_at for cleanup bookkeeping (compare never writes MA).
     is_rate_duplicate = quote_number_is_rate_source_already(quote_number)
     if is_rate_duplicate:
         print(
-            f"  ⚠️ Quote #{quote_number} already in market rates — "
-            "keeping for comparison display but skipping rate re-application."
+            f"  ⚠️ Quote #{quote_number} already staged before — "
+            "keeping for comparison display."
         )
 
     quote_payload = {
@@ -95,7 +94,7 @@ def push_to_supabase(structured_data, filename, session_id):
         "source_filename": filename,
         "session_id": session_id,
         "quote_number": quote_number,
-        # Pre-mark so finalize won't re-apply rates for this duplicate quote.
+        # Pre-mark duplicate quote numbers for staging lifecycle.
         "market_rates_applied_at": datetime.now(timezone.utc).isoformat() if is_rate_duplicate else None,
     }
 

@@ -102,7 +102,15 @@ function resolveService(name: string): TatvaService {
 }
 
 function isFinalizeFlag(raw: RawRecord): boolean {
-  const v = raw.isFinalizeQuote ?? raw.isFinalizedQuote ?? raw.finalizeQuote;
+  const v =
+    raw.isFinalizeQuote ??
+    raw.isFinalizedQuote ??
+    raw.isFinalized ??
+    raw.finalizeQuote ??
+    raw.is_finalize_quote ??
+    raw.is_finalized_quote ??
+    raw.is_finalized ??
+    raw.finalized;
   return v === true || v === "true" || v === 1 || v === "1";
 }
 

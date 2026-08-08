@@ -4,17 +4,30 @@
 
 | Table | Purpose | Retention |
 |-------|---------|-----------|
-| `quotes` + `quote_items` | Staging for compare/chat | Deleted after merge + 7 days |
+| `quotes` + `quote_items` | Staging for compare/chat | Deleted after compare session marks applied + 7 days |
 | `market_moving_averages` | Yash market-rate API | Permanent |
-| `market_moving_avg_sessions` | Dedup per compare session | Trimmed with quotes |
+| `market_moving_avg_sessions` | Dedup (incl. `finalize:<quoteNumber>`) | Trimmed with quotes |
+
+## Product rules
+
+1. User selects **2–3 quotes among N** for a compare session — only those payloads run comparison / extraction for that session.
+2. Compare is **display-only** for market averages: session rates do **not** update `market_moving_averages`.
+3. When the user marks **one quote as finalized** (`isFinalizeQuote` / `isFinalizedQuote` / `finalizeQuote`), **only that** payload’s line rates merge into `market_moving_averages`.
 
 ## Flow
 
-1. User compares quotes → rows in `quotes` / `quote_items`
-2. Compare completes → `finalize_session_market_rates()` merges rates into `market_moving_averages`
-3. Same step sets `quotes.market_rates_applied_at = now()`
-4. Daily GitHub Action runs `cleanup_comparison_sessions.py --days 7`
-5. Only rows with `market_rates_applied_at` older than 7 days are deleted
+1. User picks quotes in Project hub → compare session (session-selected quotes only).
+2. Compare completes → optional Supabase staging of those session quotes + `finalize_session_market_rates()` sets `quotes.market_rates_applied_at` for **cleanup only** (no MA write).
+3. Finalized quote path:
+   - `POST /api/market-rate/apply-finalized` with Tatva quote payload(s), and/or
+   - Project load (`fetchProjectWithQuotes`) background-applies any cached payloads with the finalize flag, and/or
+   - Compare mongo pipeline runs `apply_finalized_quotes_to_market_rates` on the session list **only if** a payload already has the finalize flag (e.g. user finalizes then re-loads project).
+4. MA apply is idempotent via session id `finalize:<quoteNumber>` in `market_moving_avg_sessions`.
+5. Daily GitHub Action runs `cleanup_comparison_sessions.py --days 7` on rows with `market_rates_applied_at` set.
+
+## Gate
+
+`MARKET_RATE_UPDATES_ENABLED=false` freezes MA writes (finalized apply becomes no-op). Compare still works.
 
 ## Do not run cleanup DELETE before backend deploy
 

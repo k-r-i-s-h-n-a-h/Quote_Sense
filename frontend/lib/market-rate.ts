@@ -1,3 +1,5 @@
+import { getBackendBase } from "./backend-url";
+
 export type MarketRateLookup = {
   recommend: boolean;
   message: string;
@@ -19,13 +21,6 @@ export type MarketRateParams = {
   entered_rate?: number;
 };
 
-function backendBase(): string {
-  return (
-    process.env.NEXT_PUBLIC_BACKEND_URL?.replace(/\/$/, "") ||
-    "http://127.0.0.1:8001"
-  );
-}
-
 export async function lookupMarketRate(
   params: MarketRateParams
 ): Promise<MarketRateLookup> {
@@ -35,7 +30,7 @@ export async function lookupMarketRate(
     sub_service: params.sub_service,
     pricing_method: params.pricing_method,
   });
-  const res = await fetch(`${backendBase()}/api/market-rate/lookup?${qs}`);
+  const res = await fetch(`${getBackendBase()}/api/market-rate/lookup?${qs}`);
   if (!res.ok) {
     return { recommend: false, message: "Could not load market data." };
   }
@@ -45,7 +40,7 @@ export async function lookupMarketRate(
 export async function recommendMarketRate(
   params: MarketRateParams
 ): Promise<MarketRateLookup> {
-  const res = await fetch(`${backendBase()}/api/market-rate/recommend`, {
+  const res = await fetch(`${getBackendBase()}/api/market-rate/recommend`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({

@@ -87,7 +87,7 @@ export default function MarketRateDemoPage() {
           serviceCategory={category}
           subService={subService}
           pricingMethod={pricingMethod}
-          enteredRate={rate ? parseFloat(rate) : undefined}
+          enteredRate={rate ? Number.parseFloat(rate) : undefined}
         />
       </div>
     </div>

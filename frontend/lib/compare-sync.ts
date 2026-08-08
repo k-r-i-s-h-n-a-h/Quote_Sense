@@ -36,7 +36,7 @@ function syncMongoUrl(sessionId: string, projectMongoId?: string): string {
 
 export function newComparisonSessionId(): string {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
-    return `session_${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`;
+    return `session_${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`;
   }
   return `session_${Date.now().toString(36)}`;
 }

@@ -8,5 +8,5 @@ export function getBackendBase(): string {
     process.env.BACKEND_URL ||
     process.env.NEXT_PUBLIC_BACKEND_URL ||
     "http://127.0.0.1:8001";
-  return raw.replace(/\/$/, "");
+  return raw.endsWith("/") ? raw.slice(0, -1) : raw;
 }

@@ -38,16 +38,18 @@ export function PdfUploadRecoveryModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}
-      onClick={onClose}
     >
-      <div
-        className="w-full max-w-md rounded-2xl bg-white shadow-xl border border-slate-200 p-6"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <button
+        type="button"
+        className="absolute inset-0 bg-slate-900/40 border-0 cursor-default"
+        aria-label="Dismiss dialog"
+        onClick={onClose}
+      />
+      <div className="relative z-10 w-full max-w-md rounded-2xl bg-white shadow-xl border border-slate-200 p-6">
         <h2 id={titleId} className="text-lg font-bold text-slate-900">
           PDF upload under recovery
         </h2>

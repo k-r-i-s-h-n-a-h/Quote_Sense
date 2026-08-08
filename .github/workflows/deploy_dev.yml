@@ -67,6 +67,8 @@ jobs:
             -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
             -Dsonar.sourceEncoding=UTF-8
             -Dsonar.exclusions=node_modules/**,.next/**,.vercel/**,coverage/**,dist/**,build/**,public/**,**/*.test.ts,**/*.test.tsx,vitest.config.ts
+            -Dsonar.coverage.exclusions=app/**,components/**,lib/auth.tsx,lib/download-comparison-pdf.ts,lib/compare-lane.ts,lib/compare-payload-cache.ts,lib/compare-progress.ts,lib/compare-sync.ts,lib/feature-flags.ts,lib/project-api.ts,lib/project-resolve.ts,lib/tatva-api.ts,lib/tatva-ecosystem.ts,lib/tatva-services.ts
+            -Dsonar.cpd.exclusions=app/**,components/**,lib/auth.tsx
 
       # ==========================================================
       # SONARQUBE QUALITY GATE

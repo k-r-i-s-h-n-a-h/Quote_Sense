@@ -3,30 +3,7 @@
  * Best-effort: never blocks project load / compare UI.
  */
 
-function isTruthyFlag(value: unknown): boolean {
-  if (value === true || value === 1) return true;
-  if (typeof value === "string") {
-    const s = value.trim().toLowerCase();
-    return s === "true" || s === "1" || s === "yes" || s === "on";
-  }
-  return false;
-}
-
-function isFinalizeFlag(raw: Record<string, unknown>): boolean {
-  for (const [k, v] of Object.entries(raw)) {
-    const key = k.toLowerCase().replace(/_/g, "");
-    if (
-      key === "isfinalizequote" ||
-      key === "isfinalizedquote" ||
-      key === "isfinalized" ||
-      key === "finalizequote" ||
-      key === "finalized"
-    ) {
-      if (isTruthyFlag(v)) return true;
-    }
-  }
-  return false;
-}
+import { isFinalizeFlagFromRecord } from "./finalize-flags";
 
 function unwrapQuote(entry: unknown): Record<string, unknown> | null {
   if (!entry || typeof entry !== "object") return null;
@@ -49,7 +26,7 @@ function unwrapQuote(entry: unknown): Record<string, unknown> | null {
 export function filterFinalizedQuotePayloads(quotes: unknown[]): unknown[] {
   return quotes.filter((q) => {
     const raw = unwrapQuote(q);
-    return raw ? isFinalizeFlag(raw) : false;
+    return raw ? isFinalizeFlagFromRecord(raw) : false;
   });
 }
 

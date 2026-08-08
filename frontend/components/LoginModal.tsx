@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import TatvaLogo from "./TatvaLogo";
 import { WhatsAppIcon } from "./WhatsAppIcon";
+import { AuthLegalFooter } from "./AuthPageLayout";
 import { useAuth } from "@/lib/auth";
 
 type LoginModalProps = {
@@ -195,7 +196,7 @@ export default function LoginModal({ open, onClose }: LoginModalProps) {
               >
                 {resendCooldown > 0 ? `Resend OTP in ${resendCooldown}s` : "Resend OTP"}
               </button>
-              <span className="text-slate-300" aria-hidden>
+              <span className="text-slate-300 px-1" aria-hidden="true">
                 ·
               </span>
               <button
@@ -217,17 +218,7 @@ export default function LoginModal({ open, onClose }: LoginModalProps) {
           <p className="mt-3 text-sm text-red-600 text-center">{otpError}</p>
         )}
 
-        <p className="mt-8 text-[11px] text-slate-400 text-center leading-relaxed">
-          By continuing, you agree to our{" "}
-          <a href="https://tatvaops.com/terms" target="_blank" rel="noopener noreferrer" className="underline hover:text-slate-600">
-            Terms of Service
-          </a>{" "}
-          and{" "}
-          <a href="https://tatvaops.com/privacy" target="_blank" rel="noopener noreferrer" className="underline hover:text-slate-600">
-            Privacy Policy
-          </a>
-          .
-        </p>
+        <AuthLegalFooter />
       </div>
     </div>
   );

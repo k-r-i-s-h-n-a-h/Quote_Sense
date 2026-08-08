@@ -3,6 +3,10 @@
  */
 
 import {
+  isFinalizeFlagFromRecord,
+  parseLooseNumber,
+} from "./finalize-flags";
+import {
   TATVA_SERVICES,
   type ProjectData,
   type ProjectSummary,
@@ -31,7 +35,7 @@ function asString(value: unknown, fallback = ""): string {
 function asNumber(value: unknown, fallback = 0): number {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string") {
-    const n = parseFloat(value.replace(/,/g, ""));
+    const n = parseLooseNumber(value);
     if (Number.isFinite(n)) return n;
   }
   return fallback;
@@ -97,39 +101,18 @@ function resolveService(name: string): TatvaService {
     (s) => s.name.toLowerCase() === name.toLowerCase()
   );
   if (match) return match;
-  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "_").slice(0, 32) || "general";
+  const slug = name.toLowerCase().replaceAll(/[^a-z0-9]+/g, "_").slice(0, 32) || "general";
   return { id: slug, name: name || "General", icon: serviceIconForName(name) };
 }
 
-function isTruthyFlag(value: unknown): boolean {
-  if (value === true || value === 1) return true;
-  if (typeof value === "string") {
-    const s = value.trim().toLowerCase();
-    return s === "true" || s === "1" || s === "yes" || s === "on";
-  }
-  return false;
-}
-
-/** Tatva final-quote flag — case-insensitive keys (isFinalizeQuote, is_finalized, …). */
+/** @deprecated Use isFinalizeFlagFromRecord — re-export for tests */
 export function isFinalizeFlag(raw: RawRecord): boolean {
-  for (const [k, v] of Object.entries(raw)) {
-    const key = k.toLowerCase().replace(/_/g, "");
-    if (
-      key === "isfinalizequote" ||
-      key === "isfinalizedquote" ||
-      key === "isfinalized" ||
-      key === "finalizequote" ||
-      key === "finalized"
-    ) {
-      if (isTruthyFlag(v)) return true;
-    }
-  }
-  return false;
+  return isFinalizeFlagFromRecord(raw);
 }
 
 function mapProjectStatus(raw: string, hasQuotesOrVendors = false): ProjectData["status"] {
   /** Project lifecycle only — never derived from quote isFinalizeQuote. */
-  const s = raw.toLowerCase().replace(/\s+/g, "_");
+  const s = raw.toLowerCase().replaceAll(/\s+/g, "_");
   if (s.includes("complete") || s.includes("closed") || s.includes("done")) {
     return "completed";
   }

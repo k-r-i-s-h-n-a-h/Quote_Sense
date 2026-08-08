@@ -7,6 +7,35 @@ const inputClass =
 
 export { inputClass };
 
+/** Shared terms/privacy notice (avoids duplicated footer markup). */
+export function AuthLegalFooter({ className = "mt-8" }: { className?: string }) {
+  return (
+    <p
+      className={`${className} text-[11px] text-slate-400 text-center leading-relaxed`}
+    >
+      By continuing, you agree to our{" "}
+      <a
+        href="https://tatvaops.com/terms"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="underline hover:text-slate-600"
+      >
+        Terms of Service
+      </a>
+      <span className="px-1">and</span>
+      <a
+        href="https://tatvaops.com/privacy"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="underline hover:text-slate-600"
+      >
+        Privacy Policy
+      </a>
+      .
+    </p>
+  );
+}
+
 type AuthPageLayoutProps = {
   title: string;
   subtitle: string;
@@ -35,27 +64,7 @@ export default function AuthPageLayout({
 
         {footer}
 
-        <p className="mt-8 text-[11px] text-slate-400 text-center leading-relaxed">
-          By continuing, you agree to our{" "}
-          <a
-            href="https://tatvaops.com/terms"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline hover:text-slate-600"
-          >
-            Terms of Service
-          </a>{" "}
-          and{" "}
-          <a
-            href="https://tatvaops.com/privacy"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline hover:text-slate-600"
-          >
-            Privacy Policy
-          </a>
-          .
-        </p>
+        <AuthLegalFooter />
       </div>
     </div>
   );

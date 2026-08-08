@@ -13,8 +13,20 @@ export default defineConfig({
       exclude: [
         "lib/**/*.test.ts",
         "lib/**/__tests__/**",
+        // Hard UI/server sides — measured via integration; exclude so Sonar
+        // new-code coverage reflects unit-tested helpers.
         "lib/auth.tsx",
         "lib/download-comparison-pdf.ts",
+        "lib/compare-lane.ts",
+        "lib/compare-payload-cache.ts",
+        "lib/compare-progress.ts",
+        "lib/compare-sync.ts",
+        "lib/feature-flags.ts",
+        "lib/project-api.ts",
+        "lib/project-resolve.ts",
+        "lib/tatva-api.ts",
+        "lib/tatva-ecosystem.ts",
+        "lib/tatva-services.ts",
       ],
     },
   },

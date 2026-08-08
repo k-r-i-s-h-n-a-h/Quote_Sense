@@ -17,10 +17,16 @@ export function vendorFileName(vendor: string): string {
 }
 
 function cleanFileName(file: string): string {
-  return file
-    .replace(/\.[a-z0-9]+$/i, "")
-    .replace(/\s*\(\d+\)\s*$/, "")
-    .trim();
+  // Avoid nested \s* quantifiers (Sonar: super-linear regex). Linear end-trim only.
+  let base = file.replace(/\.[a-z0-9]+$/i, "").trimEnd();
+  const copyIdx = base.lastIndexOf(" (");
+  if (copyIdx > 0) {
+    const suffix = base.slice(copyIdx + 2);
+    if (/^\d+\)$/.test(suffix)) {
+      base = base.slice(0, copyIdx);
+    }
+  }
+  return base.trim();
 }
 
 /**

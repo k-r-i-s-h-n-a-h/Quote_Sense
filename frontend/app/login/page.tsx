@@ -215,7 +215,7 @@ function LoginContent() {
             >
               {resendCooldown > 0 ? `Resend OTP in ${resendCooldown}s` : "Resend OTP"}
             </button>
-            <span className="text-slate-300" aria-hidden>
+            <span className="text-slate-300 px-1" aria-hidden="true">
               ·
             </span>
             <button

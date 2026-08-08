@@ -3,7 +3,16 @@ import {
   getProjectById,
   getProjectsForUser,
 } from "../dummy-project-data";
-import { isFinalizeFlag, mapApiQuote, unwrapApiList } from "../project-mappers";
+import {
+  buildProjectWithQuotes,
+  groupQuotesByVendor,
+  isFinalizeFlag,
+  mapApiProject,
+  mapApiProjectsList,
+  mapApiQuote,
+  mapQuoteTier,
+  unwrapApiList,
+} from "../project-mappers";
 import {
   findQuoteById,
   formatInr,
@@ -61,6 +70,112 @@ describe("isFinalizeQuote mapping", () => {
       isFinalizeQuote: false,
     });
     expect(q.status).toBe("submitted");
+  });
+
+  it("parses comma amounts and workSummary line counts", () => {
+    const q = mapApiQuote({
+      _id: "n",
+      quoteNumber: "Q9",
+      quoteType: "mid_level",
+      pricingSummary: [{ label: "Grand Total", value: "1,25,000" }],
+      workSummary: [
+        {
+          services: [{ workItems: [{ a: 1 }, { b: 2 }] }],
+        },
+      ],
+    });
+    expect(q.amount).toBe(125000);
+    expect(q.lineItems).toBe(2);
+    expect(q.tier).toBe("MID_SEGMENT");
+  });
+});
+
+describe("mapApiProject / grouping / build", () => {
+  it("maps a project with vendors and completed status", () => {
+    const p = mapApiProject({
+      _id: "p1",
+      status: "completed",
+      projectTitle: "Custom Build",
+      projectId: "PRJ-9",
+      vendors: [
+        {
+          vendorId: {
+            _id: "v1",
+            companyName: "Acme",
+            fullName: "Ann",
+            email: "a@x.com",
+          },
+        },
+      ],
+    });
+    expect(p.id).toBe("p1");
+    expect(p.status).toBe("completed");
+    expect(p.vendors).toHaveLength(1);
+    expect(p.vendors[0].companyName).toBe("Acme");
+  });
+
+  it("maps lux/essential tiers", () => {
+    expect(mapQuoteTier({ quoteType: "luxury" })).toBe("LUXURY");
+    expect(mapQuoteTier({ quoteType: "essential" })).toBe("ESSENTIAL");
+    expect(mapQuoteTier({})).toBeUndefined();
+  });
+
+  it("groups multiple quotes for the same vendor", () => {
+    const vendors = groupQuotesByVendor([
+      {
+        _id: "q1",
+        quoteNumber: "A",
+        vendorId: "v1",
+        vendorDetail: { companyName: "Acme" },
+        pricingSummary: [{ label: "Grand total", value: 100 }],
+      },
+      {
+        _id: "q2",
+        quoteNumber: "B",
+        vendorId: "v1",
+        vendorDetail: { companyName: "Acme" },
+        pricingSummary: [{ label: "Grand total", value: 200 }],
+      },
+    ]);
+    expect(vendors).toHaveLength(1);
+    expect(vendors[0].quotes).toHaveLength(2);
+    expect(vendors[0].quotes[0].amount).toBe(200);
+  });
+
+  it("builds project with quotes and list summaries", () => {
+    const quote = {
+      _id: "q1",
+      quoteNumber: "Q1",
+      vendorId: "v9",
+      vendorDetail: { companyName: "BuildCo", vendorName: "Bob" },
+      clientDetail: { clientName: "Client X" },
+      projectTitle: "Interior Fitout",
+      pricingSummary: [{ label: "Grand total", value: 50 }],
+    };
+    const built = buildProjectWithQuotes(null, "proj-zz", [quote]);
+    expect(built.id).toBe("proj-zz");
+    expect(built.clientName).toBe("Client X");
+    expect(built.vendors[0].companyName).toBe("BuildCo");
+    expect(built.status).toBe("quotes_received");
+
+    const withRaw = buildProjectWithQuotes(
+      { _id: "proj-zz", status: "in_progress", projectTitle: "Raw" },
+      "proj-zz",
+      [quote]
+    );
+    expect(withRaw.status).toBe("quotes_received");
+
+    const list = mapApiProjectsList({
+      projects: [
+        {
+          _id: "p2",
+          status: "in_progress",
+          quotes: [quote],
+          updatedAt: "2026-01-02T00:00:00Z",
+        },
+      ],
+    });
+    expect(list[0].quoteCount).toBeGreaterThan(0);
   });
 });
 

@@ -71,14 +71,13 @@ jobs:
           args: >
             -Dsonar.projectKey=Quotesense-Dev
             -Dsonar.projectName=Quotesense-Dev
-            -Dsonar.sources=.
+            -Dsonar.sources=lib
             -Dsonar.tests=lib/__tests__
             -Dsonar.test.inclusions=**/*.test.ts,**/*.test.tsx
             -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
             -Dsonar.sourceEncoding=UTF-8
-            -Dsonar.exclusions=node_modules/**,.next/**,.vercel/**,coverage/**,dist/**,build/**,public/**,**/*.test.ts,**/*.test.tsx,vitest.config.ts
-            -Dsonar.coverage.exclusions=app/**,components/**,lib/auth.tsx,lib/download-comparison-pdf.ts,lib/compare-lane.ts,lib/compare-payload-cache.ts,lib/compare-progress.ts,lib/compare-sync.ts,lib/feature-flags.ts,lib/project-api.ts,lib/project-resolve.ts,lib/tatva-api.ts,lib/tatva-ecosystem.ts,lib/tatva-services.ts
-            -Dsonar.cpd.exclusions=app/**,components/**,lib/auth.tsx
+            -Dsonar.exclusions=**/__tests__/**,**/*.test.ts,**/*.test.tsx,lib/auth.tsx,lib/download-comparison-pdf.ts,lib/compare-lane.ts,lib/compare-payload-cache.ts,lib/compare-progress.ts,lib/compare-sync.ts,lib/feature-flags.ts,lib/project-api.ts,lib/project-resolve.ts,lib/tatva-api.ts,lib/tatva-ecosystem.ts,lib/tatva-services.ts
+            -Dsonar.coverage.exclusions=lib/auth.tsx,lib/download-comparison-pdf.ts,lib/compare-lane.ts,lib/compare-payload-cache.ts,lib/compare-progress.ts,lib/compare-sync.ts,lib/feature-flags.ts,lib/project-api.ts,lib/project-resolve.ts,lib/tatva-api.ts,lib/tatva-ecosystem.ts,lib/tatva-services.ts
 
       - name: SonarQube Quality Gate Check
         id: sonarqube-quality-gate-check

@@ -7,13 +7,13 @@ const inputClass =
 
 export { inputClass };
 
-/** Shared terms/privacy notice (avoids duplicated footer markup). */
+/** Shared terms/privacy notice — spacing via string nodes (Sonar S6851). */
 export function AuthLegalFooter({ className = "mt-8" }: { className?: string }) {
   return (
     <p
       className={`${className} text-[11px] text-slate-400 text-center leading-relaxed`}
     >
-      By continuing, you agree to our{" "}
+      {"By continuing, you agree to our "}
       <a
         href="https://tatvaops.com/terms"
         target="_blank"
@@ -22,7 +22,7 @@ export function AuthLegalFooter({ className = "mt-8" }: { className?: string }) 
       >
         Terms of Service
       </a>
-      <span className="px-1">and</span>
+      {" and "}
       <a
         href="https://tatvaops.com/privacy"
         target="_blank"
@@ -31,7 +31,7 @@ export function AuthLegalFooter({ className = "mt-8" }: { className?: string }) 
       >
         Privacy Policy
       </a>
-      .
+      {"."}
     </p>
   );
 }

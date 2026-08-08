@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import AuthPageLayout, { inputClass } from "@/components/AuthPageLayout";
 import { WhatsAppIcon } from "@/components/WhatsAppIcon";
 import { useAuth } from "@/lib/auth";
+import { digitsOnly } from "@/lib/finalize-flags";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -44,7 +45,7 @@ export default function RegisterPage() {
     );
   }
 
-  const cleanedPhone = phone.replace(/\D/g, "");
+  const cleanedPhone = digitsOnly(phone);
   const canSend =
     name.trim().length >= 2 &&
     email.includes("@") &&
@@ -75,7 +76,7 @@ export default function RegisterPage() {
   };
 
   const submitOtp = async (code: string) => {
-    const trimmed = code.replace(/\D/g, "").slice(0, 6);
+    const trimmed = digitsOnly(code).slice(0, 6);
     if (trimmed.length !== 6 || verifyingRef.current) return;
     verifyingRef.current = true;
     setLoading(true);
@@ -97,7 +98,7 @@ export default function RegisterPage() {
   };
 
   const handleOtpChange = (value: string) => {
-    const digits = value.replace(/\D/g, "").slice(0, 6);
+    const digits = digitsOnly(value).slice(0, 6);
     setOtp(digits);
     if (digits.length === 6) {
       void submitOtp(digits);

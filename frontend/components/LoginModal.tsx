@@ -5,6 +5,7 @@ import TatvaLogo from "./TatvaLogo";
 import { WhatsAppIcon } from "./WhatsAppIcon";
 import { AuthLegalFooter } from "./AuthPageLayout";
 import { useAuth } from "@/lib/auth";
+import { digitsOnly } from "@/lib/finalize-flags";
 
 type LoginModalProps = {
   open: boolean;
@@ -51,7 +52,7 @@ export default function LoginModal({ open, onClose }: LoginModalProps) {
 
   if (!open) return null;
 
-  const cleanedPhone = phone.replace(/\D/g, "");
+  const cleanedPhone = digitsOnly(phone);
 
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,7 +78,7 @@ export default function LoginModal({ open, onClose }: LoginModalProps) {
   };
 
   const submitOtp = async (code: string) => {
-    const trimmed = code.replace(/\D/g, "").slice(0, 6);
+    const trimmed = digitsOnly(code).slice(0, 6);
     if (trimmed.length !== 6 || verifyingRef.current) return;
     verifyingRef.current = true;
     setLoading(true);
@@ -96,7 +97,7 @@ export default function LoginModal({ open, onClose }: LoginModalProps) {
   };
 
   const handleOtpChange = (value: string) => {
-    const digits = value.replace(/\D/g, "").slice(0, 6);
+    const digits = digitsOnly(value).slice(0, 6);
     setOtp(digits);
     if (digits.length === 6) {
       void submitOtp(digits);

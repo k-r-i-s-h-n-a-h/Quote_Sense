@@ -17,8 +17,16 @@ export function vendorFileName(vendor: string): string {
 }
 
 function cleanFileName(file: string): string {
-  // Avoid nested \s* quantifiers (Sonar: super-linear regex). Linear end-trim only.
-  let base = file.replace(/\.[a-z0-9]+$/i, "").trimEnd();
+  // Avoid nested quantifier regex (Sonar super-linear / S5852).
+  let base = file;
+  const dot = base.lastIndexOf(".");
+  if (dot > 0) {
+    const ext = base.slice(dot + 1);
+    if (ext.length > 0 && ext.length < 12 && /^[a-z0-9]+$/i.test(ext)) {
+      base = base.slice(0, dot);
+    }
+  }
+  base = base.trimEnd();
   const copyIdx = base.lastIndexOf(" (");
   if (copyIdx > 0) {
     const suffix = base.slice(copyIdx + 2);
@@ -114,10 +122,11 @@ export function buildVendorLabels(
     if (quoteNumber && variant) {
       const q = quoteNumber.toLowerCase();
       const tokens = variant.split(/\s+/).filter(Boolean);
-      const filtered = tokens.filter(
-        (tok) => tok.replace(/^#/, "").toLowerCase() !== q
-      );
-      variant = filtered.join(" ").trim();
+      const filtered = tokens.filter((tok) => {
+          const normalized = tok.startsWith("#") ? tok.slice(1) : tok;
+          return normalized.toLowerCase() !== q;
+        });
+        variant = filtered.join(" ").trim();
     }
 
     const label = variant ? `${company} — ${variant}` : company;

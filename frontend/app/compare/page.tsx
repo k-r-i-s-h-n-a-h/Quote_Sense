@@ -805,11 +805,10 @@ function QuoteSenseContent() {
                         return (
                           <React.Fragment key={si}>
                             {si > 0 && (
-                              <tr className="pointer-events-none select-none">
+                              <tr role="presentation">
                                 <td
                                   colSpan={vendors.length + 2}
                                   className="h-3 p-0 bg-[#f8fafc] border-0"
-                                  aria-hidden="true"
                                 />
                               </tr>
                             )}

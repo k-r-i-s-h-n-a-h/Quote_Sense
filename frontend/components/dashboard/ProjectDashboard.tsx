@@ -80,10 +80,7 @@ export default function ProjectDashboard() {
           </div>
 
           <PdfUploadGateButton className="shrink-0 inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-sm font-semibold text-white bg-[#c04a00] hover:bg-[#a84000] transition-colors shadow-sm whitespace-nowrap">
-            <span className="text-base leading-none" aria-hidden>
-              📄
-            </span>
-            <span>Upload & compare PDFs</span>
+            Upload & compare PDFs
           </PdfUploadGateButton>
         </div>
       </div>

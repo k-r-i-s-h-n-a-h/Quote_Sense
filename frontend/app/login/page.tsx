@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import AuthPageLayout, { inputClass } from "@/components/AuthPageLayout";
 import { WhatsAppIcon } from "@/components/WhatsAppIcon";
 import { useAuth } from "@/lib/auth";
+import { digitsOnly } from "@/lib/finalize-flags";
 
 function safeReturnTo(raw: string | null): string {
   if (!raw || !raw.startsWith("/") || raw.startsWith("//")) return "/";
@@ -83,7 +84,7 @@ function LoginContent() {
     );
   }
 
-  const cleanedPhone = phone.replace(/\D/g, "");
+  const cleanedPhone = digitsOnly(phone);
 
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -109,7 +110,7 @@ function LoginContent() {
   };
 
   const submitOtp = async (code: string) => {
-    const trimmed = code.replace(/\D/g, "").slice(0, 6);
+    const trimmed = digitsOnly(code).slice(0, 6);
     if (trimmed.length !== 6 || verifyingRef.current) return;
     verifyingRef.current = true;
     setLoading(true);
@@ -128,7 +129,7 @@ function LoginContent() {
   };
 
   const handleOtpChange = (value: string) => {
-    const digits = value.replace(/\D/g, "").slice(0, 6);
+    const digits = digitsOnly(value).slice(0, 6);
     setOtp(digits);
     if (digits.length === 6) {
       void submitOtp(digits);

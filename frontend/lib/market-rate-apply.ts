@@ -3,17 +3,29 @@
  * Best-effort: never blocks project load / compare UI.
  */
 
+function isTruthyFlag(value: unknown): boolean {
+  if (value === true || value === 1) return true;
+  if (typeof value === "string") {
+    const s = value.trim().toLowerCase();
+    return s === "true" || s === "1" || s === "yes" || s === "on";
+  }
+  return false;
+}
+
 function isFinalizeFlag(raw: Record<string, unknown>): boolean {
-  const v =
-    raw.isFinalizeQuote ??
-    raw.isFinalizedQuote ??
-    raw.isFinalized ??
-    raw.finalizeQuote ??
-    raw.is_finalize_quote ??
-    raw.is_finalized_quote ??
-    raw.is_finalized ??
-    raw.finalized;
-  return v === true || v === "true" || v === 1 || v === "1";
+  for (const [k, v] of Object.entries(raw)) {
+    const key = k.toLowerCase().replace(/_/g, "");
+    if (
+      key === "isfinalizequote" ||
+      key === "isfinalizedquote" ||
+      key === "isfinalized" ||
+      key === "finalizequote" ||
+      key === "finalized"
+    ) {
+      if (isTruthyFlag(v)) return true;
+    }
+  }
+  return false;
 }
 
 function unwrapQuote(entry: unknown): Record<string, unknown> | null {
@@ -25,7 +37,8 @@ function unwrapQuote(entry: unknown): Record<string, unknown> | null {
     typeof inner === "object" &&
     ("quoteNumber" in (inner as object) ||
       "workSummary" in (inner as object) ||
-      "isFinalizeQuote" in (inner as object))
+      "isFinalizeQuote" in (inner as object) ||
+      "is_finalized" in (inner as object))
   ) {
     return inner as Record<string, unknown>;
   }
@@ -43,6 +56,7 @@ export function filterFinalizedQuotePayloads(quotes: unknown[]): unknown[] {
 /**
  * Fire-and-forget apply when a project loads quote lists that may include
  * isFinalizeQuote=true. Safe to call repeatedly (backend is idempotent).
+ * Primary path is server-side apply in /api/projects/.../quotes.
  */
 export function applyFinalizedQuotesInBackground(quotes: unknown[]): void {
   const finalized = filterFinalizedQuotePayloads(quotes);

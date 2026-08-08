@@ -3,7 +3,7 @@ import {
   getProjectById,
   getProjectsForUser,
 } from "../dummy-project-data";
-import { unwrapApiList } from "../project-mappers";
+import { isFinalizeFlag, mapApiQuote, unwrapApiList } from "../project-mappers";
 import {
   findQuoteById,
   formatInr,
@@ -36,6 +36,31 @@ describe("unwrapApiList", () => {
   it("returns [] for junk", () => {
     expect(unwrapApiList(null)).toEqual([]);
     expect(unwrapApiList("x")).toEqual([]);
+  });
+});
+
+
+describe("isFinalizeQuote mapping", () => {
+  it("maps isFinalizeQuote true to status finalized even when status is submitted", () => {
+    const q = mapApiQuote({
+      _id: "abc",
+      quoteNumber: "Q2F93K0",
+      status: "submitted",
+      isFinalizeQuote: true,
+      pricingSummary: [{ label: "Grand total", value: 1125278 }],
+    });
+    expect(isFinalizeFlag({ isFinalizeQuote: true })).toBe(true);
+    expect(q.status).toBe("finalized");
+  });
+
+  it("leaves non-finalized quotes as submitted", () => {
+    const q = mapApiQuote({
+      _id: "x",
+      quoteNumber: "Q1",
+      status: "submitted",
+      isFinalizeQuote: false,
+    });
+    expect(q.status).toBe("submitted");
   });
 });
 

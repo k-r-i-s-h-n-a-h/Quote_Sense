@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-
-const BACKEND =
-  process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8001";
+import { getBackendBase } from "@/lib/backend-url";
 
 /** Same-origin proxy — avoids CORS and large cross-origin POST issues. */
 export async function POST(req: NextRequest) {
@@ -30,6 +28,8 @@ export async function POST(req: NextRequest) {
   if (projectId) {
     backendParams.set("project_id", projectId);
   }
+
+  const BACKEND = getBackendBase();
 
   try {
     const res = await fetch(

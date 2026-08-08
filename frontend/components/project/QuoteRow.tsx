@@ -61,9 +61,13 @@ export function QuoteRow({
           <span className="font-semibold text-slate-900 text-sm">#{quote.quoteNumber}</span>
           <span
             className={`text-[10px] font-medium uppercase tracking-wide px-1.5 py-0.5 rounded ${STATUS_STYLE[quote.status]}`}
-            title="Quote status"
+            title={
+              quote.status === "finalized"
+                ? "Customer selected this as the final quote (isFinalizeQuote)"
+                : "Quote status"
+            }
           >
-            {quote.status}
+            {quote.status === "finalized" ? "finalized" : quote.status}
           </span>
           {quote.tier && (
             <span

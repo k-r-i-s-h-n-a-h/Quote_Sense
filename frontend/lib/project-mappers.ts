@@ -101,17 +101,30 @@ function resolveService(name: string): TatvaService {
   return { id: slug, name: name || "General", icon: serviceIconForName(name) };
 }
 
-function isFinalizeFlag(raw: RawRecord): boolean {
-  const v =
-    raw.isFinalizeQuote ??
-    raw.isFinalizedQuote ??
-    raw.isFinalized ??
-    raw.finalizeQuote ??
-    raw.is_finalize_quote ??
-    raw.is_finalized_quote ??
-    raw.is_finalized ??
-    raw.finalized;
-  return v === true || v === "true" || v === 1 || v === "1";
+function isTruthyFlag(value: unknown): boolean {
+  if (value === true || value === 1) return true;
+  if (typeof value === "string") {
+    const s = value.trim().toLowerCase();
+    return s === "true" || s === "1" || s === "yes" || s === "on";
+  }
+  return false;
+}
+
+/** Tatva final-quote flag — case-insensitive keys (isFinalizeQuote, is_finalized, …). */
+export function isFinalizeFlag(raw: RawRecord): boolean {
+  for (const [k, v] of Object.entries(raw)) {
+    const key = k.toLowerCase().replace(/_/g, "");
+    if (
+      key === "isfinalizequote" ||
+      key === "isfinalizedquote" ||
+      key === "isfinalized" ||
+      key === "finalizequote" ||
+      key === "finalized"
+    ) {
+      if (isTruthyFlag(v)) return true;
+    }
+  }
+  return false;
 }
 
 function mapProjectStatus(raw: string, hasQuotesOrVendors = false): ProjectData["status"] {
@@ -331,6 +344,7 @@ export function mapApiProject(raw: RawRecord): ProjectData {
 
 export function mapApiQuote(raw: RawRecord): VendorQuote {
   const tier = mapQuoteTier(raw);
+  // Flag wins over Tatva status string ("submitted" + isFinalizeQuote:true → finalized).
   const finalized = isFinalizeFlag(raw);
   return {
     id: asString(raw._id || raw.id),
@@ -338,7 +352,7 @@ export function mapApiQuote(raw: RawRecord): VendorQuote {
     label: quoteLabel(raw),
     amount: extractGrandTotal(raw),
     date: formatQuoteDate(raw.quoteDate || raw.createdAt),
-    status: mapQuoteStatus(asString(raw.status, "submitted"), finalized),
+    status: finalized ? "finalized" : mapQuoteStatus(asString(raw.status, "submitted"), false),
     lineItems: countLineItems(raw),
     tier,
   };

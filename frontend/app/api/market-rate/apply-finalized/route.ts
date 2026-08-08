@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-
-const BACKEND =
-  process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8001";
+import { getBackendBase } from "@/lib/backend-url";
 
 /**
  * Proxy for finalized-quote → market_moving_averages.
@@ -18,19 +16,29 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const backend = getBackendBase();
   try {
-    const res = await fetch(`${BACKEND}/api/market-rate/apply-finalized`, {
+    const res = await fetch(`${backend}/api/market-rate/apply-finalized`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
     const data = await res.json();
-    return NextResponse.json(data, { status: res.status });
+    return NextResponse.json(
+      { ...data, backend },
+      {
+        status: res.status,
+        headers: { "X-Backend-Base": backend },
+      }
+    );
   } catch (err) {
     const message =
       err instanceof Error
         ? err.message
         : "Failed to reach market-rate backend.";
-    return NextResponse.json({ status: "error", message }, { status: 502 });
+    return NextResponse.json(
+      { status: "error", message, backend },
+      { status: 502 }
+    );
   }
 }

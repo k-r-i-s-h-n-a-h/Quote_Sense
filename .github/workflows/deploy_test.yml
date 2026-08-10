@@ -37,27 +37,26 @@ jobs:
         run: npm run build
 
       - name: Install Vercel CLI
-        # Vercel API requires CLI >= 47.2.2; keep a pin (not @latest) for CI stability.
+        # 47.2.2 never existed on npm (ETARGET). Pin a published CLI like dev.
         # Always pass --yes so non-interactive runs do not hang on prod confirm.
-        run: npm install --global vercel@47.2.2
+        run: npm install --global vercel@58.9.0
 
-      # QA project Root Directory = "frontend" → run vercel from repo root.
-      # --yes is mandatory in CI (no TTY); otherwise deploy waits forever.
+      # Deploy FROM frontend/ so Next sees app/ (Root Directory should stay ./).
+      # Skip preview env add — CLI can prompt for git branch in CI.
       - name: Sync Tatva API + QA backend URL on Vercel
+        working-directory: ./frontend
         run: |
           printf '%s' 'https://devopsapi.withtatva.ai' | vercel env add TATVA_API_BASE production --token=$VERCEL_TOKEN --force || true
-          printf '%s' 'https://devopsapi.withtatva.ai' | vercel env add TATVA_API_BASE preview --token=$VERCEL_TOKEN --force || true
           printf '%s' 'https://tatvaops-quotesense-qa.onrender.com' | vercel env add NEXT_PUBLIC_BACKEND_URL production --token=$VERCEL_TOKEN --force || true
-          printf '%s' 'https://tatvaops-quotesense-qa.onrender.com' | vercel env add NEXT_PUBLIC_BACKEND_URL preview --token=$VERCEL_TOKEN --force || true
           printf '%s' 'https://tatvaops-quotesense-qa.onrender.com' | vercel env add BACKEND_URL production --token=$VERCEL_TOKEN --force || true
-          printf '%s' 'https://tatvaops-quotesense-qa.onrender.com' | vercel env add BACKEND_URL preview --token=$VERCEL_TOKEN --force || true
 
       - name: Deploy to Vercel
+        working-directory: ./frontend
         timeout-minutes: 10
         run: |
           set -euo pipefail
-          # Drop local install/build so upload does not walk huge trees.
-          rm -rf frontend/node_modules frontend/.next
+          rm -rf node_modules .next
+          test -d app
           echo "Starting vercel deploy (non-interactive)…"
           vercel deploy --prod --yes --token="$VERCEL_TOKEN"
           echo "Vercel deploy finished."

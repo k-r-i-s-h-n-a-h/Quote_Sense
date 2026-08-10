@@ -18,9 +18,10 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v6
         with:
@@ -36,33 +37,29 @@ jobs:
         working-directory: ./frontend
         run: npm run build
 
+      # Same deploy steps as deploy_dev.yml (CLI + cwd + vercel deploy).
+      # QA project Root Directory must stay ./ (empty), NOT "frontend",
+      # or Vercel resolves frontend/frontend.
       - name: Install Vercel CLI
-        # 47.2.2 never existed on npm (ETARGET). Pin a published CLI like dev.
-        # Always pass --yes so non-interactive runs do not hang on prod confirm.
+        # Pin a published CLI (47.2.2 never existed on npm).
         run: npm install --global vercel@58.9.0
 
-      # QA project Root Directory is "frontend" (dashboard). Deploy from monorepo
-      # root so Vercel resolves frontend/ once — NOT from frontend/ (that becomes
-      # frontend/frontend). Dev project uses ./ so deploy_dev.yml differs.
-      # Skip preview env add — CLI can prompt for git branch in CI.
+      # Deploy FROM frontend/ so Next sees app/ here.
+      # Do NOT set Vercel dashboard Root Directory to "frontend" with this
+      # pattern (that would resolve frontend/frontend). Token cannot PATCH
+      # project settings (forbidden), so we avoid the API rootDirectory call.
       - name: Sync Tatva API + QA backend URL on Vercel
+        working-directory: ./frontend
         run: |
+          # production only — preview env add can prompt for git branch in CI
           printf '%s' 'https://devopsapi.withtatva.ai' | vercel env add TATVA_API_BASE production --token=$VERCEL_TOKEN --force || true
           printf '%s' 'https://tatvaops-quotesense-qa.onrender.com' | vercel env add NEXT_PUBLIC_BACKEND_URL production --token=$VERCEL_TOKEN --force || true
           printf '%s' 'https://tatvaops-quotesense-qa.onrender.com' | vercel env add BACKEND_URL production --token=$VERCEL_TOKEN --force || true
 
       - name: Deploy to Vercel
-        timeout-minutes: 10
+        working-directory: ./frontend
         run: |
           set -euo pipefail
-          rm -rf frontend/node_modules frontend/.next
-          test -d frontend/app
-          # Explicit link — env alone has left testquotesense on an ~18d-old prod build.
-          mkdir -p .vercel
-          printf '%s\n' "{\"orgId\":\"${VERCEL_ORG_ID}\",\"projectId\":\"${VERCEL_PROJECT_ID}\"}" > .vercel/project.json
-          echo "Deploy target projectId=${VERCEL_PROJECT_ID} orgId=${VERCEL_ORG_ID}"
-          echo "Starting vercel deploy (non-interactive)…"
-          URL="$(vercel deploy --prod --yes --token="$VERCEL_TOKEN")"
-          echo "Production deploy URL: ${URL}"
-          vercel ls --token="$VERCEL_TOKEN" 2>&1 | head -40 || true
-          echo "Vercel deploy finished."
+          rm -rf node_modules .next
+          test -d app
+          vercel deploy --prod --yes --token=$VERCEL_TOKEN

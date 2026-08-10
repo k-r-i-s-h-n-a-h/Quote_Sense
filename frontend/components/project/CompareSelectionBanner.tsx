@@ -23,7 +23,13 @@ function projectFromCache(
 
   const vendorsMap = new Map<
     string,
-    { id: string; companyName: string; contactName: string; email: string; quotes: ProjectData["vendors"][0]["quotes"] }
+    {
+      id: string;
+      companyName: string;
+      contactName: string;
+      email: string;
+      quotes: ProjectData["vendors"][0]["quotes"];
+    }
   >();
 
   for (const raw of entry.quotes) {
@@ -58,7 +64,9 @@ function projectFromCache(
       vendorsMap.set(vendorId, {
         id: vendorId,
         companyName: String(vendorDetail.companyName || "Vendor"),
-        contactName: String(vendorDetail.fullName || vendorDetail.vendorName || ""),
+        contactName: String(
+          vendorDetail.fullName || vendorDetail.vendorName || ""
+        ),
         email: String(vendorDetail.email || vendorDetail.companyEmail || ""),
         quotes: [quote],
       });
@@ -97,25 +105,21 @@ export function CompareSelectionBanner({
   const backHref = backRef ? `/project/${encodeURIComponent(backRef)}` : "/";
 
   return (
-    <div className="qs-card p-5 border-[#c04a00]/20 bg-orange-50/30">
+    <div className="qs-card p-5 border-[color-mix(in_srgb,var(--accent)_22%,var(--border))] bg-[var(--accent-soft)]/40">
       <div className="flex items-start justify-between gap-4 mb-4">
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-[#c04a00]">
-            Selected for comparison
-          </p>
-          <h2 className="text-lg font-bold text-slate-900 mt-1">
-            {summary.length} quotes · {new Set(summary.map((s) => s.vendor.id)).size} vendors
+          <p className="qs-eyebrow">Selected for comparison</p>
+          <h2 className="text-lg font-semibold text-stone-900 mt-1 tracking-tight">
+            {summary.length} quotes ·{" "}
+            {new Set(summary.map((s) => s.vendor.id)).size} vendors
           </h2>
           {project && (
-            <p className="text-xs text-slate-500 mt-1">
-              Project: {project.title} ({project.projectCode})
+            <p className="text-xs text-stone-500 mt-1">
+              {project.title} ({project.projectCode})
             </p>
           )}
         </div>
-        <Link
-          href={backHref}
-          className="shrink-0 text-xs font-medium text-slate-600 hover:text-[#c04a00] px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:border-[#c04a00]/30 transition-colors"
-        >
+        <Link href={backHref} className="qs-btn qs-btn-secondary !py-2 shrink-0">
           ← Back to project
         </Link>
       </div>
@@ -124,12 +128,16 @@ export function CompareSelectionBanner({
         {summary.map(({ vendor, quote }) => (
           <div
             key={quote.id}
-            className="bg-white rounded-lg border border-slate-100 px-3 py-2.5"
+            className="bg-white rounded-lg border border-stone-200 px-3 py-2.5"
           >
-            <p className="text-[11px] text-slate-400 truncate">{vendor.companyName}</p>
-            <p className="text-sm font-semibold text-slate-900">#{quote.quoteNumber}</p>
-            <p className="text-xs text-slate-500">{quote.label}</p>
-            <p className="text-sm font-bold text-[#c04a00] mt-1 tabular-nums">
+            <p className="text-[11px] text-stone-400 truncate">
+              {vendor.companyName}
+            </p>
+            <p className="text-sm font-semibold text-stone-900">
+              #{quote.quoteNumber}
+            </p>
+            <p className="text-xs text-stone-500 truncate">{quote.label}</p>
+            <p className="qs-money text-sm text-[var(--accent)] mt-1">
               {formatInr(quote.amount)}
             </p>
           </div>
@@ -154,10 +162,10 @@ export function ComparePageNav({
   const backLabel = projectId ? "Back to project" : "All projects";
 
   return (
-    <div className="flex items-center justify-between gap-4 mb-6">
+    <div className="flex items-center justify-between gap-4">
       <Link
         href={backHref}
-        className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-[#c04a00] transition-colors"
+        className="inline-flex items-center gap-1.5 text-sm font-medium text-stone-600 hover:text-[var(--accent)] transition-colors"
       >
         <span aria-hidden>←</span> {backLabel}
       </Link>
@@ -165,7 +173,7 @@ export function ComparePageNav({
         <button
           type="button"
           onClick={onNewComparison}
-          className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#c04a00] hover:text-[#a84000] px-3 py-1.5 rounded-lg border border-[#c04a00]/25 bg-white hover:bg-orange-50/50 transition-colors"
+          className="qs-btn qs-btn-secondary !py-2"
         >
           New comparison
         </button>
@@ -176,9 +184,11 @@ export function ComparePageNav({
 
 export function CompareLoadingBanner({ message }: { message: string }) {
   return (
-    <div className="qs-card p-6">
-      <h1 className="text-lg font-bold text-slate-900">Building your comparison</h1>
-      <p className="text-sm text-slate-500 mt-1">{message}</p>
+    <div className="qs-card p-5">
+      <h1 className="text-lg font-semibold text-stone-900 tracking-tight">
+        Building your comparison
+      </h1>
+      <p className="text-sm text-stone-500 mt-1">{message}</p>
     </div>
   );
 }

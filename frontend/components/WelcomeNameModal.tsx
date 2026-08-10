@@ -58,27 +58,31 @@ export default function WelcomeNameModal() {
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 px-4"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-stone-900/45 px-4 backdrop-blur-[2px]"
       role="dialog"
       aria-modal="true"
       aria-labelledby="welcome-name-title"
     >
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-xl border border-slate-100 px-8 py-10">
+      <div className="w-full max-w-md qs-card px-8 py-10 shadow-[var(--shadow-lg)]">
         <div className="text-center mb-6">
+          <p className="qs-eyebrow">QuoteSense</p>
           <h2
             id="welcome-name-title"
-            className="text-xl font-bold text-slate-900 tracking-tight"
+            className="text-xl font-semibold text-stone-900 tracking-tight mt-2"
           >
             Welcome to TatvaOps
           </h2>
-          <p className="text-sm text-slate-500 mt-2">
+          <p className="text-sm text-stone-500 mt-2 leading-relaxed">
             What should we call you? This helps personalize your dashboard.
           </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label htmlFor="welcome-name" className="block text-sm font-medium text-slate-700 mb-1.5">
+            <label
+              htmlFor="welcome-name"
+              className="block text-sm font-medium text-stone-700 mb-1.5"
+            >
               Your name
             </label>
             <input
@@ -94,18 +98,22 @@ export default function WelcomeNameModal() {
             />
           </div>
 
-          {error && <p className="text-sm text-red-600 text-center">{error}</p>}
+          {error && (
+            <p className="text-sm text-red-600 text-center" role="alert">
+              {error}
+            </p>
+          )}
 
           <button
             type="submit"
             disabled={!canSubmit}
-            className="w-full py-3.5 rounded-xl text-sm font-semibold text-white bg-[#c04a00] hover:bg-[#a84000] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="qs-btn qs-btn-primary w-full !py-3.5"
           >
             {saving ? "Saving…" : "Continue"}
           </button>
         </form>
 
-        <p className="mt-4 text-[11px] text-slate-400 text-center">
+        <p className="mt-4 text-[11px] text-stone-400 text-center">
           You can update this anytime from your profile.
         </p>
       </div>

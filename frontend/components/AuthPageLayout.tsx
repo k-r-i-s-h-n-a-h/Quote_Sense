@@ -1,9 +1,10 @@
 "use client";
 
 import React from "react";
+import TatvaLogo from "./TatvaLogo";
 
 const inputClass =
-  "w-full px-4 py-3.5 border border-slate-200 rounded-xl text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#c04a00]/30 focus:border-[#c04a00] transition-all";
+  "qs-input !py-3.5";
 
 export { inputClass };
 
@@ -11,14 +12,14 @@ export { inputClass };
 export function AuthLegalFooter({ className = "mt-8" }: { className?: string }) {
   return (
     <p
-      className={`${className} text-[11px] text-slate-400 text-center leading-relaxed`}
+      className={`${className} text-[11px] text-stone-400 text-center leading-relaxed`}
     >
       {"By continuing, you agree to our "}
       <a
         href="https://tatvaops.com/terms"
         target="_blank"
         rel="noopener noreferrer"
-        className="underline hover:text-slate-600"
+        className="underline hover:text-stone-600"
       >
         Terms of Service
       </a>
@@ -27,7 +28,7 @@ export function AuthLegalFooter({ className = "mt-8" }: { className?: string }) 
         href="https://tatvaops.com/privacy"
         target="_blank"
         rel="noopener noreferrer"
-        className="underline hover:text-slate-600"
+        className="underline hover:text-stone-600"
       >
         Privacy Policy
       </a>
@@ -51,13 +52,15 @@ export default function AuthPageLayout({
 }: AuthPageLayoutProps) {
   return (
     <div className="flex-1 flex flex-col items-center justify-center px-4 py-12">
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-lg border border-slate-100 px-8 py-10">
+      <div className="w-full max-w-md qs-card px-8 py-10 shadow-[var(--shadow-md)]">
         <div className="flex flex-col items-center text-center mb-8">
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-            Tatva Quote Comparator
+          <TatvaLogo size="sm" className="mb-4" />
+          <p className="qs-eyebrow">QuoteSense</p>
+          <p className="text-xs text-stone-400 mt-1">TatvaOps procurement intelligence</p>
+          <h1 className="text-xl font-semibold text-stone-900 tracking-tight mt-4">
+            {title}
           </h1>
-          <h2 className="text-lg font-semibold text-slate-800 mt-4">{title}</h2>
-          <p className="text-sm text-slate-500 mt-2">{subtitle}</p>
+          <p className="text-sm text-stone-500 mt-2 leading-relaxed">{subtitle}</p>
         </div>
 
         {children}

@@ -24,36 +24,50 @@ export function VendorCard({
   onToggleQuote,
   onCompareVendorQuotes,
 }: VendorCardProps) {
-  const vendorSelectedCount = vendor.quotes.filter((q) => selectedQuoteIds.has(q.id)).length;
-  const finalizedCount = vendor.quotes.filter((q) => q.isFinalizeQuote === true).length;
+  const vendorSelectedCount = vendor.quotes.filter((q) =>
+    selectedQuoteIds.has(q.id)
+  ).length;
+  const finalizedCount = vendor.quotes.filter(
+    (q) => q.isFinalizeQuote === true
+  ).length;
   const canCompare = vendor.quotes.length >= MIN_COMPARE_QUOTES;
   const compareCount = Math.min(vendor.quotes.length, MAX_COMPARE_QUOTES);
   const hasMoreThanMax = vendor.quotes.length > MAX_COMPARE_QUOTES;
+  const initial = vendor.companyName.charAt(0).toUpperCase() || "V";
 
   return (
     <section className="qs-card overflow-hidden">
-      <div className="px-5 py-4 border-b border-slate-100 flex items-start justify-between gap-4">
+      <div className="px-5 py-4 border-b border-stone-100 flex items-start justify-between gap-4">
         <div className="flex items-start gap-3 min-w-0">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center text-slate-600 font-bold text-sm shrink-0">
-            {vendor.companyName.charAt(0)}
+          <div className="w-10 h-10 rounded-lg bg-stone-100 flex items-center justify-center text-stone-700 font-semibold text-sm shrink-0">
+            {initial}
           </div>
           <div className="min-w-0">
-            <h3 className="font-semibold text-slate-900 text-sm leading-snug truncate">
+            <h3 className="font-semibold text-stone-900 text-sm leading-snug truncate">
               {vendor.companyName}
             </h3>
-            <p className="text-xs text-slate-500 mt-0.5">
-              {vendor.contactName} · {vendor.email}
-            </p>
-            <p className="text-[11px] text-slate-400 mt-1">
-              {vendor.quotes.length} quote{vendor.quotes.length !== 1 ? "s" : ""}
+            {(vendor.contactName || vendor.email) && (
+              <p className="text-xs text-stone-500 mt-0.5 truncate">
+                {[vendor.contactName, vendor.email].filter(Boolean).join(" · ")}
+              </p>
+            )}
+            <p className="text-[11px] text-stone-400 mt-1">
+              {vendor.quotes.length} quote
+              {vendor.quotes.length !== 1 ? "s" : ""}
               {finalizedCount > 0
                 ? ` · ${finalizedCount} finalized`
                 : " · none finalized"}
               {hasMoreThanMax && (
-                <span className="text-amber-600"> · max {MAX_COMPARE_QUOTES} for compare</span>
+                <span className="text-amber-700">
+                  {" "}
+                  · max {MAX_COMPARE_QUOTES} for compare
+                </span>
               )}
               {vendorSelectedCount > 0 && (
-                <span className="text-[#c04a00] font-medium"> · {vendorSelectedCount} selected</span>
+                <span className="text-[var(--accent)] font-medium">
+                  {" "}
+                  · {vendorSelectedCount} selected
+                </span>
               )}
             </p>
           </div>
@@ -62,7 +76,7 @@ export function VendorCard({
           <button
             type="button"
             onClick={() => onCompareVendorQuotes(vendor.id)}
-            className="shrink-0 text-xs font-medium text-[#c04a00] hover:text-[#a84000] px-3 py-1.5 rounded-lg border border-[#c04a00]/25 hover:bg-orange-50 transition-colors"
+            className="qs-btn qs-btn-secondary !py-2 !px-3 shrink-0 text-xs"
             title={
               hasMoreThanMax
                 ? `Only ${MAX_COMPARE_QUOTES} quotes can be compared at a time`
@@ -70,7 +84,7 @@ export function VendorCard({
             }
           >
             {hasMoreThanMax
-              ? `Compare ${MAX_COMPARE_QUOTES} quotes`
+              ? `Compare ${MAX_COMPARE_QUOTES}`
               : `Compare all (${compareCount})`}
           </button>
         )}
@@ -92,7 +106,7 @@ export function VendorCard({
               disabled={disabled}
               disabledReason={
                 tierMismatch && selectedTier
-                  ? `You've selected ${QUOTE_TIER_LABELS[selectedTier]} quotes — pick another ${QUOTE_TIER_LABELS[selectedTier]} quote to compare`
+                  ? `Compare quotes from the same tier. Current selection is ${QUOTE_TIER_LABELS[selectedTier]}.`
                   : undefined
               }
               onToggle={() => onToggleQuote(quote.id)}

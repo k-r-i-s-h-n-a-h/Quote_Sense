@@ -26,7 +26,8 @@ function ProjectDetailContent() {
   const params = useParams();
   const router = useRouter();
   const { user } = useAuth();
-  const projectId = typeof params.projectId === "string" ? params.projectId : "";
+  const projectId =
+    typeof params?.projectId === "string" ? params.projectId : "";
   const userId = getAuthUserId(user);
 
   const [project, setProject] = useState<ProjectData | null>(null);

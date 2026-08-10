@@ -19,10 +19,22 @@ type Props = {
   isPdfLane?: boolean;
 };
 
-const STEPS: { id: CompareProgressStage; label: string }[] = [
-  { id: "extracting", label: "Read PDF quotes" },
-  { id: "comparing", label: "Build comparison matrix" },
-  { id: "recommending", label: "Write AI recommendation" },
+const STEPS: { id: CompareProgressStage; label: string; detail: string }[] = [
+  {
+    id: "extracting",
+    label: "Load vendor quotes",
+    detail: "Reading line items and totals",
+  },
+  {
+    id: "comparing",
+    label: "Build comparison",
+    detail: "Aligning categories and market estimates",
+  },
+  {
+    id: "recommending",
+    label: "Generate recommendation",
+    detail: "Summarizing procurement guidance",
+  },
 ];
 
 function stepIndex(stage: CompareProgressStage): number {
@@ -59,7 +71,8 @@ export default function CompareLoadingPanel({
 
   const hasCount = total > 0;
   const pct = useMemo(() => {
-    if (!hasCount) return stage === "recommending" ? 85 : stage === "comparing" ? 55 : 15;
+    if (!hasCount)
+      return stage === "recommending" ? 85 : stage === "comparing" ? 55 : 15;
     const base = Math.round((processed / total) * 55);
     if (stage === "comparing") return Math.max(base, 60);
     if (stage === "recommending") return Math.max(base, 85);
@@ -67,7 +80,7 @@ export default function CompareLoadingPanel({
   }, [hasCount, processed, total, stage]);
 
   const timingHint = useMemo(() => {
-    if (!isPdfLane) return "Hang tight — we're crunching the numbers.";
+    if (!isPdfLane) return "Hang tight — building your procurement analysis.";
     if (total <= 1) return "Usually 1–3 minutes per PDF quote.";
     if (total === 2) return "Usually 2–4 minutes for 2 PDFs (read in parallel).";
     return "Usually 3–5 minutes for 3 PDFs (read in parallel).";
@@ -75,27 +88,25 @@ export default function CompareLoadingPanel({
 
   return (
     <div
-      className="mt-5 rounded-xl border border-orange-200/80 bg-gradient-to-b from-orange-50/80 to-white p-6 shadow-sm"
+      className="mt-2 qs-card p-6 border-[color-mix(in_srgb,var(--accent)_25%,var(--border))]"
       role="status"
       aria-live="polite"
     >
       <div className="flex flex-col gap-5">
         <div className="flex items-start gap-4">
-          <div className="relative flex h-12 w-12 shrink-0 items-center justify-center">
-            <div className="absolute h-12 w-12 animate-spin rounded-full border-[3px] border-orange-200 border-t-[#c04a00]" />
-            <span className="text-lg" aria-hidden>
-              📊
-            </span>
+          <div className="relative flex h-11 w-11 shrink-0 items-center justify-center">
+            <div className="absolute h-11 w-11 animate-spin rounded-full border-[3px] border-stone-200 border-t-[var(--accent)]" />
+            <div className="h-2 w-2 rounded-full bg-[var(--accent)]" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-slate-900">{message}</p>
+            <p className="text-sm font-semibold text-stone-900">{message}</p>
             {hasCount && (
-              <p className="text-xs font-medium text-[#c04a00] mt-0.5">
-                {processed} of {total} quote{total === 1 ? "" : "s"} extracted
+              <p className="text-xs font-medium text-[var(--accent)] mt-0.5">
+                {processed} of {total} quote{total === 1 ? "" : "s"} processed
               </p>
             )}
-            <p className="text-xs text-slate-500 mt-1">{timingHint}</p>
-            <p className="text-[11px] text-slate-400 mt-1 tabular-nums">
+            <p className="text-xs text-stone-500 mt-1">{timingHint}</p>
+            <p className="text-[11px] text-stone-400 mt-1 tabular-nums">
               Elapsed: {formatElapsed(elapsed)}
             </p>
           </div>
@@ -108,30 +119,33 @@ export default function CompareLoadingPanel({
             return (
               <li
                 key={step.id}
-                className={`rounded-lg border px-3 py-2.5 text-xs transition-colors ${
+                className={`rounded-lg border px-3 py-2.5 text-xs transition-colors duration-150 ${
                   done
-                    ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                    ? "border-[var(--success-border)] bg-[var(--success-soft)] text-emerald-800"
                     : active
-                      ? "border-[#c04a00]/40 bg-orange-50 text-[#9a3a00] font-medium"
-                      : "border-slate-100 bg-slate-50/80 text-slate-400"
+                      ? "border-[color-mix(in_srgb,var(--accent)_40%,var(--border))] bg-[var(--accent-soft)] text-[var(--accent)] font-medium"
+                      : "border-stone-100 bg-stone-50/80 text-stone-400"
                 }`}
               >
-                <span className="mr-1.5">{done ? "✓" : active ? "●" : "○"}</span>
-                {step.label}
+                <div className="font-semibold">
+                  {done ? "Done · " : active ? "In progress · " : ""}
+                  {step.label}
+                </div>
+                <div className="mt-0.5 opacity-80">{step.detail}</div>
               </li>
             );
           })}
         </ol>
 
         <div className="w-full">
-          <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200">
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-stone-200">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-[#c04a00] to-orange-400 transition-all duration-700 ease-out"
+              className="h-full rounded-full bg-[var(--accent)] transition-all duration-500 ease-out"
               style={{ width: `${pct}%` }}
             />
           </div>
-          <p className="text-[10px] text-slate-400 mt-1.5 text-center">
-            Results appear below as each step completes — you don&apos;t need to refresh.
+          <p className="text-[10px] text-stone-400 mt-1.5 text-center">
+            Partial results appear as steps complete — no refresh needed.
           </p>
         </div>
       </div>

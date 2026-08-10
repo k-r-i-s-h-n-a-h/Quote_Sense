@@ -87,10 +87,10 @@ export default function MarketRatePanel({
 
   if (loading) {
     return (
-      <aside
-        className={`rounded-xl border border-slate-200 bg-white p-4 shadow-sm ${className}`}
-      >
-        <p className="text-xs text-slate-500">Checking market rates…</p>
+      <aside className={`qs-card p-4 ${className}`}>
+        <div className="h-3 w-24 qs-skeleton mb-3" />
+        <div className="h-7 w-32 qs-skeleton mb-2" />
+        <div className="h-3 w-full qs-skeleton" />
       </aside>
     );
   }
@@ -99,38 +99,90 @@ export default function MarketRatePanel({
 
   const styles = verdictStyles(data.verdict);
   const unit = data.pricing_method || pricingMethod;
+  const entered = data.entered_rate ?? enteredRate;
+  const hasEntered = entered != null && entered > 0;
+  const diffPct =
+    hasEntered && data.market_rate > 0
+      ? ((Number(entered) - data.market_rate) / data.market_rate) * 100
+      : null;
+
+  const verdictLabel =
+    data.verdict === "low"
+      ? "Below market"
+      : data.verdict === "high"
+        ? "Above market"
+        : data.verdict === "fair"
+          ? "Aligned with market"
+          : null;
 
   return (
     <aside
-      className={`rounded-xl border p-4 shadow-sm ${styles.border} ${styles.bg} ${className}`}
+      className={`rounded-xl border p-4 shadow-[var(--shadow-xs)] ${styles.border} ${styles.bg} ${className}`}
     >
       <div className="flex items-start justify-between gap-2">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Market guidance
+          <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-stone-500">
+            Market position
           </p>
-          <p className={`mt-1 text-lg font-bold ${styles.text}`}>
-            ~₹{data.market_rate.toLocaleString("en-IN")}
-            <span className="text-sm font-normal text-slate-600"> / {unit}</span>
+          <p className={`mt-1 text-xl font-bold tabular-nums ${styles.text}`}>
+            ₹{data.market_rate.toLocaleString("en-IN")}
+            <span className="text-sm font-normal text-stone-600">
+              {" "}
+              / {unit}
+            </span>
           </p>
-          <p className="mt-1 text-xs text-slate-600">
-            Based on {data.weight} vendor quote{data.weight === 1 ? "" : "s"}
+          <p className="mt-1 text-xs text-stone-600">
+            Based on {data.weight} vendor quote
+            {data.weight === 1 ? "" : "s"}
           </p>
         </div>
-        {data.verdict && (
+        {(verdictLabel || data.verdict) && (
           <span
-            className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${styles.badge}`}
+            className={`shrink-0 rounded-md px-2.5 py-1 text-xs font-semibold ${styles.badge}`}
           >
-            {data.verdict}
+            {verdictLabel || data.verdict}
           </span>
         )}
       </div>
-      {data.message && (
-        <p className={`mt-3 text-sm leading-relaxed ${styles.text}`}>{data.message}</p>
+
+      {hasEntered && (
+        <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
+          <div className="rounded-lg bg-white/70 border border-white/80 px-3 py-2">
+            <dt className="text-[11px] text-stone-500">Your quote</dt>
+            <dd className="font-semibold tabular-nums text-stone-900">
+              ₹{Number(entered).toLocaleString("en-IN")}
+              <span className="text-xs font-normal text-stone-500">
+                {" "}
+                / {unit}
+              </span>
+            </dd>
+          </div>
+          <div className="rounded-lg bg-white/70 border border-white/80 px-3 py-2">
+            <dt className="text-[11px] text-stone-500">Market average</dt>
+            <dd className="font-semibold tabular-nums text-stone-900">
+              ₹{data.market_rate.toLocaleString("en-IN")}
+              <span className="text-xs font-normal text-stone-500">
+                {" "}
+                / {unit}
+              </span>
+            </dd>
+          </div>
+        </dl>
       )}
-      <p className="mt-2 text-xs text-slate-600">
-        Recommended base: ₹{data.market_rate.toLocaleString("en-IN")} / {unit}
-      </p>
+
+      {diffPct != null && (
+        <p className={`mt-3 text-sm font-semibold tabular-nums ${styles.text}`}>
+          {diffPct === 0
+            ? "At market average"
+            : `${diffPct > 0 ? "+" : ""}${diffPct.toFixed(1)}% vs market`}
+        </p>
+      )}
+
+      {data.message && (
+        <p className={`mt-2 text-sm leading-relaxed ${styles.text}`}>
+          {data.message}
+        </p>
+      )}
     </aside>
   );
 }

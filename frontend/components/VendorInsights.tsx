@@ -6,6 +6,7 @@ import {
   formatInrFull,
   type VendorMeta,
 } from "../lib/format";
+import { vendorColor } from "../lib/vendor-colors";
 
 type Row = Record<string, any>;
 
@@ -14,18 +15,10 @@ type Stat = {
   name: string;
   total: number;
   items: number;
+  index: number;
 };
 
 const ALL = "__all__";
-
-const BAR_COLORS = [
-  "#3b82f6",
-  "#8b5cf6",
-  "#f59e0b",
-  "#ec4899",
-  "#14b8a6",
-  "#ef4444",
-];
 
 export default function VendorInsights({
   tableData,
@@ -63,7 +56,7 @@ export default function VendorInsights({
 
   const stats: Stat[] = useMemo(() => {
     return vendors
-      .map((v) => {
+      .map((v, index) => {
         let total = 0;
         let items = 0;
         for (const r of rows) {
@@ -73,7 +66,7 @@ export default function VendorInsights({
             items += 1;
           }
         }
-        return { vendor: v, name: nameOf(v), total, items };
+        return { vendor: v, name: nameOf(v), total, items, index };
       })
       .sort((a, b) => a.total - b.total);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -84,7 +77,6 @@ export default function VendorInsights({
   const cheapest = funded[0];
   const priciest = funded[funded.length - 1];
 
-  // "Lowest cost" vendor per category — the at-a-glance "who is good at what".
   const bestByCategory = useMemo(() => {
     return categories.map((cat) => {
       const catRows = tableData.filter((r) => r.category === cat);
@@ -108,20 +100,22 @@ export default function VendorInsights({
       : 0;
 
   return (
-    <div className="qs-card p-6 md:p-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6">
+    <section className="qs-card p-5 md:p-6">
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-5">
         <div>
-          <h2 className="text-xl font-semibold text-slate-900">Who fits best, at a glance</h2>
-          <p className="text-sm text-slate-500 mt-1">
-            Pick a service to see which quote costs the least for that work.
+          <h2 className="qs-section-title">Category insights</h2>
+          <p className="qs-section-sub">
+            Scan who is cheapest overall and by service category.
           </p>
         </div>
-        <label className="text-sm">
-          <span className="block text-gray-500 mb-1 font-medium">Service</span>
+        <label className="text-sm sm:w-64">
+          <span className="block text-stone-500 mb-1 text-xs font-medium">
+            Service filter
+          </span>
           <select
             value={selected}
             onChange={(e) => setSelected(e.target.value)}
-            className="w-full sm:w-64 border border-gray-300 rounded-lg px-3 py-2 text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="qs-select"
           >
             <option value={ALL}>All services (total)</option>
             {categories.map((c) => (
@@ -133,63 +127,66 @@ export default function VendorInsights({
         </label>
       </div>
 
-      {/* Plain-language headline */}
       {cheapest && (
-        <div className="mb-6 rounded-lg bg-green-50 border border-green-200 p-4">
-          <p className="text-sm text-green-900">
-            <span className="font-bold">{cheapest.name}</span> has the lowest cost
-            for <span className="font-semibold">{label}</span> at{" "}
-            <span className="font-bold">{formatInrFull(cheapest.total)}</span>
+        <div className="mb-5 rounded-lg bg-[var(--success-soft)] border border-[var(--success-border)] p-4">
+          <p className="text-sm text-emerald-950 leading-relaxed">
+            <span className="font-semibold">{cheapest.name}</span> has the lowest
+            cost for <span className="font-medium">{label}</span> at{" "}
+            <span className="font-semibold tabular-nums">
+              {formatInrFull(cheapest.total)}
+            </span>
             {savingsPct > 0 && priciest ? (
               <>
-                {" "}— about <span className="font-bold">{savingsPct}%</span> cheaper
-                than {priciest.name} ({formatInrFull(priciest.total)}).
+                {" "}
+                — about <span className="font-semibold">{savingsPct}%</span>{" "}
+                cheaper than {priciest.name} (
+                {formatInrFull(priciest.total)}).
               </>
             ) : (
-              <>.</>
+              "."
             )}
           </p>
         </div>
       )}
 
-      {/* Horizontal cost bars (lower = better; cheapest highlighted green) */}
-      <div className="space-y-4">
-        {stats.map((s, i) => {
+      <div className="space-y-3">
+        {stats.map((s) => {
           const isBest = cheapest && s.vendor === cheapest.vendor && s.total > 0;
-          const widthPct = s.total > 0 ? Math.max(4, (s.total / maxTotal) * 100) : 0;
+          const widthPct =
+            s.total > 0 ? Math.max(4, (s.total / maxTotal) * 100) : 0;
           return (
             <div key={s.vendor} className="flex items-center gap-3">
               <div
-                className="w-32 sm:w-44 shrink-0 text-right text-xs font-semibold text-gray-700 truncate"
+                className="w-28 sm:w-40 shrink-0 text-right text-xs font-semibold text-stone-700 truncate"
                 title={labels[s.vendor]?.full || s.vendor}
               >
                 {s.name}
               </div>
-              <div className="flex-1 h-7 bg-gray-100 rounded-md overflow-hidden relative">
+              <div className="flex-1 h-7 bg-stone-100 rounded-md overflow-hidden relative">
                 {s.total > 0 ? (
                   <div
-                    className="h-full rounded-md transition-all duration-700 flex items-center justify-end pr-2"
+                    className="h-full rounded-md transition-all duration-200 flex items-center justify-end pr-2"
                     style={{
                       width: `${widthPct}%`,
                       backgroundColor: isBest
-                        ? "#16a34a"
-                        : BAR_COLORS[i % BAR_COLORS.length],
+                        ? "#047857"
+                        : vendorColor(s.index),
                     }}
                   >
-                    <span className="text-[11px] font-bold text-white whitespace-nowrap">
+                    <span className="text-[11px] font-bold text-white whitespace-nowrap tabular-nums">
                       {formatInrFull(s.total)}
                     </span>
                   </div>
                 ) : (
-                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[11px] italic text-gray-400">
+                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[11px] italic text-stone-400">
                     Not quoted
                   </span>
                 )}
               </div>
-              <div className="w-20 shrink-0 text-[11px] text-gray-400">
+              <div className="w-20 shrink-0 text-[11px] text-stone-400">
                 {s.items > 0 ? `${s.items} item${s.items > 1 ? "s" : ""}` : "—"}
                 {isBest && (
-                  <span className="ml-1 inline-block rounded bg-green-100 text-green-700 px-1.5 py-0.5 font-bold">
+                  <span className="ml-1 inline-block rounded bg-emerald-100 text-emerald-800 px-1.5 py-0.5 font-bold">
                     Best
                   </span>
                 )}
@@ -199,48 +196,51 @@ export default function VendorInsights({
         })}
       </div>
 
-      <p className="text-[11px] text-gray-400 mt-3">
-        Lower bar = lower price. The item count shows how much of this service each
-        vendor actually quoted, so a low price with few items may mean smaller scope.
+      <p className="text-[11px] text-stone-400 mt-3">
+        Lower bar = lower price. Item count shows how much of this service each
+        vendor quoted — a low price with few items may mean smaller scope.
       </p>
 
-      {/* At-a-glance: lowest-cost vendor for every service */}
       {bestByCategory.length > 0 && (
-        <div className="mt-8 pt-6 border-t border-gray-100">
-          <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wide mb-3">
+        <div className="mt-7 pt-5 border-t border-stone-100">
+          <h3 className="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-3">
             Lowest cost by service
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {bestByCategory.map(({ category, best }) => (
               <button
                 key={category}
+                type="button"
                 onClick={() => setSelected(category)}
-                className={`text-left rounded-lg border p-3 transition-colors ${
+                className={`text-left rounded-lg border p-3 transition-colors duration-150 ${
                   selected === category
-                    ? "border-blue-400 bg-blue-50"
-                    : "border-gray-200 hover:border-blue-300 hover:bg-gray-50"
+                    ? "border-[var(--ai-border)] bg-[var(--ai-soft)]"
+                    : "border-stone-200 hover:border-stone-300 hover:bg-stone-50"
                 }`}
               >
-                <div className="text-[11px] font-semibold text-gray-500 uppercase truncate">
+                <div className="text-[11px] font-semibold text-stone-500 uppercase truncate">
                   {category}
                 </div>
                 {best ? (
                   <>
-                    <div className="text-sm font-bold text-gray-900 truncate" title={best.vendor}>
+                    <div
+                      className="text-sm font-semibold text-stone-900 truncate"
+                      title={best.vendor}
+                    >
                       {nameOf(best.vendor)}
                     </div>
-                    <div className="text-xs text-green-700 font-semibold">
+                    <div className="text-xs text-emerald-700 font-semibold tabular-nums">
                       {formatInrFull(best.total)}
                     </div>
                   </>
                 ) : (
-                  <div className="text-sm text-gray-400 italic">No quotes</div>
+                  <div className="text-sm text-stone-400 italic">No quotes</div>
                 )}
               </button>
             ))}
           </div>
         </div>
       )}
-    </div>
+    </section>
   );
 }

@@ -12,6 +12,8 @@ import {
 import { ProjectTile } from "./ProjectTile";
 import StandalonePdfSection from "./StandalonePdfSection";
 import { PdfUploadGateButton } from "./PdfUploadGateButton";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { EmptyState, ErrorState } from "@/components/ui/EmptyState";
 
 type DashboardError = {
   message: string;
@@ -26,6 +28,25 @@ function isAuthSessionError(error: DashboardError): boolean {
     message.includes("token") ||
     message.includes("unauthorized") ||
     message.includes("forbidden")
+  );
+}
+
+function ProjectGridSkeleton() {
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      {Array.from({ length: 4 }).map((_, i) => (
+        <div key={i} className="qs-card p-5 min-h-[188px] space-y-3">
+          <div className="flex justify-between">
+            <div className="h-10 w-10 qs-skeleton" />
+            <div className="h-5 w-20 qs-skeleton" />
+          </div>
+          <div className="h-3 w-16 qs-skeleton" />
+          <div className="h-5 w-3/4 qs-skeleton" />
+          <div className="h-3 w-full qs-skeleton" />
+          <div className="h-3 w-2/3 qs-skeleton" />
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -89,33 +110,42 @@ export default function ProjectDashboard() {
     searchQuery.trim().length > 0 || serviceFilter.trim().length > 0;
 
   return (
-    <div className="bg-[#f8fafc] pb-12">
-      <div className="bg-white border-b border-slate-100">
-        <div className="max-w-5xl mx-auto px-4 md:px-6 py-8 flex flex-col md:flex-row md:items-center md:justify-between gap-5">
-          <div>
-            <p className="text-sm text-slate-500">Welcome back,</p>
-            <h1 className="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight mt-1">
-              {displayName}
-            </h1>
-            <p className="text-sm text-slate-500 mt-2 max-w-xl">
-              Your TatvaOps projects with vendor proposals. Open a project to compare quotes.
-            </p>
-          </div>
-
-          <PdfUploadGateButton className="shrink-0 inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-sm font-semibold text-white bg-[#c04a00] hover:bg-[#a84000] transition-colors shadow-sm whitespace-nowrap">
-            Upload & compare PDFs
-          </PdfUploadGateButton>
+    <div className="pb-14">
+      <div className="border-b border-stone-200/80 bg-white/70 backdrop-blur-sm">
+        <div className="qs-container py-8 md:py-10">
+          <PageHeader
+            eyebrow="QuoteSense"
+            title={
+              <>
+                Vendor quote intelligence
+                <span className="block text-base md:text-lg font-medium text-stone-500 mt-1">
+                  Welcome back, {displayName}
+                </span>
+              </>
+            }
+            description="Open a project to select 2–3 same-tier vendor quotes, compare costs against market rates, and review an AI recommendation."
+            actions={
+              <PdfUploadGateButton className="qs-btn qs-btn-primary whitespace-nowrap">
+                Upload & compare PDFs
+              </PdfUploadGateButton>
+            }
+          />
         </div>
       </div>
 
-      <div className="max-w-5xl mx-auto px-4 md:px-6 py-8">
+      <div className="qs-container py-8">
         <div className="flex flex-col gap-3 mb-5 sm:flex-row sm:items-center sm:justify-between">
-          <h2 className="text-sm font-semibold text-slate-800">My projects</h2>
+          <div>
+            <h2 className="qs-section-title">My projects</h2>
+            <p className="qs-section-sub">
+              Active TatvaOps projects with vendor proposals.
+            </p>
+          </div>
           {!loading && (
-            <span className="text-xs text-slate-400">
+            <span className="text-xs text-stone-400 tabular-nums">
               {isFiltering
-                ? `${filteredProjects.length} of ${projects.length} active`
-                : `${projects.length} active`}
+                ? `${filteredProjects.length} of ${projects.length} projects`
+                : `${projects.length} project${projects.length === 1 ? "" : "s"}`}
             </span>
           )}
         </div>
@@ -125,7 +155,7 @@ export default function ProjectDashboard() {
             <label className="relative flex-1 min-w-0">
               <span className="sr-only">Search projects by quote ID or service</span>
               <svg
-                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+                className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -143,7 +173,7 @@ export default function ProjectDashboard() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search by quote ID or service…"
-                className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-3 text-sm text-slate-800 placeholder:text-slate-400 shadow-sm focus:border-[#c04a00]/40 focus:outline-none focus:ring-2 focus:ring-[#c04a00]/15"
+                className="qs-input qs-input-icon"
               />
             </label>
             <label className="sm:w-56 shrink-0">
@@ -151,7 +181,7 @@ export default function ProjectDashboard() {
               <select
                 value={serviceFilter}
                 onChange={(e) => setServiceFilter(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-white py-2.5 px-3 text-sm text-slate-800 shadow-sm focus:border-[#c04a00]/40 focus:outline-none focus:ring-2 focus:ring-[#c04a00]/15"
+                className="qs-select"
               >
                 <option value="">All services</option>
                 {serviceOptions.map((service) => (
@@ -164,83 +194,69 @@ export default function ProjectDashboard() {
           </div>
         )}
 
-        {loading && (
-          <div className="flex items-center justify-center py-16">
-            <div className="w-8 h-8 border-2 border-slate-200 border-t-[#c04a00] rounded-full animate-spin" />
-          </div>
-        )}
+        {loading && <ProjectGridSkeleton />}
 
         {!loading && error && sessionError && (
-          <div className="rounded-2xl border border-orange-100 bg-white px-6 py-6 shadow-sm">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-              <div>
-                <p className="text-sm font-semibold text-slate-900">
-                  Your session has expired
-                </p>
-                <p className="text-sm text-slate-500 mt-1 max-w-xl">
-                  Please sign in again to securely load your TatvaOps projects.
-                  Your quote comparison tools are still available below.
-                </p>
-              </div>
+          <ErrorState
+            title="Your session has expired"
+            description="Sign in again to securely load your TatvaOps projects. PDF comparison remains available below when enabled."
+            action={
               <button
                 type="button"
                 onClick={() => {
                   logout();
                   window.location.href = "/login";
                 }}
-                className="inline-flex items-center justify-center rounded-xl bg-[#c04a00] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#a84000] transition-colors"
+                className="qs-btn qs-btn-primary"
               >
                 Sign in again
               </button>
-            </div>
-          </div>
+            }
+          />
         )}
 
         {!loading && error && !sessionError && (
-          <div className="rounded-2xl border border-amber-100 bg-white px-6 py-5 text-sm text-slate-700 shadow-sm">
-            We could not load your projects right now.
-            <p className="text-xs text-slate-500 mt-1">
-              Please try again in a moment. If this continues, contact support.
-            </p>
-          </div>
+          <ErrorState
+            title="We couldn’t load your projects"
+            description="Please try again in a moment. If this continues, contact support."
+          />
         )}
 
         {!loading && !error && projects.length === 0 && (
-          <div className="rounded-xl border border-dashed border-slate-200 bg-white px-6 py-10 text-center text-sm text-slate-500">
-            No projects found for your account yet.
-            <p className="text-xs text-slate-400 mt-2">
-              You can still compare vendor quote PDFs using the tool below.
-            </p>
-          </div>
+          <EmptyState
+            title="No projects yet"
+            description="Projects assigned to your TatvaOps account will appear here. You can still compare vendor quote PDFs using the standalone tool below."
+          />
         )}
 
         {!loading && projects.length > 0 && filteredProjects.length === 0 && (
-          <div className="rounded-xl border border-dashed border-slate-200 bg-white px-6 py-10 text-center text-sm text-slate-500 mb-4">
-            No projects match your search.
-            <button
-              type="button"
-              onClick={() => {
-                setSearchQuery("");
-                setServiceFilter("");
-              }}
-              className="mt-2 block mx-auto text-xs font-medium text-[#c04a00] hover:underline"
-            >
-              Clear filters
-            </button>
-          </div>
+          <EmptyState
+            title="No matching projects"
+            description="Try a different quote ID, service name, or clear your filters."
+            action={
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery("");
+                  setServiceFilter("");
+                }}
+                className="qs-btn qs-btn-secondary"
+              >
+                Clear filters
+              </button>
+            }
+          />
         )}
 
         {!loading && filteredProjects.length > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {filteredProjects.map((project) => (
               <ProjectTile key={project.id} project={project} />
             ))}
           </div>
         )}
 
-        {!loading && (
-          <StandalonePdfSection prominent={showProminentPdf} />
-        )}
+        {!loading && <StandalonePdfSection prominent={showProminentPdf} />}
       </div>
     </div>
   );

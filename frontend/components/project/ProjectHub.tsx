@@ -3,7 +3,11 @@
 import React, { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { type ProjectData, findQuoteById, QUOTE_TIER_LABELS } from "@/lib/project-types";
+import {
+  type ProjectData,
+  findQuoteById,
+  QUOTE_TIER_LABELS,
+} from "@/lib/project-types";
 import {
   buildTatvaServiceUrl,
   getTatvaServicesForNav,
@@ -12,7 +16,6 @@ import {
   cacheSelectedComparePayloads,
   readCachedProjectQuotePayloads,
 } from "@/lib/compare-payload-cache";
-import { projectHref } from "@/lib/project-api";
 import {
   MAX_COMPARE_QUOTES,
   MIN_COMPARE_QUOTES,
@@ -22,6 +25,9 @@ import {
 } from "@/lib/compare-limits";
 import { VendorCard } from "./VendorCard";
 import { CompareActionBar } from "./CompareActionBar";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { ProjectStatusBadge, TierBadge } from "@/components/ui/Badge";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 type ProjectHubProps = {
   project: ProjectData;
@@ -29,13 +35,13 @@ type ProjectHubProps = {
 
 export default function ProjectHub({ project }: ProjectHubProps) {
   const router = useRouter();
-  const [selectedQuoteIds, setSelectedQuoteIds] = useState<Set<string>>(new Set());
+  const [selectedQuoteIds, setSelectedQuoteIds] = useState<Set<string>>(
+    new Set()
+  );
   const [limitMessage, setLimitMessage] = useState<string | null>(null);
 
   const selectionFull = selectedQuoteIds.size >= MAX_COMPARE_QUOTES;
 
-  // Quote type (Essential / Mid-segment / Luxury) of the current selection — every
-  // new pick must match this so comparisons stay apples-to-apples.
   const selectedTier = useMemo(() => {
     for (const id of selectedQuoteIds) {
       const found = findQuoteById(project, id);
@@ -44,42 +50,45 @@ export default function ProjectHub({ project }: ProjectHubProps) {
     return undefined;
   }, [project, selectedQuoteIds]);
 
-  const toggleQuote = useCallback((quoteId: string) => {
-    setSelectedQuoteIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(quoteId)) {
-        next.delete(quoteId);
+  const toggleQuote = useCallback(
+    (quoteId: string) => {
+      setSelectedQuoteIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(quoteId)) {
+          next.delete(quoteId);
+          setLimitMessage(null);
+          return next;
+        }
+
+        const found = findQuoteById(project, quoteId);
+        const newTier = found?.quote.tier;
+        let currentTier: typeof newTier;
+        for (const id of prev) {
+          const t = findQuoteById(project, id)?.quote.tier;
+          if (t) {
+            currentTier = t;
+            break;
+          }
+        }
+
+        if (currentTier && newTier && currentTier !== newTier) {
+          setLimitMessage(
+            `Compare quotes from the same tier. You've selected ${QUOTE_TIER_LABELS[currentTier]} — pick another ${QUOTE_TIER_LABELS[currentTier]} quote.`
+          );
+          return prev;
+        }
+
+        if (next.size >= MAX_COMPARE_QUOTES) {
+          setLimitMessage(MAX_COMPARE_MESSAGE);
+          return prev;
+        }
+        next.add(quoteId);
         setLimitMessage(null);
         return next;
-      }
-
-      const found = findQuoteById(project, quoteId);
-      const newTier = found?.quote.tier;
-      let currentTier: typeof newTier;
-      for (const id of prev) {
-        const t = findQuoteById(project, id)?.quote.tier;
-        if (t) {
-          currentTier = t;
-          break;
-        }
-      }
-
-      if (currentTier && newTier && currentTier !== newTier) {
-        setLimitMessage(
-          `You've selected ${QUOTE_TIER_LABELS[currentTier]} quotes — pick another ${QUOTE_TIER_LABELS[currentTier]} quote to compare like-for-like.`
-        );
-        return prev;
-      }
-
-      if (next.size >= MAX_COMPARE_QUOTES) {
-        setLimitMessage(MAX_COMPARE_MESSAGE);
-        return prev;
-      }
-      next.add(quoteId);
-      setLimitMessage(null);
-      return next;
-    });
-  }, [project]);
+      });
+    },
+    [project]
+  );
 
   const clearSelection = useCallback(() => {
     setSelectedQuoteIds(new Set());
@@ -98,7 +107,11 @@ export default function ProjectHub({ project }: ProjectHubProps) {
           wanted.has(String(q._id || q.id))
         );
         if (isValidCompareCount(selected.length)) {
-          cacheSelectedComparePayloads(project.projectCode, selected, cached.meta);
+          cacheSelectedComparePayloads(
+            project.projectCode,
+            selected,
+            cached.meta
+          );
         }
       }
 
@@ -108,7 +121,7 @@ export default function ProjectHub({ project }: ProjectHubProps) {
       });
       router.push(`/compare?${params.toString()}`);
     },
-    [project.id, project.projectCode, router]
+    [project.projectCode, router]
   );
 
   const handleCompare = useCallback(() => {
@@ -121,8 +134,6 @@ export default function ProjectHub({ project }: ProjectHubProps) {
       const vendor = project.vendors.find((v) => v.id === vendorId);
       if (!vendor || vendor.quotes.length < MIN_COMPARE_QUOTES) return;
 
-      // A vendor can submit quotes of different types (Essential/Mid-segment/Luxury) —
-      // only compare quotes that share the same type as the first one.
       const firstTier = vendor.quotes.find((q) => q.tier)?.tier;
       const sameTierQuotes = firstTier
         ? vendor.quotes.filter((q) => !q.tier || q.tier === firstTier)
@@ -130,7 +141,7 @@ export default function ProjectHub({ project }: ProjectHubProps) {
 
       if (!isValidCompareCount(sameTierQuotes.length)) {
         setLimitMessage(
-          "This vendor's quotes are different types (Essential/Mid-segment/Luxury) — select at least 2 of the same type to compare."
+          "This vendor's quotes span different tiers (Essential / Mid / Luxury). Select at least 2 of the same tier to compare."
         );
         return;
       }
@@ -139,9 +150,9 @@ export default function ProjectHub({ project }: ProjectHubProps) {
       setSelectedQuoteIds(new Set(ids));
       setLimitMessage(
         sameTierQuotes.length > MAX_COMPARE_QUOTES
-          ? `Only ${MAX_COMPARE_QUOTES} quotes can be compared — the first ${MAX_COMPARE_QUOTES} of the same type are selected.`
+          ? `Only ${MAX_COMPARE_QUOTES} quotes can be compared — the first ${MAX_COMPARE_QUOTES} of the same tier are selected.`
           : sameTierQuotes.length < vendor.quotes.length
-            ? "Some of this vendor's quotes were a different type and were skipped."
+            ? "Some of this vendor's quotes were a different tier and were skipped."
             : null
       );
       navigateToCompare(ids);
@@ -157,120 +168,96 @@ export default function ProjectHub({ project }: ProjectHubProps) {
   const finalizedQuotes = useMemo(
     () =>
       project.vendors.reduce(
-        (n, v) =>
-          n +
-          v.quotes.filter((q) => q.isFinalizeQuote === true).length,
+        (n, v) => n + v.quotes.filter((q) => q.isFinalizeQuote === true).length,
         0
       ),
     [project.vendors]
   );
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] pb-28">
-      {/* Project header */}
-      <div className="bg-white border-b border-slate-100">
-        <div className="max-w-4xl mx-auto px-4 md:px-6 py-6">
+    <div className="pb-32">
+      <div className="border-b border-stone-200/80 bg-white/70 backdrop-blur-sm">
+        <div className="qs-container py-6 md:py-8">
           <Link
             href="/"
-            className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-[#c04a00] mb-4 transition-colors"
+            className="inline-flex items-center gap-1 text-xs font-medium text-stone-500 hover:text-[var(--accent)] mb-4 transition-colors"
           >
             ← All projects
           </Link>
-          <div className="flex items-center gap-2 text-xs text-slate-500 mb-3">
-            <span className="font-medium text-[#c04a00]">{project.projectCode}</span>
-            <span>·</span>
-            <span>{project.clientName}</span>
-          </div>
-          <h1 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">
-            {project.title}
-          </h1>
-          <p className="text-sm text-slate-500 mt-2 max-w-2xl leading-relaxed">{project.brief}</p>
-
-          <div className="flex flex-wrap items-center gap-2 mt-4">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-50 text-indigo-700 text-xs font-medium">
-              <span>{project.service.icon}</span>
-              {project.service.name}
-            </span>
-            <span className="inline-flex items-center px-3 py-1 rounded-full bg-slate-100 text-slate-600 text-xs font-medium">
-              {project.vendors.length} vendor{project.vendors.length === 1 ? "" : "s"}
-              {totalQuotes > 0
-                ? ` · ${totalQuotes} quote${totalQuotes === 1 ? "" : "s"}`
-                : ""}
-              {finalizedQuotes > 0
-                ? ` · ${finalizedQuotes} finalized`
-                : ""}
-            </span>
-            <span
-              className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium capitalize ${
-                project.status === "completed"
-                  ? "bg-violet-50 text-violet-800"
-                  : project.status === "comparing"
-                    ? "bg-amber-50 text-amber-700"
-                    : project.status === "quotes_received"
-                      ? "bg-emerald-50 text-emerald-700"
-                      : "bg-blue-50 text-blue-700"
-              }`}
-              title="Project lifecycle (from Tatva project), not the quote finalize flag"
-            >
-              Project · {project.status.replaceAll("_", " ")}
-            </span>
-            {finalizedQuotes > 0 ? (
-              <span
-                className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-violet-50 text-violet-800"
-                title="At least one quote has isFinalizeQuote: true"
-              >
-                {finalizedQuotes} quote{finalizedQuotes === 1 ? "" : "s"} finalized
-              </span>
-            ) : null}
-          </div>
-          <p className="mt-3 text-[11px] text-slate-400 leading-relaxed max-w-2xl">
-            <strong className="font-medium text-slate-500">Quote badges</strong> use two fields:{" "}
-            <code className="text-[10px]">status</code> → SUBMITTED / REVISED / …, and{" "}
-            <code className="text-[10px]">isFinalizeQuote</code> → an extra{" "}
-            <strong className="text-violet-700">FINALIZED</strong> badge when true. Both can show
-            together (submitted + finalized).
-          </p>
+          <PageHeader
+            eyebrow={project.projectCode}
+            title={project.title}
+            description={
+              <>
+                {project.brief}
+                {project.clientName && project.clientName !== "—" ? (
+                  <span className="block mt-1 text-stone-400">
+                    Client · {project.clientName}
+                  </span>
+                ) : null}
+              </>
+            }
+            meta={
+              <>
+                <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-stone-100 text-stone-700 text-xs font-medium">
+                  {project.service.name}
+                </span>
+                <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-stone-100 text-stone-600 text-xs font-medium">
+                  {project.vendors.length} vendor
+                  {project.vendors.length === 1 ? "" : "s"}
+                  {totalQuotes > 0
+                    ? ` · ${totalQuotes} quote${totalQuotes === 1 ? "" : "s"}`
+                    : ""}
+                </span>
+                <ProjectStatusBadge status={project.status} />
+                {finalizedQuotes > 0 ? (
+                  <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-violet-50 text-violet-800">
+                    {finalizedQuotes} finalized
+                  </span>
+                ) : null}
+                {selectedTier ? <TierBadge tier={selectedTier} /> : null}
+              </>
+            }
+          />
         </div>
       </div>
 
-      {/* How it works — minimal hint */}
-      <div className="max-w-4xl mx-auto px-4 md:px-6 pt-6 space-y-2">
-        <div className="rounded-xl border border-dashed border-slate-200 bg-white/60 px-4 py-3 text-xs text-slate-500 leading-relaxed">
-          <strong className="text-slate-700 font-medium">Compare quotes</strong> — pick{" "}
-          {MIN_COMPARE_QUOTES}–{MAX_COMPARE_QUOTES} proposals of the{" "}
-          <strong className="text-slate-700">same quote type</strong> (Essential / Mid-segment /
-          Luxury), then click <strong className="text-slate-700">Compare quotes</strong>.
+      <div className="qs-container pt-6 space-y-3">
+        <div className="qs-card px-4 py-3.5 border-dashed">
+          <p className="text-sm text-stone-700 leading-relaxed">
+            <strong className="font-semibold text-stone-900">
+              Pick {MIN_COMPARE_QUOTES}–{MAX_COMPARE_QUOTES} quotes from the same
+              tier
+            </strong>{" "}
+            (Essential, Mid-segment, or Luxury), then compare. Mixing tiers is
+            blocked so comparisons stay like-for-like.
+          </p>
         </div>
         {limitMessage && (
           <div
             role="alert"
-            className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800 leading-relaxed"
+            className="rounded-lg border border-[var(--warning-border)] bg-[var(--warning-soft)] px-4 py-3 text-sm text-amber-900 leading-relaxed"
           >
             {limitMessage}
           </div>
         )}
       </div>
 
-      {/* Service pills — other Tatva services (context) */}
-      <div className="max-w-4xl mx-auto px-4 md:px-6 pt-5">
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-2">
+      <div className="qs-container pt-5">
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-stone-400 mb-2">
           TatvaOps services
         </p>
         <div className="flex flex-wrap gap-1.5">
           {getTatvaServicesForNav().map((svc) => {
             const isActive = svc.id === project.service.id;
-            const className = `text-[11px] px-2.5 py-1 rounded-md border transition-colors ${
+            const className = `text-[11px] px-2.5 py-1 rounded-md border transition-colors duration-150 ${
               isActive
-                ? "border-[#c04a00]/30 bg-orange-50 text-[#c04a00] font-medium"
+                ? "border-[color-mix(in_srgb,var(--accent)_35%,var(--border))] bg-[var(--accent-soft)] text-[var(--accent)] font-medium"
                 : svc.href
-                  ? "border-slate-100 bg-white text-slate-500 hover:border-[#c04a00]/20 hover:text-[#c04a00]"
-                  : "border-slate-100 bg-white text-slate-400"
+                  ? "border-stone-200 bg-white text-stone-500 hover:border-[color-mix(in_srgb,var(--accent)_25%,var(--border))] hover:text-[var(--accent)]"
+                  : "border-stone-100 bg-white text-stone-400"
             }`;
-            const label = (
-              <>
-                {svc.icon} {svc.name}
-              </>
-            );
+            const label = svc.name;
             if (svc.href) {
               return (
                 <a
@@ -293,29 +280,39 @@ export default function ProjectHub({ project }: ProjectHubProps) {
         </div>
       </div>
 
-      {/* Vendor quote cards */}
-      <div className="max-w-4xl mx-auto px-4 md:px-6 py-6 space-y-4">
+      <div className="qs-container py-6 space-y-4">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-sm font-semibold text-slate-800">
-            Assigned vendors & proposals
-          </h2>
+          <div>
+            <h2 className="qs-section-title">Vendors & proposals</h2>
+            <p className="qs-section-sub">
+              Select quotes to analyze side-by-side.
+            </p>
+          </div>
           {selectedQuoteIds.size > 0 && (
-            <span className="text-xs text-slate-500 tabular-nums">
+            <span className="text-xs text-stone-500 tabular-nums">
               {selectedQuoteIds.size}/{MAX_COMPARE_QUOTES} selected
             </span>
           )}
         </div>
-        {project.vendors.map((vendor) => (
-          <VendorCard
-            key={vendor.id}
-            vendor={vendor}
-            selectedQuoteIds={selectedQuoteIds}
-            selectionFull={selectionFull}
-            selectedTier={selectedTier}
-            onToggleQuote={toggleQuote}
-            onCompareVendorQuotes={handleCompareVendorQuotes}
+
+        {project.vendors.length === 0 ? (
+          <EmptyState
+            title="No vendor quotes yet"
+            description="When vendors submit proposals for this project, they’ll appear here for selection and comparison."
           />
-        ))}
+        ) : (
+          project.vendors.map((vendor) => (
+            <VendorCard
+              key={vendor.id}
+              vendor={vendor}
+              selectedQuoteIds={selectedQuoteIds}
+              selectionFull={selectionFull}
+              selectedTier={selectedTier}
+              onToggleQuote={toggleQuote}
+              onCompareVendorQuotes={handleCompareVendorQuotes}
+            />
+          ))
+        )}
       </div>
 
       <CompareActionBar

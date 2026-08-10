@@ -52,7 +52,7 @@ function LoginContent() {
   const searchParams = useSearchParams();
   const { sendOtp, verifyOtp, otpSent, otpError, clearOtpState, isAuthenticated, isLoading } =
     useAuth();
-  const returnTo = cleanReturnTo(safeReturnTo(searchParams.get("returnTo")));
+  const returnTo = cleanReturnTo(safeReturnTo(searchParams?.get("returnTo") ?? null));
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
@@ -141,9 +141,12 @@ function LoginContent() {
       title="Sign in"
       subtitle="Welcome back — enter your phone number to continue"
       footer={
-        <p className="mt-6 text-sm text-slate-500 text-center">
+        <p className="mt-6 text-sm text-stone-500 text-center">
           Don&apos;t have an account?{" "}
-          <Link href="/register" className="font-medium text-[#c04a00] hover:underline">
+          <Link
+            href="/register"
+            className="font-medium text-[var(--accent)] hover:underline"
+          >
             Create one
           </Link>
         </p>
@@ -152,7 +155,10 @@ function LoginContent() {
       {!otpSent ? (
         <form onSubmit={handleSendOtp} className="space-y-4">
           <div>
-            <label htmlFor="phone" className="block text-sm font-medium text-slate-700 mb-1.5">
+            <label
+              htmlFor="phone"
+              className="block text-sm font-medium text-stone-700 mb-1.5"
+            >
               Phone number
             </label>
             <input
@@ -169,7 +175,7 @@ function LoginContent() {
           <button
             type="submit"
             disabled={cleanedPhone.length < 10 || loading}
-            className="w-full py-3.5 rounded-xl font-semibold text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-gradient-to-b from-slate-500 to-slate-700 hover:from-slate-600 hover:to-slate-800 shadow-sm inline-flex items-center justify-center gap-2.5"
+            className="qs-btn qs-btn-primary w-full !py-3.5"
           >
             {loading ? (
               "Sending…"
@@ -183,11 +189,15 @@ function LoginContent() {
         </form>
       ) : (
         <form onSubmit={handleVerifyOtp} className="space-y-4">
-          <p className="text-sm text-slate-500 text-center">
-            OTP sent to <span className="font-medium text-slate-700">+91 {cleanedPhone}</span>
+          <p className="text-sm text-stone-500 text-center">
+            OTP sent to{" "}
+            <span className="font-medium text-stone-700">+91 {cleanedPhone}</span>
           </p>
           <div>
-            <label htmlFor="otp" className="block text-sm font-medium text-slate-700 mb-1.5">
+            <label
+              htmlFor="otp"
+              className="block text-sm font-medium text-stone-700 mb-1.5"
+            >
               One-time password
             </label>
             <input
@@ -203,8 +213,10 @@ function LoginContent() {
               autoFocus
               className={`${inputClass} text-center text-lg tracking-[0.3em]`}
             />
-            <p className="mt-2 text-xs text-slate-500 text-center">
-              {loading ? "Verifying…" : "Sign-in runs automatically after 6 digits"}
+            <p className="mt-2 text-xs text-stone-500 text-center">
+              {loading
+                ? "Verifying…"
+                : "Sign-in runs automatically after 6 digits"}
             </p>
           </div>
           <div className="flex items-center justify-center gap-3 text-sm">
@@ -212,11 +224,11 @@ function LoginContent() {
               type="button"
               onClick={handleResendOtp}
               disabled={loading || resendCooldown > 0}
-              className="text-[#c04a00] hover:underline transition-colors disabled:opacity-50 disabled:no-underline disabled:cursor-not-allowed"
+              className="text-[var(--accent)] hover:underline transition-colors disabled:opacity-50 disabled:no-underline disabled:cursor-not-allowed"
             >
               {resendCooldown > 0 ? `Resend OTP in ${resendCooldown}s` : "Resend OTP"}
             </button>
-            <span className="text-slate-300 px-1" aria-hidden="true">
+            <span className="text-stone-300 px-1" aria-hidden="true">
               ·
             </span>
             <button
@@ -226,7 +238,7 @@ function LoginContent() {
                 setOtp("");
                 setResendCooldown(0);
               }}
-              className="text-slate-500 hover:text-[#c04a00] transition-colors"
+              className="text-stone-500 hover:text-[var(--accent)] transition-colors"
             >
               Change phone number
             </button>
@@ -234,7 +246,11 @@ function LoginContent() {
         </form>
       )}
 
-      {otpError && <p className="mt-3 text-sm text-red-600 text-center">{otpError}</p>}
+      {otpError && (
+        <p className="mt-3 text-sm text-red-600 text-center" role="alert">
+          {otpError}
+        </p>
+      )}
     </AuthPageLayout>
   );
 }

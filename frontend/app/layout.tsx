@@ -1,6 +1,13 @@
 import type { Metadata } from "next";
+import { DM_Sans } from "next/font/google";
 import AppShell from "@/components/AppShell";
 import "./globals.css";
+
+const dmSans = DM_Sans({
+  subsets: ["latin"],
+  variable: "--font-dm-sans",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "QuoteSense | TatvaOps Procurement Intelligence",
@@ -19,7 +26,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="antialiased font-sans">
+      <body className={`${dmSans.variable} antialiased font-sans`}>
         <AppShell>{children}</AppShell>
       </body>
     </html>

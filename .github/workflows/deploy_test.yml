@@ -56,14 +56,20 @@ jobs:
           printf '%s' 'https://tatvaops-quotesense-qa.onrender.com' | vercel env add NEXT_PUBLIC_BACKEND_URL production --token=$VERCEL_TOKEN --force || true
           printf '%s' 'https://tatvaops-quotesense-qa.onrender.com' | vercel env add BACKEND_URL production --token=$VERCEL_TOKEN --force || true
 
-      - name: Deploy to Vercel
+      # Prebuilt + explicit alias (same as deploy_dev.yml) so the public hostname
+      # cannot stay pinned to a stale production deployment.
+      - name: Deploy to Vercel (prebuilt + alias)
         working-directory: ./frontend
         run: |
           set -euo pipefail
-          rm -rf node_modules .next
           test -d app
           mkdir -p .vercel
           printf '%s\n' "{\"orgId\":\"${VERCEL_ORG_ID}\",\"projectId\":\"${VERCEL_PROJECT_ID}\"}" > .vercel/project.json
           echo "Deploy target projectId=${VERCEL_PROJECT_ID} orgId=${VERCEL_ORG_ID}"
-          URL="$(vercel deploy --prod --yes --token=$VERCEL_TOKEN)"
+          vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+          vercel build --prod --token="$VERCEL_TOKEN"
+          URL="$(vercel deploy --prebuilt --prod --yes --token="$VERCEL_TOKEN" | tee /tmp/vercel-deploy.out | tail -n 1)"
           echo "Production deploy URL: ${URL}"
+          test -n "${URL}"
+          vercel alias set "${URL}" testquotesense.withtatva.ai --token="$VERCEL_TOKEN" --scope="${VERCEL_ORG_ID}"
+          echo "Aliased testquotesense.withtatva.ai -> ${URL}"

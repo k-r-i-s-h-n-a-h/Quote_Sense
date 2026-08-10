@@ -60,17 +60,23 @@ jobs:
           # production only — preview env add can prompt for git branch in CI
           printf '%s' 'https://devopsapi.withtatva.ai' | vercel env add TATVA_API_BASE production --token=$VERCEL_TOKEN --force || true
 
-      - name: Deploy to Vercel
+      # Prebuilt + explicit alias: plain `vercel deploy --prod` was leaving
+      # devquotesense stuck on an old production deployment (same dpl/etag).
+      - name: Deploy to Vercel (prebuilt + alias)
         working-directory: ./frontend
         run: |
           set -euo pipefail
-          rm -rf node_modules .next
           test -d app
           mkdir -p .vercel
           printf '%s\n' "{\"orgId\":\"${VERCEL_ORG_ID}\",\"projectId\":\"${VERCEL_PROJECT_ID}\"}" > .vercel/project.json
           echo "Deploy target projectId=${VERCEL_PROJECT_ID} orgId=${VERCEL_ORG_ID}"
-          URL="$(vercel deploy --prod --yes --token=$VERCEL_TOKEN)"
+          vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+          vercel build --prod --token="$VERCEL_TOKEN"
+          URL="$(vercel deploy --prebuilt --prod --yes --token="$VERCEL_TOKEN" | tee /tmp/vercel-deploy.out | tail -n 1)"
           echo "Production deploy URL: ${URL}"
+          test -n "${URL}"
+          vercel alias set "${URL}" devquotesense.withtatva.ai --token="$VERCEL_TOKEN" --scope="${VERCEL_ORG_ID}"
+          echo "Aliased devquotesense.withtatva.ai -> ${URL}"
 
       # ==========================================================
       # TEMPORARILY DISABLED — Sonar scan + Quality Gate

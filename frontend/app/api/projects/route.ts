@@ -83,9 +83,9 @@ export async function GET(req: NextRequest) {
     let page = 1;
     let stoppedReason = "first-page-only";
 
-    // Keep requesting the next page until the API says we're done.
-    // Do NOT require page1.length === PAGE_SIZE — a short first page (e.g. 81)
-    // can still have more pages (→ 121). That bug caused local vs test gaps.
+    // Keep requesting the next page until empty/duplicate (or MAX_PAGES).
+    // Do NOT stop on short pages or Tatva's pagination.total — both have
+    // under-fetched local lists (e.g. 81) while test still showed ~121.
     while (
       shouldFetchNextPage({
         page,
@@ -130,15 +130,27 @@ export async function GET(req: NextRequest) {
       stoppedReason = `merged-through-page-${page}`;
     }
 
-    if (
-      totalHint != null &&
-      allItems.length >= totalHint &&
-      stoppedReason === "first-page-only"
-    ) {
-      stoppedReason = "reached-total-hint";
+    const merged = withMergedList(firstData, firstList.path, allItems);
+    // Rewrite pagination so Network Response matches what we actually merged
+    // (Tatva's first-page total/pages can lag behind multi-page fetches).
+    if (merged && typeof merged === "object" && !Array.isArray(merged)) {
+      const root = merged as JsonRecord;
+      const prev =
+        root.pagination && typeof root.pagination === "object"
+          ? (root.pagination as JsonRecord)
+          : {};
+      root.pagination = {
+        ...prev,
+        page: 1,
+        limit: PAGE_SIZE,
+        total: allItems.length,
+        pages: Math.max(1, Math.ceil(allItems.length / PAGE_SIZE)),
+        tatvaTotalHint: totalHint,
+        pagesFetched: page,
+        stopReason: stoppedReason,
+      };
     }
 
-    const merged = withMergedList(firstData, firstList.path, allItems);
     const resHeaders = new Headers();
     resHeaders.set("Cache-Control", "no-store");
     resHeaders.set("X-Projects-Count", String(allItems.length));

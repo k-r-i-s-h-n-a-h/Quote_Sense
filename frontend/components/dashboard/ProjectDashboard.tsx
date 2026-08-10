@@ -1,10 +1,14 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { getUserDisplayName } from "@/lib/user-display";
 import { fetchUserProjects, getAuthUserId } from "@/lib/project-api";
 import type { ProjectSummary } from "@/lib/project-types";
+import {
+  filterProjects,
+  serviceOptionsForFilter,
+} from "@/lib/project-list-filter";
 import { ProjectTile } from "./ProjectTile";
 import StandalonePdfSection from "./StandalonePdfSection";
 import { PdfUploadGateButton } from "./PdfUploadGateButton";
@@ -33,6 +37,8 @@ export default function ProjectDashboard() {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<DashboardError | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [serviceFilter, setServiceFilter] = useState("");
 
   useEffect(() => {
     if (!userId) {
@@ -65,6 +71,23 @@ export default function ProjectDashboard() {
   const showProminentPdf = !loading && !error && projects.length === 0;
   const sessionError = error ? isAuthSessionError(error) : false;
 
+  const serviceOptions = useMemo(
+    () => serviceOptionsForFilter(projects),
+    [projects]
+  );
+
+  const filteredProjects = useMemo(
+    () =>
+      filterProjects(projects, {
+        query: searchQuery,
+        serviceId: serviceFilter,
+      }),
+    [projects, searchQuery, serviceFilter]
+  );
+
+  const isFiltering =
+    searchQuery.trim().length > 0 || serviceFilter.trim().length > 0;
+
   return (
     <div className="bg-[#f8fafc] pb-12">
       <div className="bg-white border-b border-slate-100">
@@ -86,12 +109,60 @@ export default function ProjectDashboard() {
       </div>
 
       <div className="max-w-5xl mx-auto px-4 md:px-6 py-8">
-        <div className="flex items-center justify-between mb-5">
+        <div className="flex flex-col gap-3 mb-5 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="text-sm font-semibold text-slate-800">My projects</h2>
           {!loading && (
-            <span className="text-xs text-slate-400">{projects.length} active</span>
+            <span className="text-xs text-slate-400">
+              {isFiltering
+                ? `${filteredProjects.length} of ${projects.length} active`
+                : `${projects.length} active`}
+            </span>
           )}
         </div>
+
+        {!loading && projects.length > 0 && (
+          <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center">
+            <label className="relative flex-1 min-w-0">
+              <span className="sr-only">Search projects by quote ID or service</span>
+              <svg
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+                aria-hidden
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M21 21l-4.35-4.35M11 18a7 7 0 100-14 7 7 0 000 14z"
+                />
+              </svg>
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search by quote ID or service…"
+                className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-3 text-sm text-slate-800 placeholder:text-slate-400 shadow-sm focus:border-[#c04a00]/40 focus:outline-none focus:ring-2 focus:ring-[#c04a00]/15"
+              />
+            </label>
+            <label className="sm:w-56 shrink-0">
+              <span className="sr-only">Filter by service type</span>
+              <select
+                value={serviceFilter}
+                onChange={(e) => setServiceFilter(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-white py-2.5 px-3 text-sm text-slate-800 shadow-sm focus:border-[#c04a00]/40 focus:outline-none focus:ring-2 focus:ring-[#c04a00]/15"
+              >
+                <option value="">All services</option>
+                {serviceOptions.map((service) => (
+                  <option key={service.id} value={service.id}>
+                    {service.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        )}
 
         {loading && (
           <div className="flex items-center justify-center py-16">
@@ -143,9 +214,25 @@ export default function ProjectDashboard() {
           </div>
         )}
 
-        {!loading && projects.length > 0 && (
+        {!loading && projects.length > 0 && filteredProjects.length === 0 && (
+          <div className="rounded-xl border border-dashed border-slate-200 bg-white px-6 py-10 text-center text-sm text-slate-500 mb-4">
+            No projects match your search.
+            <button
+              type="button"
+              onClick={() => {
+                setSearchQuery("");
+                setServiceFilter("");
+              }}
+              className="mt-2 block mx-auto text-xs font-medium text-[#c04a00] hover:underline"
+            >
+              Clear filters
+            </button>
+          </div>
+        )}
+
+        {!loading && filteredProjects.length > 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-4">
-            {projects.map((project) => (
+            {filteredProjects.map((project) => (
               <ProjectTile key={project.id} project={project} />
             ))}
           </div>

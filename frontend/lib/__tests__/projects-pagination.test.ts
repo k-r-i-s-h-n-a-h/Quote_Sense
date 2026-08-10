@@ -28,29 +28,17 @@ describe("projects-pagination", () => {
     expect(readTotalHint({ data: { total: "121" } })).toBe(121);
   });
 
-  it("shouldFetchNextPage continues after short first page (81 vs 100)", () => {
-    // Old bug: stopped when length !== page * 100, so 81 ended pagination early.
+  it("shouldFetchNextPage continues after short first page even when total says done", () => {
+    // Old bugs: (1) require full page of 100; (2) trust pagination.total and skip page 2.
     expect(
       shouldFetchNextPage({
         page: 1,
         maxPages: 20,
         lastPageCount: 81,
         mergedCount: 81,
-        totalHint: null,
+        totalHint: 81,
       })
     ).toBe(true);
-  });
-
-  it("shouldFetchNextPage stops at total hint", () => {
-    expect(
-      shouldFetchNextPage({
-        page: 1,
-        maxPages: 20,
-        lastPageCount: 81,
-        mergedCount: 121,
-        totalHint: 121,
-      })
-    ).toBe(false);
   });
 
   it("shouldFetchNextPage stops on empty page", () => {

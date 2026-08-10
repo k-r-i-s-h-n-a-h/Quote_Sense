@@ -101,7 +101,12 @@ export function readTotalHint(payload: unknown): number | null {
   return null;
 }
 
-/** Whether we should request another page after receiving `lastPageCount` items. */
+/** Whether we should request another page after receiving `lastPageCount` items.
+ *
+ * Do NOT stop on Tatva's `pagination.total` alone — it has been observed to
+ * under-report (e.g. total/pages say 81/1 while later pages still return rows).
+ * Only empty pages, duplicate pages, or MAX_PAGES end the loop in the route.
+ */
 export function shouldFetchNextPage(opts: {
   page: number;
   maxPages: number;
@@ -109,8 +114,9 @@ export function shouldFetchNextPage(opts: {
   mergedCount: number;
   totalHint: number | null;
 }): boolean {
+  void opts.mergedCount;
+  void opts.totalHint;
   if (opts.page >= opts.maxPages) return false;
   if (opts.lastPageCount === 0) return false;
-  if (opts.totalHint != null && opts.mergedCount >= opts.totalHint) return false;
   return true;
 }

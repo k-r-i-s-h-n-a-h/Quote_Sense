@@ -97,11 +97,37 @@ function serviceIconForName(name: string): string {
 }
 
 function resolveService(name: string): TatvaService {
-  const match = TATVA_SERVICES.find(
-    (s) => s.name.toLowerCase() === name.toLowerCase()
-  );
-  if (match) return match;
-  const slug = name.toLowerCase().replaceAll(/[^a-z0-9]+/g, "_").slice(0, 32) || "general";
+  const lower = name.toLowerCase().trim();
+  const exact = TATVA_SERVICES.find((s) => s.name.toLowerCase() === lower);
+  if (exact) return exact;
+
+  // Tatva often sends labels that don't match catalog names exactly
+  // (e.g. "Residential Interiors" / "Interiors" → Interior Design).
+  const fuzzyId = ((): string | null => {
+    if (lower.includes("interior")) return "interior";
+    if (lower.includes("paint")) return "painting";
+    if (lower.includes("plumb")) return "plumbing";
+    if (lower.includes("electr")) return "electrical";
+    if (lower.includes("solar")) return "solar";
+    if (lower.includes("event")) return "event_management";
+    if (lower.includes("property") && lower.includes("develop")) {
+      return "property_development";
+    }
+    if (lower.includes("home") && lower.includes("automation")) {
+      return "home_automation";
+    }
+    if (lower.includes("farm")) return "farm_infrastructure";
+    if (lower.includes("irrigation")) return "irrigation_automation";
+    if (lower.includes("construction")) return "construction";
+    return null;
+  })();
+  if (fuzzyId) {
+    const catalog = TATVA_SERVICES.find((s) => s.id === fuzzyId);
+    if (catalog) return catalog;
+  }
+
+  const slug =
+    lower.replaceAll(/[^a-z0-9]+/g, "_").slice(0, 32) || "general";
   return { id: slug, name: name || "General", icon: serviceIconForName(name) };
 }
 

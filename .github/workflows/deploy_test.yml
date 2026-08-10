@@ -68,8 +68,9 @@ jobs:
           echo "Deploy target projectId=${VERCEL_PROJECT_ID} orgId=${VERCEL_ORG_ID}"
           vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
           vercel build --prod --token="$VERCEL_TOKEN"
+          # --prod already assigns production aliases (incl. custom domain).
+          # Skip explicit alias set with --scope=$VERCEL_ORG_ID (personal-account error).
           URL="$(vercel deploy --prebuilt --prod --yes --token="$VERCEL_TOKEN" | tee /tmp/vercel-deploy.out | tail -n 1)"
           echo "Production deploy URL: ${URL}"
           test -n "${URL}"
-          vercel alias set "${URL}" testquotesense.withtatva.ai --token="$VERCEL_TOKEN" --scope="${VERCEL_ORG_ID}"
-          echo "Aliased testquotesense.withtatva.ai -> ${URL}"
+          grep -E 'Aliased|Production|Ready' /tmp/vercel-deploy.out || true

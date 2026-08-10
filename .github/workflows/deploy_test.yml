@@ -41,22 +41,22 @@ jobs:
         # Always pass --yes so non-interactive runs do not hang on prod confirm.
         run: npm install --global vercel@58.9.0
 
-      # Deploy FROM frontend/ so Next sees app/ (Root Directory should stay ./).
+      # QA project Root Directory is "frontend" (dashboard). Deploy from monorepo
+      # root so Vercel resolves frontend/ once — NOT from frontend/ (that becomes
+      # frontend/frontend). Dev project uses ./ so deploy_dev.yml differs.
       # Skip preview env add — CLI can prompt for git branch in CI.
       - name: Sync Tatva API + QA backend URL on Vercel
-        working-directory: ./frontend
         run: |
           printf '%s' 'https://devopsapi.withtatva.ai' | vercel env add TATVA_API_BASE production --token=$VERCEL_TOKEN --force || true
           printf '%s' 'https://tatvaops-quotesense-qa.onrender.com' | vercel env add NEXT_PUBLIC_BACKEND_URL production --token=$VERCEL_TOKEN --force || true
           printf '%s' 'https://tatvaops-quotesense-qa.onrender.com' | vercel env add BACKEND_URL production --token=$VERCEL_TOKEN --force || true
 
       - name: Deploy to Vercel
-        working-directory: ./frontend
         timeout-minutes: 10
         run: |
           set -euo pipefail
-          rm -rf node_modules .next
-          test -d app
+          rm -rf frontend/node_modules frontend/.next
+          test -d frontend/app
           echo "Starting vercel deploy (non-interactive)…"
           vercel deploy --prod --yes --token="$VERCEL_TOKEN"
           echo "Vercel deploy finished."

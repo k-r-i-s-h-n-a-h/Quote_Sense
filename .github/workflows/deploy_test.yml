@@ -37,39 +37,28 @@ jobs:
         working-directory: ./frontend
         run: npm run build
 
-      # Same deploy steps as deploy_dev.yml (CLI + cwd + vercel deploy).
-      # QA project Root Directory must stay ./ (empty), NOT "frontend",
-      # or Vercel resolves frontend/frontend.
       - name: Install Vercel CLI
         # Pin a published CLI (47.2.2 never existed on npm).
         run: npm install --global vercel@58.9.0
 
-      # Deploy FROM frontend/ so Next sees app/ here.
-      # Do NOT set Vercel dashboard Root Directory to "frontend" with this
-      # pattern (that would resolve frontend/frontend). Token cannot PATCH
-      # project settings (forbidden), so we avoid the API rootDirectory call.
+      # QA project Root Directory = "frontend" → run Vercel CLI from monorepo ROOT.
+      # Running from ./frontend makes Vercel look for frontend/frontend/package.json.
       - name: Sync Tatva API + QA backend URL on Vercel
-        working-directory: ./frontend
         run: |
-          # production only — preview env add can prompt for git branch in CI
           printf '%s' 'https://devopsapi.withtatva.ai' | vercel env add TATVA_API_BASE production --token=$VERCEL_TOKEN --force || true
           printf '%s' 'https://tatvaops-quotesense-qa.onrender.com' | vercel env add NEXT_PUBLIC_BACKEND_URL production --token=$VERCEL_TOKEN --force || true
           printf '%s' 'https://tatvaops-quotesense-qa.onrender.com' | vercel env add BACKEND_URL production --token=$VERCEL_TOKEN --force || true
 
-      # Prebuilt + explicit alias (same as deploy_dev.yml) so the public hostname
-      # cannot stay pinned to a stale production deployment.
-      - name: Deploy to Vercel (prebuilt + alias)
-        working-directory: ./frontend
+      - name: Deploy to Vercel (prebuilt)
         run: |
           set -euo pipefail
-          test -d app
+          test -d frontend/app
           mkdir -p .vercel
           printf '%s\n' "{\"orgId\":\"${VERCEL_ORG_ID}\",\"projectId\":\"${VERCEL_PROJECT_ID}\"}" > .vercel/project.json
           echo "Deploy target projectId=${VERCEL_PROJECT_ID} orgId=${VERCEL_ORG_ID}"
           vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
           vercel build --prod --token="$VERCEL_TOKEN"
           # --prod already assigns production aliases (incl. custom domain).
-          # Skip explicit alias set with --scope=$VERCEL_ORG_ID (personal-account error).
           URL="$(vercel deploy --prebuilt --prod --yes --token="$VERCEL_TOKEN" | tee /tmp/vercel-deploy.out | tail -n 1)"
           echo "Production deploy URL: ${URL}"
           test -n "${URL}"

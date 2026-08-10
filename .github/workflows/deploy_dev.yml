@@ -50,38 +50,22 @@ jobs:
         # Pin a published CLI (47.2.2 never existed on npm).
         run: npm install --global vercel@58.9.0
 
-      # Monorepo: Next app lives in frontend/. Without this, Vercel builds at repo
-      # root and fails with "Couldn't find any pages or app directory".
-      - name: Ensure Vercel Root Directory is frontend
-        run: |
-          set -euo pipefail
-          curl -sS -X PATCH \
-            "https://api.vercel.com/v9/projects/${VERCEL_PROJECT_ID}?teamId=${VERCEL_ORG_ID}" \
-            -H "Authorization: Bearer ${VERCEL_TOKEN}" \
-            -H "Content-Type: application/json" \
-            -d '{"rootDirectory":"frontend"}' \
-            | tee /tmp/vercel-project-patch.json
-          python3 - <<'PY'
-          import json, sys
-          data = json.load(open("/tmp/vercel-project-patch.json"))
-          root = data.get("rootDirectory")
-          if root != "frontend":
-              print("Unexpected project payload:", json.dumps(data, indent=2)[:2000])
-              sys.exit("Failed to set rootDirectory=frontend")
-          print("rootDirectory OK:", root)
-          PY
-
-      # Run from monorepo root (not frontend/) so Root Directory is not doubled.
+      # Deploy FROM frontend/ so Next sees app/ here.
+      # Do NOT set Vercel dashboard Root Directory to "frontend" with this
+      # pattern (that would resolve frontend/frontend). Token cannot PATCH
+      # project settings (forbidden), so we avoid the API rootDirectory call.
       - name: Sync Tatva API URL on Vercel
+        working-directory: ./frontend
         run: |
           # production only — preview env add can prompt for git branch in CI
           printf '%s' 'https://devopsapi.withtatva.ai' | vercel env add TATVA_API_BASE production --token=$VERCEL_TOKEN --force || true
 
       - name: Deploy to Vercel
+        working-directory: ./frontend
         run: |
           set -euo pipefail
-          rm -rf frontend/node_modules frontend/.next
-          test -d frontend/app
+          rm -rf node_modules .next
+          test -d app
           vercel deploy --prod --yes --token=$VERCEL_TOKEN
 
       # ==========================================================

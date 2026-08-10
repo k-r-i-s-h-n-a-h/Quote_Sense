@@ -15,6 +15,7 @@ import {
   recommendMarketRate,
   verdictStyles,
 } from "../market-rate";
+import { annotateQuotesPayloadForUi } from "../quote-ui-status";
 
 describe("finalize-flags", () => {
   it("isTruthyFlag", () => {
@@ -166,5 +167,24 @@ describe("getBackendBase", () => {
     expect(getBackendBase()).toBe("https://public.example.com");
     delete process.env.NEXT_PUBLIC_BACKEND_URL;
     expect(getBackendBase()).toBe("http://127.0.0.1:8001");
+  });
+});
+
+describe("annotateQuotesPayloadForUi", () => {
+  it("keeps status submitted and normalizes isFinalizeQuote when true", () => {
+    const out = annotateQuotesPayloadForUi({
+      success: true,
+      data: [{ quoteNumber: "Q2", status: "submitted", isFinalizeQuote: true }],
+    }) as { data: Array<Record<string, unknown>> };
+    expect(out.data[0].status).toBe("submitted");
+    expect(out.data[0].isFinalizeQuote).toBe(true);
+  });
+
+  it("leaves submitted when flag false", () => {
+    const out = annotateQuotesPayloadForUi({
+      data: [{ status: "submitted", isFinalizeQuote: false }],
+    }) as { data: Array<Record<string, unknown>> };
+    expect(out.data[0].status).toBe("submitted");
+    expect(out.data[0].isFinalizeQuote).toBe(false);
   });
 });

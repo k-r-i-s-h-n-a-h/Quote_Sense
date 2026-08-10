@@ -15,6 +15,19 @@ export function isTruthyFlag(value: unknown): boolean {
 export function isFinalizeFlagFromRecord(
   raw: Record<string, unknown>
 ): boolean {
+  // Fast path for Tatva’s usual camelCase field (most common production shape).
+  if (
+    isTruthyFlag(raw.isFinalizeQuote) ||
+    isTruthyFlag(raw.isFinalizedQuote) ||
+    isTruthyFlag(raw.isFinalized) ||
+    isTruthyFlag(raw.finalizeQuote) ||
+    isTruthyFlag(raw.is_finalized) ||
+    isTruthyFlag(raw.is_finalize_quote) ||
+    isTruthyFlag(raw.is_finalized_quote)
+  ) {
+    return true;
+  }
+
   for (const [k, v] of Object.entries(raw)) {
     const key = k.toLowerCase().replaceAll("_", "");
     if (

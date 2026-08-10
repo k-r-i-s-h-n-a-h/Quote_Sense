@@ -26,6 +26,15 @@ type QuoteRowProps = {
   onToggle: () => void;
 };
 
+/** Tatva lifecycle badge — uses `status` only (submitted / revised / draft / …). */
+function lifecycleBadge(status: QuoteStatus): { text: string; styleKey: QuoteStatus } {
+  // Never show "finalized" as the lifecycle pill — that comes from isFinalizeQuote.
+  if (status === "finalized") {
+    return { text: "submitted", styleKey: "submitted" };
+  }
+  return { text: status, styleKey: status };
+}
+
 export function QuoteRow({
   quote,
   vendorName,
@@ -34,8 +43,14 @@ export function QuoteRow({
   disabledReason,
   onToggle,
 }: QuoteRowProps) {
+  const { text: statusText, styleKey } = lifecycleBadge(quote.status);
+  // Source of truth for the FINALIZED badge: isFinalizeQuote boolean only.
+  const showFinalized = quote.isFinalizeQuote === true;
+
   return (
     <label
+      data-quote-number={quote.quoteNumber}
+      data-is-finalize-quote={showFinalized ? "true" : "false"}
       className={`flex items-center gap-3 p-3 rounded-lg border transition-all ${
         disabled
           ? "border-slate-100 bg-slate-50/60 opacity-55 cursor-not-allowed"
@@ -60,15 +75,20 @@ export function QuoteRow({
         <div className="flex items-center gap-2 flex-wrap">
           <span className="font-semibold text-slate-900 text-sm">#{quote.quoteNumber}</span>
           <span
-            className={`text-[10px] font-medium uppercase tracking-wide px-1.5 py-0.5 rounded ${STATUS_STYLE[quote.status]}`}
-            title={
-              quote.status === "finalized"
-                ? "Customer selected this as the final quote (isFinalizeQuote)"
-                : "Quote status"
-            }
+            className={`text-[10px] font-medium uppercase tracking-wide px-1.5 py-0.5 rounded ${STATUS_STYLE[styleKey]}`}
+            title="Tatva quote lifecycle (status field)"
           >
-            {quote.status === "finalized" ? "finalized" : quote.status}
+            {statusText}
           </span>
+          {showFinalized ? (
+            <span
+              className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-violet-600 text-white"
+              title="isFinalizeQuote: true"
+              data-testid="quote-finalized-badge"
+            >
+              FINALIZED
+            </span>
+          ) : null}
           {quote.tier && (
             <span
               className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${TIER_STYLE[quote.tier]}`}

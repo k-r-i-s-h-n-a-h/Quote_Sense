@@ -42,18 +42,22 @@ jobs:
 
       # Deploy first so Vercel is not blocked when SonarQube is down or QG fails.
       - name: Install Vercel CLI
-        # Align with Vercel API requirement (>= 47.2.2); pin for reproducible CI.
-        run: npm install --global vercel@47.2.2
+        # Pin a published CLI (47.2.2 never existed on npm).
+        run: npm install --global vercel@58.9.0
 
+      # Root Directory on the Vercel project is "frontend" — run CLI from monorepo root
+      # so it does not resolve to frontend/frontend.
       - name: Sync Tatva API URL on Vercel
-        working-directory: ./frontend
         run: |
           printf '%s' 'https://devopsapi.withtatva.ai' | vercel env add TATVA_API_BASE production --token=$VERCEL_TOKEN --force || true
           printf '%s' 'https://devopsapi.withtatva.ai' | vercel env add TATVA_API_BASE preview --token=$VERCEL_TOKEN --force || true
 
       - name: Deploy to Vercel
-        working-directory: ./frontend
-        run: vercel deploy --prod --yes --token=$VERCEL_TOKEN
+        run: |
+          set -euo pipefail
+          rm -rf frontend/node_modules frontend/.next
+          test -d frontend
+          vercel deploy --prod --yes --token=$VERCEL_TOKEN
 
       # ==========================================================
       # SONARQUBE (non-blocking): host timeouts must not fail deploy.

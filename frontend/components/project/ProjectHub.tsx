@@ -157,7 +157,9 @@ export default function ProjectHub({ project }: ProjectHubProps) {
   const finalizedQuotes = useMemo(
     () =>
       project.vendors.reduce(
-        (n, v) => n + v.quotes.filter((q) => q.status === "finalized").length,
+        (n, v) =>
+          n +
+          v.quotes.filter((q) => q.isFinalizeQuote === true).length,
         0
       ),
     [project.vendors]
@@ -208,11 +210,26 @@ export default function ProjectHub({ project }: ProjectHubProps) {
                       ? "bg-emerald-50 text-emerald-700"
                       : "bg-blue-50 text-blue-700"
               }`}
-              title="Project lifecycle status — independent of quote finalize"
+              title="Project lifecycle (from Tatva project), not the quote finalize flag"
             >
-              {project.status.replaceAll("_", " ")}
+              Project · {project.status.replaceAll("_", " ")}
             </span>
+            {finalizedQuotes > 0 ? (
+              <span
+                className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-violet-50 text-violet-800"
+                title="At least one quote has isFinalizeQuote: true"
+              >
+                {finalizedQuotes} quote{finalizedQuotes === 1 ? "" : "s"} finalized
+              </span>
+            ) : null}
           </div>
+          <p className="mt-3 text-[11px] text-slate-400 leading-relaxed max-w-2xl">
+            <strong className="font-medium text-slate-500">Quote badges</strong> use two fields:{" "}
+            <code className="text-[10px]">status</code> → SUBMITTED / REVISED / …, and{" "}
+            <code className="text-[10px]">isFinalizeQuote</code> → an extra{" "}
+            <strong className="text-violet-700">FINALIZED</strong> badge when true. Both can show
+            together (submitted + finalized).
+          </p>
         </div>
       </div>
 

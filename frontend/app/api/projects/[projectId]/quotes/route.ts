@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getBackendBase } from "@/lib/backend-url";
+import { annotateQuotesPayloadForUi } from "@/lib/quote-ui-status";
 import { TATVA_VENDOR_API } from "@/lib/tatva-api";
 
 type RouteContext = { params: Promise<{ projectId: string }> };
@@ -78,18 +79,22 @@ export async function GET(req: NextRequest, context: RouteContext) {
     const headers = new Headers();
     headers.set("Cache-Control", "no-store");
 
+    // Keep original payload for MA (flag + workSummary). Rewrite a copy for UI.
+    let responseBody: unknown = data;
     if (res.ok) {
       syncMarketRateCatalog(data);
-      // Full Mongo quote list (incl. workSummary + isFinalizeQuote) → MA update
       const apply = await applyFinalizedQuotesFromPayload(data);
       headers.set(
         "X-Market-Rate-Apply",
         apply.ok ? apply.detail || "ok" : `error:${apply.detail || "fail"}`
       );
       headers.set("X-Backend-Base", getBackendBase());
+      // Normalize isFinalizeQuote; leave Tatva status for dual badges (SUBMITTED + FINALIZED)
+      responseBody = annotateQuotesPayloadForUi(data);
+      headers.set("X-Quote-Ui-Status", "dual-badge");
     }
 
-    return NextResponse.json(data, { status: res.status, headers });
+    return NextResponse.json(responseBody, { status: res.status, headers });
   } catch {
     return NextResponse.json(
       { success: false, message: "Unable to fetch project quotes." },

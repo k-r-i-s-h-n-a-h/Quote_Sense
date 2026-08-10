@@ -25,7 +25,7 @@ export function VendorCard({
   onCompareVendorQuotes,
 }: VendorCardProps) {
   const vendorSelectedCount = vendor.quotes.filter((q) => selectedQuoteIds.has(q.id)).length;
-  const finalizedCount = vendor.quotes.filter((q) => q.status === "finalized").length;
+  const finalizedCount = vendor.quotes.filter((q) => q.isFinalizeQuote === true).length;
   const canCompare = vendor.quotes.length >= MIN_COMPARE_QUOTES;
   const compareCount = Math.min(vendor.quotes.length, MAX_COMPARE_QUOTES);
   const hasMoreThanMax = vendor.quotes.length > MAX_COMPARE_QUOTES;
@@ -48,7 +48,7 @@ export function VendorCard({
               {vendor.quotes.length} quote{vendor.quotes.length !== 1 ? "s" : ""}
               {finalizedCount > 0
                 ? ` · ${finalizedCount} finalized`
-                : " submitted"}
+                : " · none finalized"}
               {hasMoreThanMax && (
                 <span className="text-amber-600"> · max {MAX_COMPARE_QUOTES} for compare</span>
               )}

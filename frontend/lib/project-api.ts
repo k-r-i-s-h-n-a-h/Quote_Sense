@@ -7,6 +7,7 @@ import type { ProjectData, ProjectSummary } from "./project-types";
 import { getAuthToken, getAuthUserId } from "./auth";
 import { cacheProjectQuotePayloads } from "./compare-payload-cache";
 import { applyFinalizedQuotesInBackground } from "./market-rate-apply";
+import { annotateQuotesPayloadForUi } from "./quote-ui-status";
 import {
   findProjectRawByRef,
   isMongoObjectId,
@@ -102,8 +103,11 @@ export async function fetchProjectWithQuotes(
     return { ok: false, message: msg, status: quotesRes.status };
   }
 
+  // Raw Tatva shape (keep isFinalizeQuote for MA apply).
   const rawQuotes = unwrapApiList(quotesData);
-  const project = buildProjectWithQuotes(projectRaw, mongoId, quotesData);
+  // UI path: normalize finalize flag; keep Tatva status for dual badges.
+  const uiQuotesPayload = annotateQuotesPayloadForUi(quotesData);
+  const project = buildProjectWithQuotes(projectRaw, mongoId, uiQuotesPayload);
   project.id = mongoId;
   project.projectCode = publicRef;
 

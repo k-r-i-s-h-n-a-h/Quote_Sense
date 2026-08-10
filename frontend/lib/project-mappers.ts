@@ -327,15 +327,20 @@ export function mapApiProject(raw: RawRecord): ProjectData {
 
 export function mapApiQuote(raw: RawRecord): VendorQuote {
   const tier = mapQuoteTier(raw);
-  // Flag wins over Tatva status string ("submitted" + isFinalizeQuote:true → finalized).
-  const finalized = isFinalizeFlag(raw);
+  // Two independent signals from Tatva:
+  // - status → lifecycle badge (submitted / revised / draft / …)
+  // - isFinalizeQuote → separate FINALIZED badge + MA apply gate
+  const customerFinalized = isFinalizeFlag(raw);
+  const lifecycle = mapQuoteStatus(asString(raw.status, "submitted"), false);
   return {
     id: asString(raw._id || raw.id),
     quoteNumber: asString(raw.quoteNumber, "—"),
     label: quoteLabel(raw),
     amount: extractGrandTotal(raw),
     date: formatQuoteDate(raw.quoteDate || raw.createdAt),
-    status: finalized ? "finalized" : mapQuoteStatus(asString(raw.status, "submitted"), false),
+    // Keep Tatva lifecycle; never overwrite with finalize bool.
+    status: lifecycle === "finalized" ? "submitted" : lifecycle,
+    isFinalizeQuote: customerFinalized,
     lineItems: countLineItems(raw),
     tier,
   };
@@ -451,6 +456,6 @@ export function buildProjectWithQuotes(
     }
   }
 
-  // Quote finalize flags only affect VendorQuote.status ("finalized"), never project.status.
+  // Quote finalize flags only set VendorQuote.isFinalizeQuote — never project.status.
   return base;
 }

@@ -50,7 +50,7 @@ describe("unwrapApiList", () => {
 
 
 describe("isFinalizeQuote mapping", () => {
-  it("maps isFinalizeQuote true to status finalized even when status is submitted", () => {
+  it("keeps status submitted and sets isFinalizeQuote when flag true", () => {
     const q = mapApiQuote({
       _id: "abc",
       quoteNumber: "Q2F93K0",
@@ -59,10 +59,11 @@ describe("isFinalizeQuote mapping", () => {
       pricingSummary: [{ label: "Grand total", value: 1125278 }],
     });
     expect(isFinalizeFlag({ isFinalizeQuote: true })).toBe(true);
-    expect(q.status).toBe("finalized");
+    expect(q.status).toBe("submitted");
+    expect(q.isFinalizeQuote).toBe(true);
   });
 
-  it("leaves non-finalized quotes as submitted", () => {
+  it("leaves non-finalized quotes as submitted with flag false", () => {
     const q = mapApiQuote({
       _id: "x",
       quoteNumber: "Q1",
@@ -70,6 +71,7 @@ describe("isFinalizeQuote mapping", () => {
       isFinalizeQuote: false,
     });
     expect(q.status).toBe("submitted");
+    expect(q.isFinalizeQuote).toBe(false);
   });
 
   it("parses comma amounts and workSummary line counts", () => {
@@ -259,5 +261,57 @@ describe("compare-matrix", () => {
     expect(
       lineItemDescription({ work_item: "Wardrobe", room: "Bedroom" })
     ).toEqual({ title: "Wardrobe", room: "Bedroom" });
+  });
+});
+
+describe("exact QA payload isFinalizeQuote:true", () => {
+  it("maps Q2F93K0 shape with dual signals (submitted + finalized flag)", () => {
+    const q = mapApiQuote({
+      _id: "6a76ebf1f181b15829a606b8",
+      quoteNumber: "Q2F93K0",
+      status: "submitted",
+      quoteType: "essential",
+      isFinalizeQuote: true,
+      pricingSummary: [{ label: "Grand total", value: 1125278.49 }],
+      workSummary: [{ services: [{ workItems: [{ a: 1 }] }] }],
+    });
+    expect(q.status).toBe("submitted");
+    expect(q.isFinalizeQuote).toBe(true);
+    expect(q.quoteNumber).toBe("Q2F93K0");
+  });
+
+  it("buildProjectWithQuotes keeps submitted + isFinalizeQuote flag", () => {
+    const payload = {
+      success: true,
+      data: [
+        {
+          _id: "6a76ebf1f181b15829a606b8",
+          quoteNumber: "Q2F93K0",
+          status: "submitted",
+          isFinalizeQuote: true,
+          vendorId: "v1",
+          vendorDetail: {
+            companyName: "Tata Consultancy Services Limited",
+            vendorName: "vidya",
+            companyEmail: "vidya.m@tatvaops.com",
+          },
+          pricingSummary: [{ label: "Grand total", value: 1125278.49 }],
+        },
+      ],
+    };
+    const project = buildProjectWithQuotes(null, "mongo1", payload);
+    expect(project.vendors[0].quotes[0].status).toBe("submitted");
+    expect(project.vendors[0].quotes[0].isFinalizeQuote).toBe(true);
+  });
+
+  it("false flag stays submitted without finalize", () => {
+    const q = mapApiQuote({
+      _id: "x",
+      quoteNumber: "Q1",
+      status: "submitted",
+      isFinalizeQuote: false,
+    });
+    expect(q.status).toBe("submitted");
+    expect(q.isFinalizeQuote).toBe(false);
   });
 });

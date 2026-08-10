@@ -12,6 +12,8 @@ export type VendorQuote = {
   amount: number;
   date: string;
   status: QuoteStatus;
+  /** True when Tatva isFinalizeQuote is true — shows a separate FINALIZED badge. */
+  isFinalizeQuote?: boolean;
   lineItems: number;
   tier?: QuoteTier;
 };

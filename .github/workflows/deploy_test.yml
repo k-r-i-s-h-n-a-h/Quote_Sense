@@ -62,4 +62,8 @@ jobs:
           set -euo pipefail
           rm -rf node_modules .next
           test -d app
-          vercel deploy --prod --yes --token=$VERCEL_TOKEN
+          mkdir -p .vercel
+          printf '%s\n' "{\"orgId\":\"${VERCEL_ORG_ID}\",\"projectId\":\"${VERCEL_PROJECT_ID}\"}" > .vercel/project.json
+          echo "Deploy target projectId=${VERCEL_PROJECT_ID} orgId=${VERCEL_ORG_ID}"
+          URL="$(vercel deploy --prod --yes --token=$VERCEL_TOKEN)"
+          echo "Production deploy URL: ${URL}"

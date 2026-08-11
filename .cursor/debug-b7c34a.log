@@ -268,3 +268,15 @@
 {"sessionId":"b7c34a","location":"AppShell.tsx:state","message":"shell render state","data":{"isLoading":false,"isAuthenticated":true,"pathname":"/","isProtectedRoute":true},"timestamp":1786364600382,"hypothesisId":"H2"}
 {"sessionId":"b7c34a","location":"AppShell.tsx:state","message":"shell render state","data":{"isLoading":true,"isAuthenticated":false,"pathname":"/","isProtectedRoute":true},"timestamp":1786364775104,"hypothesisId":"H2"}
 {"sessionId":"b7c34a","location":"AppShell.tsx:state","message":"shell render state","data":{"isLoading":false,"isAuthenticated":true,"pathname":"/","isProtectedRoute":true},"timestamp":1786364775107,"hypothesisId":"H2"}
+{"sessionId":"b7c34a","location":"AppShell.tsx:state","message":"shell render state","data":{"isLoading":true,"isAuthenticated":false,"pathname":"/","isProtectedRoute":true},"timestamp":1786430420259,"hypothesisId":"H2"}
+{"sessionId":"b7c34a","location":"auth.tsx:initAuth:start","message":"auth init started","data":{},"timestamp":1786430420260,"hypothesisId":"H2"}
+{"sessionId":"b7c34a","location":"auth.tsx:initAuth:stored","message":"auth stored session","data":{"hasStored":true,"hasToken":true},"timestamp":1786430420261,"hypothesisId":"H2"}
+{"sessionId":"b7c34a","location":"auth.tsx:initAuth:done","message":"auth loading false","data":{"cancelled":false},"timestamp":1786430420261,"hypothesisId":"H2"}
+{"sessionId":"b7c34a","location":"AppShell.tsx:state","message":"shell render state","data":{"isLoading":false,"isAuthenticated":true,"pathname":"/","isProtectedRoute":true},"timestamp":1786430420266,"hypothesisId":"H2"}
+{"sessionId":"b7c34a","location":"ProjectDashboard.tsx:fetch","message":"projects fetch result","data":{"ok":true,"status":200,"count":121,"message":null},"timestamp":1786430425469,"hypothesisId":"H4"}
+{"sessionId":"b7c34a","location":"AppShell.tsx:state","message":"shell render state","data":{"isLoading":true,"isAuthenticated":false,"pathname":"/","isProtectedRoute":true},"timestamp":1786430495141,"hypothesisId":"H2"}
+{"sessionId":"b7c34a","location":"AppShell.tsx:state","message":"shell render state","data":{"isLoading":false,"isAuthenticated":true,"pathname":"/","isProtectedRoute":true},"timestamp":1786430495146,"hypothesisId":"H2"}
+{"sessionId":"b7c34a","location":"auth.tsx:initAuth:start","message":"auth init started","data":{},"timestamp":1786430495141,"hypothesisId":"H2"}
+{"sessionId":"b7c34a","location":"auth.tsx:initAuth:stored","message":"auth stored session","data":{"hasStored":true,"hasToken":true},"timestamp":1786430495142,"hypothesisId":"H2"}
+{"sessionId":"b7c34a","location":"auth.tsx:initAuth:done","message":"auth loading false","data":{"cancelled":false},"timestamp":1786430495142,"hypothesisId":"H2"}
+{"sessionId":"b7c34a","location":"ProjectDashboard.tsx:fetch","message":"projects fetch result","data":{"ok":true,"status":200,"count":121,"message":null},"timestamp":1786430501018,"hypothesisId":"H4"}

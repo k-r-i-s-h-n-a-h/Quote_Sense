@@ -38,27 +38,42 @@ jobs:
         run: npm run build
 
       - name: Install Vercel CLI
-        # Pin a published CLI (47.2.2 never existed on npm).
+        # Same pin as deploy_dev.yml
         run: npm install --global vercel@58.9.0
 
-      # QA project Root Directory = "frontend" → run Vercel CLI from monorepo ROOT.
-      # Running from ./frontend makes Vercel look for frontend/frontend/package.json.
+      # Same cwd as deploy_dev.yml (./frontend). Keep QA backend env sync.
       - name: Sync Tatva API + QA backend URL on Vercel
+        working-directory: ./frontend
         run: |
           printf '%s' 'https://devopsapi.withtatva.ai' | vercel env add TATVA_API_BASE production --token=$VERCEL_TOKEN --force || true
           printf '%s' 'https://tatvaops-quotesense-qa.onrender.com' | vercel env add NEXT_PUBLIC_BACKEND_URL production --token=$VERCEL_TOKEN --force || true
           printf '%s' 'https://tatvaops-quotesense-qa.onrender.com' | vercel env add BACKEND_URL production --token=$VERCEL_TOKEN --force || true
 
+      # Same prebuilt flow as deploy_dev.yml. After pull, clear rootDirectory so
+      # QA (dashboard Root Directory=frontend) does not resolve frontend/frontend
+      # or upload broken monorepo traces for node_modules.
       - name: Deploy to Vercel (prebuilt)
+        working-directory: ./frontend
         run: |
           set -euo pipefail
-          test -d frontend/app
+          test -d app
           mkdir -p .vercel
           printf '%s\n' "{\"orgId\":\"${VERCEL_ORG_ID}\",\"projectId\":\"${VERCEL_PROJECT_ID}\"}" > .vercel/project.json
           echo "Deploy target projectId=${VERCEL_PROJECT_ID} orgId=${VERCEL_ORG_ID}"
           vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          path = Path(".vercel/project.json")
+          data = json.loads(path.read_text())
+          settings = data.get("settings")
+          if isinstance(settings, dict):
+              settings["rootDirectory"] = None
+          data["rootDirectory"] = None
+          path.write_text(json.dumps(data, indent=2) + "\n")
+          print("Cleared rootDirectory in .vercel/project.json (match Dev project ./)")
+          PY
           vercel build --prod --token="$VERCEL_TOKEN"
-          # --prod already assigns production aliases (incl. custom domain).
           URL="$(vercel deploy --prebuilt --prod --yes --token="$VERCEL_TOKEN" | tee /tmp/vercel-deploy.out | tail -n 1)"
           echo "Production deploy URL: ${URL}"
           test -n "${URL}"

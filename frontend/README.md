@@ -34,3 +34,34 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+
+
+If you **cleared** Root Directory to `./` (like Dev), then this README + current `deploy_test.yml` are wrong—you’d need the Dev-style “deploy from `frontend/`” flow instead. Confirm which setting you saved in the dashboard.
+
+---
+
+### Finalized quotes: can we identify them?
+
+**Yes.** Same path as Dev:
+
+- Flag: `isFinalizeQuote` (and aliases) on the Tatva quote payload  
+- UI: separate FINALIZED badge  
+- MA write: only via `POST /api/market-rate/apply-finalized` → `apply_finalized_quotes_to_market_rates()`  
+- Compare sessions **do not** write MA  
+
+On project load, `/api/projects/[projectId]/quotes` calls apply and exposes `X-Market-Rate-Apply` (e.g. `quotes_applied=1`).
+
+---
+
+### How many finalized quotes are waiting to update MA?
+
+I **cannot** give a live count from here (no access to Tatva/Supabase staging). Check in order:
+
+1. **Already applied?** In Supabase SQL:
+```sql
+SELECT session_id, COUNT(*) 
+FROM market_moving_avg_sessions
+WHERE session_id LIKE 'finalize:%'
+GROUP BY 1
+ORDER BY 1;

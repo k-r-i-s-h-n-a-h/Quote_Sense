@@ -18,10 +18,9 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
 
       - uses: actions/setup-node@v6
         with:
@@ -38,43 +37,41 @@ jobs:
         run: npm run build
 
       - name: Install Vercel CLI
-        # Same pin as deploy_dev.yml
+        # Pin a published version (reproducible CI; --yes required non-interactive).
         run: npm install --global vercel@58.9.0
 
-      # Same cwd as deploy_dev.yml (./frontend). Keep QA backend env sync.
+      # Project Settings → Root Directory = "frontend".
+      # Deploy/env commands MUST run from the monorepo root (not ./frontend),
+      # otherwise Vercel resolves to frontend/frontend and fails.
       - name: Sync Tatva API + QA backend URL on Vercel
-        working-directory: ./frontend
         run: |
           printf '%s' 'https://devopsapi.withtatva.ai' | vercel env add TATVA_API_BASE production --token=$VERCEL_TOKEN --force || true
+          printf '%s' 'https://devopsapi.withtatva.ai' | vercel env add TATVA_API_BASE preview --token=$VERCEL_TOKEN --force || true
           printf '%s' 'https://tatvaops-quotesense-qa.onrender.com' | vercel env add NEXT_PUBLIC_BACKEND_URL production --token=$VERCEL_TOKEN --force || true
+          printf '%s' 'https://tatvaops-quotesense-qa.onrender.com' | vercel env add NEXT_PUBLIC_BACKEND_URL preview --token=$VERCEL_TOKEN --force || true
           printf '%s' 'https://tatvaops-quotesense-qa.onrender.com' | vercel env add BACKEND_URL production --token=$VERCEL_TOKEN --force || true
+          printf '%s' 'https://tatvaops-quotesense-qa.onrender.com' | vercel env add BACKEND_URL preview --token=$VERCEL_TOKEN --force || true
 
-      # Same prebuilt flow as deploy_dev.yml. After pull, clear rootDirectory so
-      # QA (dashboard Root Directory=frontend) does not resolve frontend/frontend
-      # or upload broken monorepo traces for node_modules.
-      - name: Deploy to Vercel (prebuilt)
-        working-directory: ./frontend
+      - name: Deploy to Vercel (production)
+        id: vercel_deploy
+        timeout-minutes: 10
         run: |
           set -euo pipefail
-          test -d app
-          mkdir -p .vercel
-          printf '%s\n' "{\"orgId\":\"${VERCEL_ORG_ID}\",\"projectId\":\"${VERCEL_PROJECT_ID}\"}" > .vercel/project.json
-          echo "Deploy target projectId=${VERCEL_PROJECT_ID} orgId=${VERCEL_ORG_ID}"
-          vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
-          python3 - <<'PY'
-          import json
-          from pathlib import Path
-          path = Path(".vercel/project.json")
-          data = json.loads(path.read_text())
-          settings = data.get("settings")
-          if isinstance(settings, dict):
-              settings["rootDirectory"] = None
-          data["rootDirectory"] = None
-          path.write_text(json.dumps(data, indent=2) + "\n")
-          print("Cleared rootDirectory in .vercel/project.json (match Dev project ./)")
-          PY
-          vercel build --prod --token="$VERCEL_TOKEN"
-          URL="$(vercel deploy --prebuilt --prod --yes --token="$VERCEL_TOKEN" | tee /tmp/vercel-deploy.out | tail -n 1)"
-          echo "Production deploy URL: ${URL}"
-          test -n "${URL}"
-          grep -E 'Aliased|Production|Ready' /tmp/vercel-deploy.out || true
+          # Avoid shipping local build artifacts; Vercel builds from Root Directory.
+          rm -rf frontend/node_modules frontend/.next
+          echo "Commit: ${GITHUB_SHA}"
+          echo "Cwd: $(pwd)  (expect monorepo root; Root Directory=frontend on project)"
+          test -d frontend || { echo "missing frontend/ at repo root"; exit 1; }
+          # --prod assigns production aliases of the linked Vercel project
+          DEPLOY_URL=$(vercel deploy --prod --yes --token="$VERCEL_TOKEN")
+          echo "Deploy URL: ${DEPLOY_URL}"
+          echo "url=${DEPLOY_URL}" >> "$GITHUB_OUTPUT"
+          vercel inspect "$DEPLOY_URL" --token="$VERCEL_TOKEN" || true
+
+      - name: Alias note
+        run: |
+          echo "If testquotesense.withtatva.ai does not show dual badges after this run:"
+          echo "  1) Vercel → tatvaops-quotesense-qa → Deployments → this commit"
+          echo "  2) Confirm Production domain is attached to THAT deployment"
+          echo "  3) Network headers: X-Quote-Ui-Status: dual-badge"
+          echo "Deployed: ${{ steps.vercel_deploy.outputs.url }}"

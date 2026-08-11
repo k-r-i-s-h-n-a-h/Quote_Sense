@@ -785,7 +785,9 @@ cd frontend && npm run test:coverage
 
 - Branches: `dev` → dev project; `test` → QA (`testquotesense.withtatva.ai`); `main` → prod.
 - Set `BACKEND_URL` / `NEXT_PUBLIC_BACKEND_URL` to the matching Render backend.
-- Root Directory for Vercel projects is typically `frontend` (see `.vercelignore` notes).
+- Vercel **Root Directory must be empty (`./`)** for Dev and QA. CI runs `vercel` from `frontend/`
+  (see `deploy_dev.yml` / `deploy_test.yml`). Setting Root Directory to `frontend` causes
+  `frontend/frontend` or “No Next.js version detected” depending on cwd.
 
 ### Backend (Render)
 

@@ -40,14 +40,48 @@ _SERVICE_FILE = _DATA_DIR / "tatva_service_ids.json"
 _OID_RE = re.compile(r"^[a-fA-F0-9]{24}$")
 
 # Label variants that share one Tatva pricing-method ObjectId once any alias is known.
+# Keys/values are matched casefold against tatva_pricing_method_ids.json labels.
 _PM_LABEL_ALIASES: dict[str, tuple[str, ...]] = {
-    "area (sqft)": ("Area (sqft)", "Area (in sqft)", "Area in sqft"),
-    "area (in sqft)": ("Area (sqft)", "Area (in sqft)", "Area in sqft"),
-    "area in sqft": ("Area (sqft)", "Area (in sqft)", "Area in sqft"),
-    "area(in sqm)": ("Area(in sqm)", "Area (in sqm)", "Area in sqm"),
-    "area (in sqm)": ("Area(in sqm)", "Area (in sqm)", "Area in sqm"),
-    "area (in sqmm)": ("Area (in sqmm)", "Area(in sqmm)"),
-    "area (sqft)/per unit": ("Area (sqft)/Per Unit", "Area (in sqft)", "Area (sqft)"),
+    # Legacy → Area – Direct Entry (sq ft)
+    "area (sqft)": ("Area – Direct Entry (sq ft)", "Area (sqft)", "Area (in sqft)"),
+    "area (in sqft)": ("Area – Direct Entry (sq ft)", "Area (sqft)", "Area (in sqft)"),
+    "area in sqft": ("Area – Direct Entry (sq ft)", "Area (sqft)", "Area (in sqft)"),
+    "area (sqft)/per unit": ("Area – Direct Entry (sq ft)", "Area (sqft)/Per Unit"),
+    "square feet": ("Square Feet", "Area – Direct Entry (sq ft)"),
+    # Legacy → Area – Direct Entry (sq m)
+    "area(in sqm)": ("Area – Direct Entry (sq m)", "Area(in sqm)", "Area (in sqm)"),
+    "area (in sqm)": ("Area – Direct Entry (sq m)", "Area(in sqm)", "Area (in sqm)"),
+    "area in sqm": ("Area – Direct Entry (sq m)", "Area(in sqm)"),
+    "area (in sqmm)": ("Area – Direct Entry (sq m)", "Area (in sqmm)"),
+    # Common short names
+    "per unit": ("Per Unit / Each", "Per Unit"),
+    "lump sum": ("Fixed Amount / Lump Sum", "Lump Sum"),
+    "fixed amount": ("Fixed Amount / Lump Sum",),
+    "running feet": ("Running Length (rft)", "Running Feet"),
+    "running length": ("Running Length (rft)",),
+    "rft": ("Running Length (rft)",),
+    "per visit / service call": ("Per Visit / Service Call", "Per Visit"),
+    "weight – metric (mt)": ("Weight – Metric (MT)", "Weight – Metric Tonne (MT)"),
+    "weight - metric (mt)": ("Weight – Metric (MT)", "Weight – Metric Tonne (MT)"),
+    "dimension(l*b in m)": ("Dimension(L*B in m)", "Area – Length × Breadth (m → sq m)"),
+    "dimension(l*b in sq)": ("Dimension(L*B in m)", "Dimension(L*B in sq)"),
+    "cubic feet": ("Cubic Feet", "Volume – Direct Entry (cu ft)"),
+}
+
+# Old service category display names → current catalog names (same ObjectId).
+_SERVICE_CATEGORY_ALIASES: dict[str, tuple[str, ...]] = {
+    "interiors": ("Residential Interiors", "Interiors"),
+    "interior design": ("Residential Interiors",),
+    "electrical services": ("Home Renovation", "Electrical Services"),
+    "electrical": ("Home Renovation",),
+    "painting": ("Property Management & Rental Operations", "Painting"),
+    "plumbing services": ("Facility Management and Security", "Plumbing Services"),
+    "plumbing": ("Facility Management and Security",),
+    "solar services": ("Solar, Energy & Automation Solutions", "Solar Services"),
+    "solar": ("Solar, Energy & Automation Solutions",),
+    "property development": ("Property Advisory, Sales & Leasing", "Property Development"),
+    "home automation": ("Home Maintenance & Appliance Care", "Home Automation"),
+    "event management": ("Event Management",),
 }
 
 # Seed label ↔ Tatva admin catalog name (same ObjectId).
@@ -768,11 +802,13 @@ def service_id_for_category(service_category: str | None) -> str | None:
         return None
     if not isinstance(raw, dict):
         return None
+
+    candidates = {cat, *(a.casefold() for a in _SERVICE_CATEGORY_ALIASES.get(cat, ()))}
     for sid, entry in raw.items():
         if not isinstance(entry, dict):
             continue
         name = str(entry.get("service_category") or "").strip().casefold()
-        if name == cat and is_object_id(str(sid)):
+        if name in candidates and is_object_id(str(sid)):
             return str(sid).strip()
     return None
 

@@ -1,39 +1,31 @@
 {
+  "6926b1978ba6a3cfc5a191ce": {
+    "service_category": "Residential Interiors",
+    "service_code": "INTERIORS"
+  },
+  "6982f2e19397ea98d6f9600c": {
+    "service_category": "Home Renovation",
+    "service_code": "ELECTRICAL_SERVICES"
+  },
   "6926b7865c6d9f597ae41693": {
     "service_category": "Residential Construction",
     "service_code": "RESIDENTIAL_CONSTRUCTION"
   },
-  "6926b1978ba6a3cfc5a191ce": {
-    "service_category": "Interiors",
-    "service_code": "INTERIORS"
-  },
-  "6926a8308ba6a3cfc5a19114": {
-    "service_category": "Painting",
-    "service_code": "_PAINTING"
-  },
-  "6982f2e19397ea98d6f9600c": {
-    "service_category": "Electrical Services",
-    "service_code": "ELECTRICAL_SERVICES"
-  },
-  "6982f37d9397ea98d6f96019": {
-    "service_category": "Plumbing Services",
-    "service_code": "PLUMBING_SERVICES"
-  },
-  "6926a8928ba6a3cfc5a1911b": {
-    "service_category": "Solar Services",
-    "service_code": "SOLAR_SERVICES"
-  },
-  "6926b4b35c6d9f597ae41670": {
-    "service_category": "Event Management",
-    "service_code": "_EVENT_MANAGEMENT"
-  },
   "6926b24a8ba6a3cfc5a191d5": {
-    "service_category": "Property Development",
+    "service_category": "Property Advisory, Sales & Leasing",
     "service_code": "PROPERTY_DEVELOPMENT"
   },
+  "6926a8928ba6a3cfc5a1911b": {
+    "service_category": "Solar, Energy & Automation Solutions",
+    "service_code": "SOLAR_SERVICES"
+  },
+  "6926a8308ba6a3cfc5a19114": {
+    "service_category": "Property Management & Rental Operations",
+    "service_code": "_PAINTING"
+  },
   "6926a7728ba6a3cfc5a19104": {
-    "service_category": "Home Automation",
-    "service_code": "CIRC01"
+    "service_category": "Home Maintenance & Appliance Care",
+    "service_code": "HOME_AUTOMATION"
   },
   "6926b3888ba6a3cfc5a191e6": {
     "service_category": "Farm Infrastructure Setup",
@@ -42,5 +34,13 @@
   "6926aa018ba6a3cfc5a19122": {
     "service_category": "Irrigation Automation",
     "service_code": "IRRIGATION_AUTOMATION"
+  },
+  "6982f37d9397ea98d6f96019": {
+    "service_category": "Facility Management and Security",
+    "service_code": "PLUMBING_SERVICES"
+  },
+  "6926b4b35c6d9f597ae41670": {
+    "service_category": "Event Management",
+    "service_code": "_EVENT_MANAGEMENT"
   }
 }

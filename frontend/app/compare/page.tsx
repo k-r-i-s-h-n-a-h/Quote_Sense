@@ -354,14 +354,14 @@ function QuoteSenseContent() {
 
     let cancelled = false;
     const sid = activeJobId;
-    const backendUrl = getBackendUrl();
 
     (async () => {
       setLoading(true);
       pollingActiveRef.current = true;
 
       try {
-        await runPollForSession(sid, backendUrl);
+        // Same-origin /api/progress proxy → Render (do not poll NEXT_PUBLIC host directly)
+        await runPollForSession(sid);
       } catch (err) {
         if (!cancelled) {
           setReport(`❌ ${err instanceof Error ? err.message : "Comparison failed."}`);
@@ -438,10 +438,9 @@ function QuoteSenseContent() {
     }
   };
 
-  const runPollForSession = async (sid: string, backendUrl: string) => {
+  const runPollForSession = async (sid: string) => {
     const result = await pollCompareProgress({
       sessionId: sid,
-      backendUrl,
       shouldContinue: () => pollingActiveRef.current,
       hasPartialApplied: () => partialAppliedRef.current,
       onTick: handleProgressTick,

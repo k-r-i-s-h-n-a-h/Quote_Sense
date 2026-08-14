@@ -1,5 +1,9 @@
 /**
  * Poll /api/progress/{session_id} with adaptive intervals (not hundreds of rapid fetches).
+ *
+ * Prefer same-origin `/api/progress/...` (Next.js → Render proxy). Passing backendUrl
+ * is only for local/dev overrides; hosted clients must not poll the Vercel host as
+ * if it were FastAPI (that returns HTML 404).
  */
 
 export type CompareProgressPayload = {
@@ -15,13 +19,24 @@ export type CompareProgressPayload = {
 
 export type PollCompareProgressOptions = {
   sessionId: string;
-  backendUrl: string;
+  /**
+   * Optional FastAPI origin. Empty / omitted → same-origin Next proxy
+   * (`/api/progress/{sessionId}`).
+   */
+  backendUrl?: string;
   /** Return false to stop polling (e.g. component unmounted). */
   shouldContinue: () => boolean;
   /** Client already rendered the partial matrix. */
   hasPartialApplied: () => boolean;
   onTick: (data: CompareProgressPayload) => void;
 };
+
+function progressUrl(sessionId: string, backendUrl: string | undefined, hasPartial: boolean): string {
+  const q = hasPartial ? "?has_partial=true" : "";
+  const path = `/api/progress/${encodeURIComponent(sessionId)}${q}`;
+  const base = (backendUrl || "").trim().replace(/\/$/, "");
+  return base ? `${base}${path}` : path;
+}
 
 export type PollCompareProgressResult =
   | { outcome: "done"; result: Record<string, unknown> }
@@ -64,10 +79,18 @@ export async function pollCompareProgress(
 
     let data: CompareProgressPayload;
     try {
-      const hasPartialParam = hasPartialApplied() ? "?has_partial=true" : "";
-      const res = await fetch(
-        `${backendUrl}/api/progress/${encodeURIComponent(sessionId)}${hasPartialParam}`
-      );
+      const res = await fetch(progressUrl(sessionId, backendUrl, hasPartialApplied()), {
+        cache: "no-store",
+      });
+      // Next.js HTML 404 means the request never reached FastAPI.
+      const ctype = res.headers.get("content-type") || "";
+      if (!ctype.includes("application/json")) {
+        return {
+          outcome: "error",
+          message:
+            "Progress API returned a non-JSON response (often a Vercel 404). Check BACKEND_URL on the frontend host.",
+        };
+      }
       data = (await res.json()) as CompareProgressPayload;
     } catch {
       await sleep(2000);
@@ -110,10 +133,17 @@ export async function pollCompareProgress(
 
   // One last check before giving up (backend may have finished between polls).
   try {
-    const hasPartialParam = hasPartialApplied() ? "?has_partial=true" : "";
-    const res = await fetch(
-      `${backendUrl}/api/progress/${encodeURIComponent(sessionId)}${hasPartialParam}`
-    );
+    const res = await fetch(progressUrl(sessionId, backendUrl, hasPartialApplied()), {
+      cache: "no-store",
+    });
+    const ctype = res.headers.get("content-type") || "";
+    if (!ctype.includes("application/json")) {
+      return {
+        outcome: "error",
+        message:
+          "Progress API returned a non-JSON response (often a Vercel 404). Check BACKEND_URL on the frontend host.",
+      };
+    }
     const data = (await res.json()) as CompareProgressPayload;
     if (data.status === "done" && data.result) {
       return { outcome: "done", result: data.result };

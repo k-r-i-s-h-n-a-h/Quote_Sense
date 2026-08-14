@@ -51,7 +51,8 @@ jobs:
         working-directory: ./frontend
         run: |
           # production only — preview env add prompts for git branch in CI
-          printf '%s' 'https://devopsapi.withtatva.ai' | vercel env add TATVA_API_BASE production --token=$VERCEL_TOKEN --force || true
+          # Test QuoteSense must hit testops so OTP records show in admin.testops
+          printf '%s' 'https://testopsapi.withtatva.ai' | vercel env add TATVA_API_BASE production --token=$VERCEL_TOKEN --force || true
           printf '%s' 'https://tatvaops-quotesense-qa.onrender.com' | vercel env add NEXT_PUBLIC_BACKEND_URL production --token=$VERCEL_TOKEN --force || true
           printf '%s' 'https://tatvaops-quotesense-qa.onrender.com' | vercel env add BACKEND_URL production --token=$VERCEL_TOKEN --force || true
 

@@ -758,6 +758,8 @@ Idempotent demo session `seed_demo_0001` (two vendors + line items). Load compar
 | Path | Audience | Summary |
 |------|----------|---------|
 | `README.md` (this file) | Everyone | Setup, architecture, **full file reference** |
+| `docs/QA_TESTING_KT.md` | **QA / testing** | Full KT: env pairings, OTP↔admin, compare/progress, market-rate, checklists, known pitfalls |
+| `scripts/qa_env_smoke.sh` | QA / ops | Curl smoke for health + by-category (`./scripts/qa_env_smoke.sh test`) |
 | `docs/COMPARISON_DATA_LIFECYCLE.md` | Ops / backend | Staging vs permanent tables, finalize-only MA, cleanup Action, gate flag |
 | `docs/VENDOR_MARKET_RATE_API.md` | Integrators | Detailed suggest/by-category/lookup contract, verdict bands, caching |
 | `docs/VENDOR_MARKET_RATE_API_PM.md` | PM quote-form | Shorter PM contract: `service_id` vs `category_id` (quote type), prod base URL, freeze flag |

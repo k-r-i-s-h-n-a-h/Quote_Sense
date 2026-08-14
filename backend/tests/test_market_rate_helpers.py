@@ -2,17 +2,21 @@
 
 from __future__ import annotations
 
+from datetime import date
+
 import pytest
 
 from services.market_rate import (
     DEFAULT_SERVICE_TYPE,
     bundle_key,
+    finalize_quote_meets_min_date,
     is_amount_based_pricing_method,
     is_finalize_quote_flag,
     market_rate_updates_enabled,
     normalize_pricing_method,
     normalize_service_type,
     normalize_text,
+    parse_quote_event_date,
     resolve_effective_rate,
     resolve_service_type,
     finalized_quote_session_id,
@@ -161,3 +165,40 @@ def test_is_finalize_quote_flag(payload, expected):
 def test_finalized_quote_session_id_uses_quote_number():
     assert finalized_quote_session_id({"quoteNumber": "#AB-12"}) == "finalize:AB-12"
     assert finalized_quote_session_id({"_id": "oid1"}) == "finalize:oid1"
+
+
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        ("2026-08-14T12:00:00.000Z", date(2026, 8, 14)),
+        ("2026-08-14", date(2026, 8, 14)),
+        ("14/08/2026", date(2026, 8, 14)),
+        ("14-08-2026", date(2026, 8, 14)),
+        ("", None),
+        (None, None),
+    ],
+)
+def test_parse_quote_event_date(raw, expected):
+    assert parse_quote_event_date(raw) == expected
+
+
+def test_finalize_quote_meets_min_date_default(monkeypatch):
+    monkeypatch.setenv("MA_FINALIZE_MIN_DATE", "2026-08-14")
+    assert finalize_quote_meets_min_date(
+        {"isFinalizeQuote": True, "quoteDate": "2026-08-14"}
+    )
+    assert finalize_quote_meets_min_date(
+        {"isFinalizeQuote": True, "updatedAt": "2026-08-15T01:00:00Z"}
+    )
+    assert not finalize_quote_meets_min_date(
+        {"isFinalizeQuote": True, "quoteDate": "2026-08-13"}
+    )
+    assert not finalize_quote_meets_min_date(
+        {"isFinalizeQuote": True, "quoteNumber": "Q-no-date"}
+    )
+
+
+def test_finalize_quote_meets_min_date_disabled(monkeypatch):
+    monkeypatch.setenv("MA_FINALIZE_MIN_DATE", "")
+    assert finalize_quote_meets_min_date({"isFinalizeQuote": True, "quoteNumber": "Q1"})
+

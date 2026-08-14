@@ -10,6 +10,8 @@ Values are raw per-unit rates — GST is the vendor's choice, not normalized her
 from __future__ import annotations
 
 import os
+import re
+from datetime import date, datetime, timezone
 from typing import Any
 
 from services.env_config import get_supabase_client
@@ -36,8 +38,16 @@ _SERVICE_TYPE_ALIASES: dict[str, str] = {
     "premium": SERVICE_TYPE_LUXURY,
 }
 
-# Seed / base-rate rows use weight=0 until finalized quotes arrive.
+# Seed / base-rate rows should use weight>=1 so the first finalize blends.
 MIN_WEIGHT_FOR_RECOMMEND = 0
+
+# Only apply finalized quotes on/after this date (YYYY-MM-DD).
+# Unset → default 2026-08-14. Set to empty string to disable the date gate.
+def _finalize_min_date_str() -> str:
+    if "MA_FINALIZE_MIN_DATE" not in os.environ:
+        return "2026-08-14"
+    return (os.getenv("MA_FINALIZE_MIN_DATE") or "").strip()
+
 
 ABOVE_MARKET_MESSAGE = (
     "Current rates exceed the recommended base rate of {amount}. "
@@ -364,8 +374,16 @@ def update_rate_moving_average(
     sub_service: str,
     pricing_method: str,
     batch_rates: list[float],
+    *,
+    allow_insert: bool = True,
 ) -> tuple[float, int]:
-    """Merge session batch of raw rates into stored weighted moving average."""
+    """
+    Merge session batch of raw rates into stored weighted moving average.
+
+    When allow_insert=False (finalize path), only update rows that already exist
+    in market_moving_averages (seeded bundles). Unmatched pairs are skipped —
+    never create new MA rows from finalized quotes.
+    """
     key = bundle_key(service_type, service_category, sub_service, pricing_method)
     label = f"{key['sub_service']} / {key['pricing_method']}"
 
@@ -395,6 +413,12 @@ def update_rate_moving_average(
         return rate, int(existing.get("weight") or 0)
 
     if existing is None:
+        if not allow_insert:
+            print(
+                f"  ⏭️ Rate avg skip (no seed match): {key['service_type']} / "
+                f"{key['service_category']} / {label}"
+            )
+            return 0.0, 0
         moving_avg = batch_avg
         weight = batch_weight
         print(
@@ -417,7 +441,7 @@ def update_rate_moving_average(
         "moving_average": round(moving_avg, 2),
         "weight": weight,
         "last_session_id": session_id,
-        "item_key": key["sub_service"],
+        "item_key": f"{key['sub_service']}::{key['pricing_method']}",
     }
 
     try:
@@ -715,10 +739,18 @@ def recommend_rate(
     }
 
 
-def update_rates_from_dataframe(df, session_id: str, fast: bool = False) -> dict[tuple, tuple[float, int]]:
+def update_rates_from_dataframe(
+    df,
+    session_id: str,
+    fast: bool = False,
+    *,
+    allow_insert: bool = True,
+) -> dict[tuple, tuple[float, int]]:
     """
     Collect one rate per vendor per bundle from a compare dataframe.
     Returns map of bundle tuple -> (rate_avg, weight) for display lookups.
+
+    Finalize path must pass allow_insert=False so only seeded MA bundles update.
     """
     if df is None or len(df) == 0:
         return {}
@@ -753,7 +785,9 @@ def update_rates_from_dataframe(df, session_id: str, fast: bool = False) -> dict
             avg = round(sum(rates) / len(rates), 2) if rates else 0.0
             weight = len(rates)
         else:
-            avg, weight = update_rate_moving_average(session_id, st, cat, sub, pm, rates)
+            avg, weight = update_rate_moving_average(
+                session_id, st, cat, sub, pm, rates, allow_insert=allow_insert
+            )
         results[bundle] = (avg, weight)
 
     return results
@@ -818,6 +852,83 @@ def is_finalize_quote_flag(quote_entry: Any) -> bool:
     return False
 
 
+def parse_quote_event_date(value: Any) -> date | None:
+    """Parse Tatva/ISO/DD-MM-YYYY date fields to a calendar date (UTC date for ISO)."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        if value.tzinfo is not None:
+            return value.astimezone(timezone.utc).date()
+        return value.date()
+    if isinstance(value, date):
+        return value
+    text = str(value).strip()
+    if not text or text.lower() in ("nan", "none", "null"):
+        return None
+    # ISO / Mongo-style: 2026-08-14T10:00:00.000Z
+    if "T" in text or (len(text) >= 10 and text[4] == "-" and text[7] == "-"):
+        try:
+            iso = text.replace("Z", "+00:00")
+            dt = datetime.fromisoformat(iso)
+            if dt.tzinfo is not None:
+                return dt.astimezone(timezone.utc).date()
+            return dt.date()
+        except ValueError:
+            pass
+        try:
+            return date.fromisoformat(text[:10])
+        except ValueError:
+            pass
+    # DD/MM/YYYY or DD-MM-YYYY
+    m = re.match(r"^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$", text)
+    if m:
+        d, mo, y = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        try:
+            return date(y, mo, d)
+        except ValueError:
+            return None
+    return None
+
+
+def finalize_quote_event_date(quote_entry: Any) -> date | None:
+    """Best-effort event date for a finalized quote (prefer finalize/update times)."""
+    raw = _unwrap_quote_dict(quote_entry)
+    for key in (
+        "finalizedAt",
+        "finalized_at",
+        "finalizeDate",
+        "updatedAt",
+        "updated_at",
+        "quoteDate",
+        "quote_date",
+        "createdAt",
+        "created_at",
+    ):
+        parsed = parse_quote_event_date(raw.get(key))
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def finalize_quote_meets_min_date(quote_entry: Any) -> bool:
+    """
+    True when the quote's event date is on/after MA_FINALIZE_MIN_DATE (default 2026-08-14).
+    Set MA_FINALIZE_MIN_DATE empty to disable the gate. Missing dates are rejected (strict).
+    """
+    min_raw = _finalize_min_date_str()
+    if not min_raw:
+        return True
+    try:
+        min_d = date.fromisoformat(min_raw[:10])
+    except ValueError:
+        print(f"⚠️ Invalid MA_FINALIZE_MIN_DATE={min_raw!r} — treating as no gate")
+        return True
+    event_d = finalize_quote_event_date(quote_entry)
+    if event_d is None:
+        return False
+    return event_d >= min_d
+
+
 def finalized_quote_session_id(quote_entry: Any) -> str:
     """Stable session key so the same finalized quote is never applied twice."""
     raw = _unwrap_quote_dict(quote_entry)
@@ -855,8 +966,12 @@ def apply_finalized_quotes_to_market_rates(
     Merge rates into market_moving_averages for quotes the user selected as final
     (isFinalizeQuote / isFinalizedQuote / finalizeQuote).
 
-    Compare sessions only stage/compare selected quotes — they must not call this
-    for every row; only payloads that carry the finalize flag are eligible.
+    Strict rules:
+      - Only quotes with the finalize flag
+      - Only quotes on/after MA_FINALIZE_MIN_DATE (default 2026-08-14)
+      - Only update existing seeded MA bundles (never INSERT new pairs)
+
+    Compare sessions must not call this for every row; only finalize-flagged payloads.
     """
     if not market_rate_updates_enabled():
         print(
@@ -888,13 +1003,24 @@ def apply_finalized_quotes_to_market_rates(
 
     applied: list[dict] = []
     skipped_already: list[str] = []
+    skipped_before_min_date: list[str] = []
     total_bundles = 0
     errors: list[str] = []
+    min_date = _finalize_min_date_str() or None
 
     for quote_entry in finalized:
         raw = _unwrap_quote_dict(quote_entry)
         label = str(raw.get("quoteNumber") or raw.get("_id") or "quote").strip()
         sid = finalized_quote_session_id(quote_entry)
+
+        if not finalize_quote_meets_min_date(quote_entry):
+            skipped_before_min_date.append(label)
+            event_d = finalize_quote_event_date(quote_entry)
+            print(
+                f"  ⏭️ Finalized quote #{label} before min date "
+                f"(event={event_d}, min={min_date}) — skip MA apply"
+            )
+            continue
 
         if finalize_quote_already_applied_to_ma(quote_entry):
             skipped_already.append(label)
@@ -903,19 +1029,24 @@ def apply_finalized_quotes_to_market_rates(
 
         try:
             df = mongodb_quotes_to_dataframe([quote_entry])
-            bundles = update_rates_from_dataframe(df, sid, fast=False)
-            total_bundles += len(bundles)
+            # Seed-match only: never INSERT unmatched category/sub/PM bundles.
+            bundles = update_rates_from_dataframe(
+                df, sid, fast=False, allow_insert=False
+            )
+            matched = {k: v for k, v in bundles.items() if v[1] > 0 or v[0] > 0}
+            total_bundles += len(matched)
             applied.append(
                 {
                     "quote_number": str(raw.get("quoteNumber") or "").lstrip("#").strip(),
                     "quote_id": str(raw.get("_id") or raw.get("id") or "").strip(),
                     "session_id": sid,
-                    "bundles_updated": len(bundles),
+                    "bundles_updated": len(matched),
+                    "bundles_seen": len(bundles),
                 }
             )
             print(
                 f"  ✅ Finalized quote #{label} → market MA "
-                f"({len(bundles)} bundles, session={sid}, source={source})"
+                f"({len(matched)} seeded bundles updated, session={sid}, source={source})"
             )
         except Exception as e:
             msg = f"{label}: {e}"
@@ -929,9 +1060,12 @@ def apply_finalized_quotes_to_market_rates(
         "finalized_found": len(finalized),
         "quotes_applied": len(applied),
         "skipped_already_applied": skipped_already,
+        "skipped_before_min_date": skipped_before_min_date,
+        "min_date": min_date,
         "bundles_updated": total_bundles,
         "applied": applied,
         "errors": errors,
+        "seed_match_only": True,
     }
 
 

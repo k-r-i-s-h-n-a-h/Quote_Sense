@@ -286,8 +286,9 @@ def run_comparison(session_id, on_matrix_ready=None, df=None, fast_moving_avg=Tr
         if 'service_type' not in df.columns or df['service_type'].eq('').all():
             df['service_type'] = DEFAULT_SERVICE_TYPE
 
-        # Update per-unit market rates by bundle (type + category + sub_service + pricing_method)
-        bundle_rate_map = update_rates_from_dataframe(df, session_id, fast=fast_moving_avg)
+        # Display-only rates for this compare matrix — never persist MA here.
+        # Market averages update only from isFinalizeQuote via apply_finalized_*.
+        bundle_rate_map = update_rates_from_dataframe(df, session_id, fast=True)
 
         def _is_blank(value):
             return (not value) or value.lower() in ('', 'nan', 'none', 'null')

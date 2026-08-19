@@ -174,7 +174,7 @@ app.add_middleware(
         # "https://dev.withtatva.ai",
     ],
     allow_credentials=False,
-    allow_methods=["GET"],
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
 

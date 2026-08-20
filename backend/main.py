@@ -8,34 +8,11 @@ import os
 import shutil
 import uuid
 import asyncio
-import json
-import time
 from datetime import datetime
 from dotenv import load_dotenv
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(os.path.join(BASE_DIR, ".env"), override=True)
-
-DEBUG_LOG_PATH = os.path.join(BASE_DIR, "..", ".cursor", "debug-b7c34a.log")
-
-
-def _agent_debug_log(location, message, data=None, hypothesis_id=None, run_id="pre-fix"):
-    # region agent log
-    try:
-        os.makedirs(os.path.dirname(DEBUG_LOG_PATH), exist_ok=True)
-        with open(DEBUG_LOG_PATH, "a") as f:
-            f.write(json.dumps({
-                "sessionId": "b7c34a",
-                "timestamp": int(time.time() * 1000),
-                "location": location,
-                "message": message,
-                "data": data or {},
-                "hypothesisId": hypothesis_id,
-                "runId": run_id,
-            }) + "\n")
-    except Exception:
-        pass
-    # endregion
 
 # Import your extractor and comparator functions!
 from services.extractor import process_single_pdf
@@ -807,30 +784,6 @@ async def market_rate_sync_catalog(
     }
 
 
-def _probe_supabase_tables() -> dict:
-    """Sync Supabase probes — must never run on the event loop without a timeout."""
-    supabase_ok = False
-    sessions_ok = False
-    supabase_err = None
-    sessions_err = None
-    try:
-        get_supabase_client().table("market_moving_averages").select("id").limit(1).execute()
-        supabase_ok = True
-    except Exception as e:
-        supabase_err = str(e)
-    try:
-        get_supabase_client().table("market_moving_avg_sessions").select("id").limit(1).execute()
-        sessions_ok = True
-    except Exception as e:
-        sessions_err = str(e)
-    return {
-        "market_moving_averages_ok": supabase_ok,
-        "market_moving_avg_sessions_ok": sessions_ok,
-        "market_moving_averages_err": supabase_err,
-        "market_moving_avg_sessions_err": sessions_err,
-    }
-
-
 @app.on_event("startup")
 async def _startup_diagnostics():
     """
@@ -840,43 +793,8 @@ async def _startup_diagnostics():
     leaving port 8001 in CLOSED and curl/browser with connection refused/timeout.
     """
     diag = env_diagnostics()
-    _agent_debug_log(
-        "main.py:startup",
-        "backend startup diagnostics (env only)",
-        {**diag, "python_ok": True},
-        hypothesis_id="E",
-    )
     if not diag.get("supabase_configured"):
         return
-
-    async def _bg_probe() -> None:
-        try:
-            probe = await asyncio.wait_for(
-                run_in_threadpool(_probe_supabase_tables),
-                timeout=5.0,
-            )
-        except asyncio.TimeoutError:
-            probe = {
-                "market_moving_averages_ok": False,
-                "market_moving_avg_sessions_ok": False,
-                "market_moving_averages_err": "timeout after 5s",
-                "market_moving_avg_sessions_err": "timeout after 5s",
-            }
-        except Exception as e:
-            probe = {
-                "market_moving_averages_ok": False,
-                "market_moving_avg_sessions_ok": False,
-                "market_moving_averages_err": str(e),
-                "market_moving_avg_sessions_err": str(e),
-            }
-        _agent_debug_log(
-            "main.py:startup",
-            "backend supabase probe",
-            {**diag, **probe, "python_ok": True},
-            hypothesis_id="E",
-        )
-
-    asyncio.create_task(_bg_probe())
 
 
 async def _run_compare_pipeline(session_id, saved_files):

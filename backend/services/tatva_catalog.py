@@ -70,18 +70,27 @@ _PM_LABEL_ALIASES: dict[str, tuple[str, ...]] = {
 
 # Old service category display names → current catalog names (same ObjectId).
 _SERVICE_CATEGORY_ALIASES: dict[str, tuple[str, ...]] = {
-    "interiors": ("Residential Interiors", "Interiors"),
-    "interior design": ("Residential Interiors",),
+    "interiors": ("Residential Interior", "Residential Interiors", "Interiors"),
+    "interior design": ("Residential Interior", "Residential Interiors"),
+    "residential interiors": ("Residential Interior",),
+    "residential interior": ("Residential Interior",),
     "electrical services": ("Home Renovation", "Electrical Services"),
     "electrical": ("Home Renovation",),
+    "home renovation": ("Home Renovation",),
     "painting": ("Property Management & Rental Operations", "Painting"),
+    "property management & rental operations": ("Property Management & Rental Operations",),
     "plumbing services": ("Facility Management and Security", "Plumbing Services"),
     "plumbing": ("Facility Management and Security",),
+    "facility management and security": ("Facility Management and Security",),
     "solar services": ("Solar, Energy & Automation Solutions", "Solar Services"),
     "solar": ("Solar, Energy & Automation Solutions",),
     "property development": ("Property Advisory, Sales & Leasing", "Property Development"),
+    "property advisory, sales & leasing": ("Property Advisory, Sales & Leasing",),
     "home automation": ("Home Maintenance & Appliance Care", "Home Automation"),
+    "home maintenance & appliance care": ("Home Maintenance & Appliance Care",),
     "event management": ("Event Management",),
+    "farm infrastructure": ("Farm Infrastructure Setup", "Farm Infrastructure"),
+    "farm infrastructure setup": ("Farm Infrastructure Setup",),
 }
 
 # Seed label ↔ Tatva admin catalog name (same ObjectId).

@@ -1,0 +1,11 @@
+.DS_Store
+graphify-out/
+backend/graphify-out/
+venv/
+node_modules*
+__pycache__/
+.test-deps/
+.cursor/
+*.icloud-broken
+staging_data.sql
+*.icloud

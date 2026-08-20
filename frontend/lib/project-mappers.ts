@@ -87,10 +87,21 @@ function serviceIconForName(name: string): string {
   const lower = name.toLowerCase();
   if (lower.includes("interior")) return "🛋️";
   if (lower.includes("construction") || lower.includes("residential")) return "🏗️";
-  if (lower.includes("solar")) return "☀️";
-  if (lower.includes("paint")) return "🎨";
-  if (lower.includes("plumb")) return "🔧";
-  if (lower.includes("electr")) return "⚡";
+  if (lower.includes("solar") || lower.includes("energy")) return "☀️";
+  if (lower.includes("paint") || lower.includes("rental") || lower.includes("property management")) {
+    return "🎨";
+  }
+  if (lower.includes("plumb") || lower.includes("facility") || lower.includes("security")) {
+    return "🔧";
+  }
+  if (lower.includes("electr") || lower.includes("renovation")) return "⚡";
+  if (lower.includes("event")) return "🎪";
+  if (lower.includes("advisory") || lower.includes("leas")) return "🏢";
+  if (lower.includes("maintenance") || lower.includes("appliance") || lower.includes("automation")) {
+    return "🏠";
+  }
+  if (lower.includes("farm")) return "🌾";
+  if (lower.includes("irrigation")) return "💧";
   if (lower.includes("landscape")) return "🌿";
   if (lower.includes("hvac")) return "❄️";
   return "📋";
@@ -101,19 +112,40 @@ function resolveService(name: string): TatvaService {
   const exact = TATVA_SERVICES.find((s) => s.name.toLowerCase() === lower);
   if (exact) return exact;
 
-  // Tatva often sends labels that don't match catalog names exactly
-  // (e.g. "Residential Interiors" / "Interiors" → Interior Design).
+  // Map Tatva / legacy labels onto the current catalog (stable ids).
   const fuzzyId = ((): string | null => {
-    if (lower.includes("interior")) return "interior";
-    if (lower.includes("paint")) return "painting";
-    if (lower.includes("plumb")) return "plumbing";
-    if (lower.includes("electr")) return "electrical";
-    if (lower.includes("solar")) return "solar";
+    if (lower.includes("interior") || lower === "interiors") return "interior";
+    if (
+      lower.includes("property management") ||
+      lower.includes("rental operation") ||
+      lower.includes("paint")
+    ) {
+      return "painting";
+    }
+    if (
+      lower.includes("facility") ||
+      lower.includes("security") ||
+      lower.includes("plumb")
+    ) {
+      return "plumbing";
+    }
+    if (lower.includes("renovation") || lower.includes("electr")) return "electrical";
+    if (lower.includes("solar") || (lower.includes("energy") && lower.includes("automation"))) {
+      return "solar";
+    }
     if (lower.includes("event")) return "event_management";
-    if (lower.includes("property") && lower.includes("develop")) {
+    if (
+      lower.includes("advisory") ||
+      lower.includes("leas") ||
+      (lower.includes("property") && lower.includes("develop"))
+    ) {
       return "property_development";
     }
-    if (lower.includes("home") && lower.includes("automation")) {
+    if (
+      (lower.includes("home") && lower.includes("maintenance")) ||
+      lower.includes("appliance") ||
+      (lower.includes("home") && lower.includes("automation"))
+    ) {
       return "home_automation";
     }
     if (lower.includes("farm")) return "farm_infrastructure";

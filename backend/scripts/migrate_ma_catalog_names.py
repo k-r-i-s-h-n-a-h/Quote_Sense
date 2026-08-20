@@ -46,8 +46,9 @@ DATA = ROOT / "data"
 
 # Old display names → new Tatva service_category (same ObjectId).
 SERVICE_CATEGORY_ALIASES: dict[str, str] = {
-    "Interiors": "Residential Interiors",
-    "Interior Design": "Residential Interiors",
+    "Interiors": "Residential Interior",
+    "Interior Design": "Residential Interior",
+    "Residential Interiors": "Residential Interior",
     "Electrical Services": "Home Renovation",
     "Electrical": "Home Renovation",
     "Painting": "Property Management & Rental Operations",
@@ -59,6 +60,7 @@ SERVICE_CATEGORY_ALIASES: dict[str, str] = {
     "Home Automation": "Home Maintenance & Appliance Care",
     "Event Management": "Event Management",
     "Residential Construction": "Residential Construction",
+    "Farm Infrastructure": "Farm Infrastructure Setup",
     "Farm Infrastructure Setup": "Farm Infrastructure Setup",
     "Irrigation Automation": "Irrigation Automation",
 }

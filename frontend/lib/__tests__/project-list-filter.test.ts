@@ -34,8 +34,8 @@ describe("project-list-filter", () => {
     summary({
       id: "2",
       projectCode: "0F452E",
-      title: "Residential Interiors — 0F452E",
-      service: { id: "interior", name: "Residential Interiors", icon: "🛋️" },
+      title: "Residential Interior — 0F452E",
+      service: { id: "interior", name: "Residential Interior", icon: "🛋️" },
       brief: "3 BHK apartment",
     }),
   ];

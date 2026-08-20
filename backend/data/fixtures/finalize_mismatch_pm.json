@@ -1,0 +1,26 @@
+{
+  "quoteNumber": "CURL-MISMATCH-PM-001",
+  "isFinalizeQuote": true,
+  "quoteType": "essential",
+  "quoteDate": "2026-08-17T10:00:00.000Z",
+  "vendorDetail": { "companyName": "Curl Mismatch Vendor" },
+  "clientDetail": { "clientName": "Curl Test Client" },
+  "pricingSummary": [{ "label": "Grand Total", "value": 100 }],
+  "workSummary": [
+    {
+      "services": [
+        {
+          "serviceId": { "name": "Residential Interior" },
+          "workItems": [
+            {
+              "workTitle": "Kitchen",
+              "subService": { "name": "2D Floor Planning" },
+              "pricingMethod": { "name": "Per Plate" },
+              "pricingInput": [{ "quantity": 1, "rate": 99, "amount": 99, "grandTotal": 99 }]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

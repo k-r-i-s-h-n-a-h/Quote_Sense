@@ -1,0 +1,26 @@
+{
+  "quoteNumber": "CURL-MATCH-001",
+  "isFinalizeQuote": true,
+  "quoteType": "essential",
+  "quoteDate": "2026-08-17T10:00:00.000Z",
+  "vendorDetail": { "companyName": "Curl Match Vendor" },
+  "clientDetail": { "clientName": "Curl Test Client" },
+  "pricingSummary": [{ "label": "Grand Total", "value": 3900 }],
+  "workSummary": [
+    {
+      "services": [
+        {
+          "serviceId": { "name": "Residential Interior" },
+          "workItems": [
+            {
+              "workTitle": "Kitchen",
+              "subService": { "name": "2D Floor Planning" },
+              "pricingMethod": { "name": "Area – Direct Entry (sq ft)" },
+              "pricingInput": [{ "quantity": 100, "rate": 50, "amount": 5000, "grandTotal": 5000 }]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

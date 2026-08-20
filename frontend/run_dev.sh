@@ -13,12 +13,15 @@ export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=1536}"
 TMP_APP="/tmp/qs-frontend-app"
 TMP_NM="$TMP_APP/node_modules"
 
-# Ensure off-Desktop node_modules (avoids 6000+ iCloud placeholder hangs)
-if [[ ! -x "$TMP_NM/.bin/next" ]]; then
+# Ensure off-Desktop node_modules (avoids 6000+ iCloud placeholder hangs).
+# Also detect a broken Next install (bin exists but server files were purged from /tmp).
+if [[ ! -x "$TMP_NM/.bin/next" || ! -f "$TMP_NM/next/dist/server/require-hook.js" ]]; then
   echo "Installing frontend deps under $TMP_APP (local disk, not iCloud)…"
   mkdir -p "$TMP_APP"
   cp package.json "$TMP_APP/"
   [[ -f package-lock.json ]] && cp package-lock.json "$TMP_APP/"
+  # Partial /tmp installs cause: Cannot find module '../server/require-hook'
+  rm -rf "$TMP_NM"
   (cd "$TMP_APP" && npm install --no-fund --no-audit)
 fi
 

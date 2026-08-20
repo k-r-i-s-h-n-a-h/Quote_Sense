@@ -58,7 +58,7 @@ export type ProjectSummary = Pick<
 export const TATVA_SERVICES: TatvaService[] = [
   {
     id: "interior",
-    name: "Interior Design",
+    name: "Residential Interior",
     icon: "🛋️",
     envKey: "NEXT_PUBLIC_SERVICE_INTERIORS",
   },
@@ -68,22 +68,27 @@ export const TATVA_SERVICES: TatvaService[] = [
     icon: "🏗️",
     envKey: "NEXT_PUBLIC_SERVICE_CONSTRUCTION",
   },
-  { id: "solar", name: "Solar", icon: "☀️", envKey: "NEXT_PUBLIC_SERVICE_SOLAR" },
+  {
+    id: "solar",
+    name: "Solar, Energy & Automation Solutions",
+    icon: "☀️",
+    envKey: "NEXT_PUBLIC_SERVICE_SOLAR",
+  },
   {
     id: "painting",
-    name: "Painting",
+    name: "Property Management & Rental Operations",
     icon: "🎨",
     envKey: "NEXT_PUBLIC_SERVICE_PAINTING",
   },
   {
     id: "plumbing",
-    name: "Plumbing",
+    name: "Facility Management and Security",
     icon: "🔧",
     envKey: "NEXT_PUBLIC_SERVICE_PLUMBING",
   },
   {
     id: "electrical",
-    name: "Electrical",
+    name: "Home Renovation",
     icon: "⚡",
     envKey: "NEXT_PUBLIC_SERVICE_ELECTRICAL",
   },
@@ -95,19 +100,19 @@ export const TATVA_SERVICES: TatvaService[] = [
   },
   {
     id: "property_development",
-    name: "Property Development",
+    name: "Property Advisory, Sales & Leasing",
     icon: "🏢",
     envKey: "NEXT_PUBLIC_SERVICE_PROPERTY_DEVELOPMENT",
   },
   {
     id: "home_automation",
-    name: "Home Automation",
+    name: "Home Maintenance & Appliance Care",
     icon: "🏠",
     envKey: "NEXT_PUBLIC_SERVICE_HOME_AUTOMATION",
   },
   {
     id: "farm_infrastructure",
-    name: "Farm Infrastructure",
+    name: "Farm Infrastructure Setup",
     icon: "🌾",
     envKey: "NEXT_PUBLIC_SERVICE_FARM_INFRASTRUCTURE",
   },
@@ -116,7 +121,7 @@ export const TATVA_SERVICES: TatvaService[] = [
     name: "Irrigation Automation",
     icon: "💧",
     envKey: "NEXT_PUBLIC_SERVICE_IRRIGATION_AUTOMATION",
-  }
+  },
 ];
 
 export const QUOTE_TIER_LABELS: Record<QuoteTier, string> = {

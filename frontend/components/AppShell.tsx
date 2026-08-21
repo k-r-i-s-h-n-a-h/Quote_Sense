@@ -11,11 +11,15 @@ import { userNeedsName } from "@/lib/user-display";
 function ShellContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() ?? "";
   const router = useRouter();
-  const { isAuthenticated, isLoading, user } = useAuth();
+  const { isAuthenticated, isLoading, user, fromPmSso } = useAuth();
 
   const isAuthRoute = pathname === "/login" || pathname === "/register";
   const showNameOnboarding =
-    isAuthenticated && !isLoading && !isAuthRoute && userNeedsName(user);
+    isAuthenticated &&
+    !isLoading &&
+    !isAuthRoute &&
+    !fromPmSso &&
+    userNeedsName(user);
   const showFooter = isAuthRoute && !isAuthenticated;
   const isProtectedRoute =
     pathname === "/" || pathname === "/compare" || pathname.startsWith("/project/");

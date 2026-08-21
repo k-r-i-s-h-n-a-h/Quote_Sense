@@ -224,6 +224,13 @@ describe("user-display", () => {
     expect(userNeedsName({ name: "A" })).toBe(false);
   });
 
+  it("uses PM username or first/last name when name is empty", () => {
+    expect(getUserDisplayName({ username: "Priya" })).toBe("Priya");
+    expect(userNeedsName({ username: "Priya" })).toBe(false);
+    expect(getUserDisplayName({ firstName: "Ann", lastName: "Rao" })).toBe("Ann Rao");
+    expect(userNeedsName({ firstName: "Ann", lastName: "Rao" })).toBe(false);
+  });
+
   it("initial letter", () => {
     expect(getUserInitial({ name: "divya" })).toBe("D");
     expect(getUserInitial(null)).toBe("?");

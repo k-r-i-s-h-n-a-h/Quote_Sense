@@ -10,15 +10,21 @@ import React, {
 } from "react";
 import type { TatvaUser, VerifyOtpResponse } from "./tatva-api";
 import { buildPmRedirectPath } from "./project-resolve";
+import { resolveProfileName, withResolvedName } from "./user-display";
 
 const TOKEN_KEY = "token";
 const REFRESH_KEY = "refreshToken";
 const USER_KEY = "user";
+const AUTH_SOURCE_KEY = "authSource";
+
+type AuthSource = "sso" | "otp";
 
 type AuthContextValue = {
   user: TatvaUser | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  /** True when this session was started from a PM jwt_auth / token redirect. */
+  fromPmSso: boolean;
   otpSent: boolean;
   otpError: string | null;
   sendOtp: (phoneNumber: string) => Promise<boolean>;
@@ -34,13 +40,27 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+function readAuthSource(): AuthSource | null {
+  if (typeof window === "undefined") return null;
+  const value = localStorage.getItem(AUTH_SOURCE_KEY);
+  return value === "sso" || value === "otp" ? value : null;
+}
+
+function writeStoredUser(user: TatvaUser, source?: AuthSource) {
+  const normalized = withResolvedName(user);
+  localStorage.setItem(USER_KEY, JSON.stringify({ user: normalized }));
+  if (source) localStorage.setItem(AUTH_SOURCE_KEY, source);
+  return normalized;
+}
+
 function readStoredUser(): TatvaUser | null {
   if (typeof window === "undefined") return null;
   try {
     const raw = localStorage.getItem(USER_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    return parsed?.user ?? parsed;
+    const user = parsed?.user ?? parsed;
+    return user ? withResolvedName(user as TatvaUser) : null;
   } catch {
     return null;
   }
@@ -94,6 +114,14 @@ function parseProfileFromResponse(data: Record<string, unknown>): TatvaUser | nu
   return data as TatvaUser;
 }
 
+function claimString(payload: Record<string, unknown>, ...keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = payload[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return undefined;
+}
+
 /** Build a minimal session user from a Tatva JWT when the profile API is unavailable. */
 function userFromJwt(token: string, userId: string): TatvaUser | null {
   const payload = decodeJwtPayload(token);
@@ -102,15 +130,47 @@ function userFromJwt(token: string, userId: string): TatvaUser | null {
   const exp = payload.exp;
   if (typeof exp === "number" && Date.now() / 1000 > exp) return null;
 
-  const email = typeof payload.email === "string" ? payload.email : undefined;
-  const name =
-    typeof payload.name === "string"
-      ? payload.name
-      : typeof payload.fullName === "string"
-        ? payload.fullName
-        : undefined;
+  const nested =
+    payload.user && typeof payload.user === "object"
+      ? (payload.user as Record<string, unknown>)
+      : payload;
 
-  return { _id: userId, email, name };
+  const firstName = claimString(nested, "firstName", "first_name", "given_name");
+  const lastName = claimString(nested, "lastName", "last_name", "family_name");
+  const name =
+    resolveProfileName({
+      name: claimString(nested, "name"),
+      fullName: claimString(nested, "fullName"),
+      username: claimString(nested, "username"),
+      firstName,
+      lastName,
+    }) || undefined;
+
+  return withResolvedName({
+    _id: userId,
+    email: claimString(nested, "email"),
+    name,
+    fullName: claimString(nested, "fullName") || name,
+    username: claimString(nested, "username"),
+    firstName,
+    lastName,
+  });
+}
+
+function mergeProfileWithJwt(profile: TatvaUser, token: string): TatvaUser {
+  const userId = getUserId(profile);
+  const fromJwt = userId ? userFromJwt(token, userId) : null;
+  if (!fromJwt) return withResolvedName(profile);
+  return withResolvedName({
+    ...fromJwt,
+    ...profile,
+    name: resolveProfileName(profile) || fromJwt.name,
+    fullName: profile.fullName?.trim() || fromJwt.fullName,
+    username: profile.username || fromJwt.username,
+    firstName: profile.firstName || fromJwt.firstName,
+    lastName: profile.lastName || fromJwt.lastName,
+    email: profile.email || fromJwt.email,
+  });
 }
 
 function buildSsoRedirectUrl(params: URLSearchParams): string {
@@ -168,15 +228,15 @@ async function bootstrapFromSearchParams(
       const data = await res.json();
       const profile = parseProfileFromResponse(data);
       if (isValidUser(profile)) {
-        localStorage.setItem(USER_KEY, JSON.stringify({ user: profile }));
-        return { user: profile, redirectTo };
+        const user = writeStoredUser(mergeProfileWithJwt(profile, urlToken), "sso");
+        return { user, redirectTo };
       }
     }
 
     const fallbackUser = userFromJwt(urlToken, urlUserId);
     if (isValidUser(fallbackUser)) {
-      localStorage.setItem(USER_KEY, JSON.stringify({ user: fallbackUser }));
-      return { user: fallbackUser, redirectTo };
+      const user = writeStoredUser(fallbackUser, "sso");
+      return { user, redirectTo };
     }
 
     localStorage.removeItem(TOKEN_KEY);
@@ -184,8 +244,8 @@ async function bootstrapFromSearchParams(
   } catch {
     const fallbackUser = userFromJwt(urlToken, urlUserId);
     if (isValidUser(fallbackUser)) {
-      localStorage.setItem(USER_KEY, JSON.stringify({ user: fallbackUser }));
-      return { user: fallbackUser, redirectTo };
+      const user = writeStoredUser(fallbackUser, "sso");
+      return { user, redirectTo };
     }
     localStorage.removeItem(TOKEN_KEY);
     return null;
@@ -215,6 +275,7 @@ function applyBootstrapRedirect(redirectTo: string) {
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<TatvaUser | null>(null);
+  const [fromPmSso, setFromPmSso] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [otpSent, setOtpSent] = useState(false);
   const [otpError, setOtpError] = useState<string | null>(null);
@@ -231,14 +292,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     localStorage.setItem(TOKEN_KEY, accessToken);
     if (refreshToken) localStorage.setItem(REFRESH_KEY, refreshToken);
-    localStorage.setItem(USER_KEY, JSON.stringify({ user: nextUser }));
-    setUser(nextUser);
+    const normalized = writeStoredUser(mergeProfileWithJwt(nextUser, accessToken), "otp");
+    setFromPmSso(false);
+    setUser(normalized);
   }, []);
 
   const clearSession = useCallback(() => {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(REFRESH_KEY);
     localStorage.removeItem(USER_KEY);
+    localStorage.removeItem(AUTH_SOURCE_KEY);
+    setFromPmSso(false);
     setUser(null);
   }, []);
 
@@ -257,8 +321,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const data = await res.json();
       const profile = parseProfileFromResponse(data);
       if (isValidUser(profile)) {
-        localStorage.setItem(USER_KEY, JSON.stringify({ user: profile }));
-        setUser(profile);
+        const merged = writeStoredUser(
+          mergeProfileWithJwt(current ? { ...current, ...profile } : profile, token)
+        );
+        setUser(merged);
       }
     } catch {
       /* keep cached user */
@@ -274,6 +340,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (cancelled) return;
 
         if (fromRedirect) {
+          setFromPmSso(true);
           setUser(fromRedirect.user);
           applyBootstrapRedirect(fromRedirect.redirectTo);
           return;
@@ -282,6 +349,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const stored = readStoredUser();
         const token = localStorage.getItem(TOKEN_KEY);
         if (stored && token) {
+          setFromPmSso(readAuthSource() === "sso");
           setUser(stored);
           refreshProfile().catch(() => {});
         }
@@ -334,7 +402,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         });
         const data: VerifyOtpResponse = await res.json();
         if (data.success && data.data?.user && data.data?.tokens) {
-          persistSession(data.data.user, data.data.tokens);
+          persistSession(
+            withResolvedName({
+              ...data.data.user,
+              ...(profile?.name?.trim() ? { name: profile.name.trim() } : {}),
+              ...(profile?.email?.trim() ? { email: profile.email.trim() } : {}),
+            }),
+            data.data.tokens
+          );
           setOtpSent(false);
 
           const userId = getUserId(data.data.user);
@@ -390,6 +465,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       user,
       isAuthenticated: !!user,
       isLoading,
+      fromPmSso,
       otpSent,
       otpError,
       sendOtp,
@@ -398,7 +474,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       refreshProfile,
       clearOtpState,
     }),
-    [user, isLoading, otpSent, otpError, sendOtp, verifyOtp, logout, refreshProfile, clearOtpState]
+    [
+      user,
+      isLoading,
+      fromPmSso,
+      otpSent,
+      otpError,
+      sendOtp,
+      verifyOtp,
+      logout,
+      refreshProfile,
+      clearOtpState,
+    ]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

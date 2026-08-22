@@ -29,11 +29,11 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../'
 from services.env_config import get_gemini_client, get_supabase_client
 from services.market_rate import (
     DEFAULT_SERVICE_TYPE,
-    lookup_market_rate,
     normalize_pricing_method,
     normalize_service_type,
-    update_rates_from_dataframe,
 )
+from services.space_clusters import apply_space_clusters
+from services.work_rollup import apply_work_rollup
 
 DEBUG_LOG_PATH = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "../../.cursor/debug-b7c34a.log")
@@ -187,8 +187,8 @@ def _build_fallback_report(chart_data):
             f"₹{priciest['total']:,.0f} (~{diff_pct:.0f}% more than the lowest)."
         )
     lines.append(
-        "- **Scope Check:** A lower total may just mean a smaller scope — compare the "
-        "line items in the table before deciding."
+        "- **Scope Check:** A lower total may just mean a smaller scope — compare rooms "
+        "in the matrix before deciding."
     )
     lines.append(
         "- **Recommendation:** This is an automatic summary (the detailed AI write-up "
@@ -231,11 +231,11 @@ def _generate_recommendation(summary_prompt, chart_data):
 
 
 def run_comparison(session_id, on_matrix_ready=None, df=None, fast_moving_avg=True):
-    """Build the comparison matrix, then generate the recommendation.
+    """Build the space-first comparison matrix, then generate the recommendation.
 
     If ``df`` is provided (MongoDB/Tatva payload lane), skip the Supabase fetch.
-    ``fast_moving_avg`` (default True) uses in-session / seed lookups only —
-    no market_moving_averages writes. MA updates only run from finalized quotes.
+    Compare does not look up or send market moving averages.
+    ``fast_moving_avg`` is kept for call-site compatibility and ignored.
     """
     try:
         if df is None:
@@ -271,11 +271,8 @@ def run_comparison(session_id, on_matrix_ready=None, df=None, fast_moving_avg=Tr
                 "quote_date": (str(r.get('quote_date', '') or '').strip() if has_quote_date else ''),
             }
 
-        # 2. Prepare Tabular Data & THE NOTEBOOK MEAN CALCULATION
-        # Three-level hierarchy:
-        #   service_category -> sub_service -> line items (item_name + room).
-        # Line items stay visible; the UI sums amounts on the sub_service header row.
-        for col in ('work_title', 'item_name', 'sub_service', 'service_category', 'pricing_method', 'service_type', 'rate'):
+        # 2. Space-first matrix: cluster rooms, roll up lighting lumpsum vs itemized.
+        for col in ('work_title', 'item_name', 'sub_service', 'service_category', 'pricing_method', 'service_type', 'rate', 'space_raw', 'description'):
             if col not in df.columns:
                 df[col] = '' if col != 'rate' else 0.0
             if col == 'rate':
@@ -286,12 +283,11 @@ def run_comparison(session_id, on_matrix_ready=None, df=None, fast_moving_avg=Tr
         if 'service_type' not in df.columns or df['service_type'].eq('').all():
             df['service_type'] = DEFAULT_SERVICE_TYPE
 
-        # Display-only rates for this compare matrix — never persist MA here.
-        # Market averages update only from isFinalizeQuote via apply_finalized_*.
-        bundle_rate_map = update_rates_from_dataframe(df, session_id, fast=True)
+        if "space_raw" not in df.columns or df["space_raw"].eq("").all():
+            df["space_raw"] = df["work_title"]
 
         def _is_blank(value):
-            return (not value) or value.lower() in ('', 'nan', 'none', 'null')
+            return (not value) or str(value).lower() in ('', 'nan', 'none', 'null')
 
         df['service_category'] = df['service_category'].apply(
             lambda v: v if not _is_blank(v) else 'Other'
@@ -300,36 +296,42 @@ def run_comparison(session_id, on_matrix_ready=None, df=None, fast_moving_avg=Tr
             lambda v: v if not _is_blank(v) else 'General'
         )
 
+        df = _bind_catalog_ids_from_cache(df)
+        df = apply_space_clusters(df)
+        df = apply_work_rollup(df)
+
         def _item_label(r):
             if not _is_blank(r['item_name']):
                 return r['item_name']
-            if not _is_blank(r['work_title']):
-                return r['work_title']
-            return r['sub_service'] or 'Unspecified Item'
+            if not _is_blank(r['sub_service']):
+                return r['sub_service']
+            return r['work_title'] or 'Unspecified Item'
 
         df['item_label'] = df.apply(_item_label, axis=1)
-        df['room'] = df['work_title'].apply(lambda v: v if not _is_blank(v) else '')
+        df['room'] = df['space']
         df['work_item'] = df['item_label']
+        if "sub_service_id" not in df.columns:
+            df["sub_service_id"] = ""
+        df["sub_service_id"] = df["sub_service_id"].fillna("").astype(str).str.strip()
+        df["sub_key"] = df.apply(
+            lambda r: r["sub_service_id"] if r["sub_service_id"] else r["sub_service"],
+            axis=1,
+        )
 
         df = df.reset_index(drop=True)
         df['__seq'] = range(len(df))
-        cat_order = df.groupby('service_category')['__seq'].min().to_dict()
-        sub_order = df.groupby(['service_category', 'sub_service'])['__seq'].min().to_dict()
-        item_order = (
-            df.groupby(
-                ['service_category', 'sub_service', 'item_label', 'room']
-            )['__seq'].min().to_dict()
-        )
+        space_order = df.groupby('space')['__seq'].min().to_dict()
+        sub_order = df.groupby(['space', 'sub_key'])['__seq'].min().to_dict()
 
         detailed_totals = (
             df.groupby(
-                ['service_category', 'sub_service', 'item_label', 'room', 'vendor_name']
+                ['space', 'sub_key', 'vendor_name']
             )['amount']
             .sum()
             .reset_index()
         )
         pivot_df = detailed_totals.pivot(
-            index=['service_category', 'sub_service', 'item_label', 'room'],
+            index=['space', 'sub_key'],
             columns='vendor_name',
             values='amount',
         ).fillna(0.0)
@@ -338,77 +340,64 @@ def run_comparison(session_id, on_matrix_ready=None, df=None, fast_moving_avg=Tr
         table_data = []
 
         for index, row in pivot_df.iterrows():
-            category, sub_service_name, item_label, room = index
+            space_name, sub_key = index
 
-            line_mask = (
-                (df['service_category'] == category)
-                & (df['sub_service'] == sub_service_name)
-                & (df['item_label'] == item_label)
-                & (df['room'] == room)
-            )
+            line_mask = (df['space'] == space_name) & (df['sub_key'] == sub_key)
             line_slice = df.loc[line_mask]
+            sub_service_name = str(
+                line_slice['sub_service'].mode().iloc[0]
+                if len(line_slice) and not line_slice['sub_service'].mode().empty
+                else sub_key
+            )
+            category = str(
+                line_slice['service_category'].iloc[0] if len(line_slice) else "Other"
+            )
             service_type = normalize_service_type(
                 line_slice['service_type'].iloc[0] if len(line_slice) else DEFAULT_SERVICE_TYPE
             )
             pricing_method = normalize_pricing_method(
                 line_slice['pricing_method'].iloc[0] if len(line_slice) else 'Unit'
             )
-            bundle = (service_type, str(category), str(sub_service_name), pricing_method)
-
-            if bundle in bundle_rate_map:
-                moving_avg, moving_weight = bundle_rate_map[bundle]
-            else:
-                lookup = lookup_market_rate(
-                    service_type, str(category), str(sub_service_name), pricing_method
-                )
-                moving_avg = lookup["market_rate"] if lookup else 0.0
-                moving_weight = lookup["weight"] if lookup else 0
-
-            # Compute average quantity across vendors for this specific line item so
-            # we can show market_estimate = rate_per_unit × avg_qty in the Moving Avg
-            # column — making it directly comparable to vendor total amounts.
-            avg_qty = 1.0
-            if moving_avg > 0 and 'quantity' in line_slice.columns:
-                valid_qtys = line_slice['quantity'].dropna()
-                valid_qtys = valid_qtys[valid_qtys > 0]
-                if len(valid_qtys) > 0:
-                    avg_qty = float(valid_qtys.mean())
-
-            market_estimate = round(moving_avg * avg_qty) if moving_avg > 0 else 0
+            space_raws = sorted({
+                str(v).strip() for v in line_slice.get('space_raw', pd.Series(dtype=str)).tolist()
+                if str(v).strip()
+            })
+            breakdown = []
+            if len(line_slice) > 1:
+                for _, child in line_slice.iterrows():
+                    breakdown.append({
+                        "vendor": str(child.get("vendor_name") or ""),
+                        "item": str(child.get("item_label") or child.get("item_name") or ""),
+                        "amount": round(float(child.get("amount") or 0)),
+                    })
 
             row_dict = {
-                "category": str(category),
+                "category": category,
+                "space": str(space_name),
+                "space_raw": " · ".join(space_raws),
                 "sub_service": str(sub_service_name),
-                "item_name": str(item_label),
-                "room": str(room),
-                "work_item": str(item_label),
+                "sub_service_id": str(line_slice['sub_service_id'].iloc[0] if len(line_slice) else ""),
+                "item_name": str(sub_service_name),
+                "room": str(space_name),
+                "work_item": str(sub_service_name),
                 "taxonomy": str(sub_service_name),
                 "service_type": service_type,
                 "pricing_method": pricing_method,
-                # market_estimate = per-unit rate × avg qty → same unit as vendor amounts
-                "moving_average": market_estimate,
-                "moving_weight": moving_weight,
-                "market_average": market_estimate,
-                # raw per-unit rate kept for the UI to show as a sub-label (e.g. "₹1,166/sqft")
-                "market_rate_per_unit": round(moving_avg, 2),
-                "_cat_order": float(cat_order.get(category, 1e9)),
-                "_sub_order": float(sub_order.get((category, sub_service_name), 1e9)),
-                "_item_order": float(
-                    item_order.get((category, sub_service_name, item_label, room), 1e9)
-                ),
+                "breakdown": breakdown,
+                "_space_order": float(space_order.get(space_name, 1e9)),
+                "_sub_order": float(sub_order.get((space_name, sub_key), 1e9)),
             }
             for v in vendors:
                 amt = float(row[v])
                 row_dict[v] = round(amt) if amt > 0 else 0
             table_data.append(row_dict)
 
-        table_data.sort(key=lambda r: (r["_cat_order"], r["_sub_order"], r["_item_order"]))
+        table_data.sort(key=lambda r: (r["_space_order"], r["_sub_order"]))
         for r in table_data:
-            r.pop("_cat_order", None)
+            r.pop("_space_order", None)
             r.pop("_sub_order", None)
-            r.pop("_item_order", None)
 
-        print(f"📊 Built comparison matrix with {len(table_data)} line items across {len(vendors)} quotes.")
+        print(f"📊 Built space-first comparison matrix with {len(table_data)} rows across {len(vendors)} quotes.")
 
         # Publish the fast matrix result before the slow recommendation call so the
         # frontend can render the chart + table right away.
@@ -435,11 +424,9 @@ def run_comparison(session_id, on_matrix_ready=None, df=None, fast_moving_avg=Tr
         # far less likely to hang on large quotes.
         compact_matrix = [
             {
-                "item": r["item_name"],
+                "space": r.get("space") or r.get("room"),
                 "sub_service": r["sub_service"],
-                "category": r["category"],
-                "moving_avg": r["moving_average"],
-                "moving_weight": r["moving_weight"],
+                "pricing_method": r.get("pricing_method"),
                 **{v: int(r.get(v, 0) or 0) for v in vendors},
             }
             for r in table_data
@@ -448,12 +435,13 @@ def run_comparison(session_id, on_matrix_ready=None, df=None, fast_moving_avg=Tr
         summary_prompt = f"""
         You are 'QuoteSense', an expert procurement analyst for TatvaOps.
         Analyze these quotes based strictly on the provided data.
-        
-        Data Matrix (Includes the historical 'moving_avg' baseline and 'moving_weight'
-        — the number of past quotes used to build that baseline):
+        Rows are grouped by SPACE (room) then sub-service. N/A or 0 means that
+        vendor did not quote that work in that space.
+
+        Data Matrix:
         {compact_matrix}
         Overall Totals: {chart_data}
-        
+
         Write the analysis as SHORT, POINT-WISE bullets — NOT a paragraph.
 
         FORMAT RULES (follow exactly):
@@ -462,14 +450,14 @@ def run_comparison(session_id, on_matrix_ready=None, df=None, fast_moving_avg=Tr
           then one concise sentence. Example: "- **Best Overall Value:** Vendor X ...".
         - Do NOT show arithmetic breakdowns (e.g. do not write amounts as "X + Y" or "(A + B)").
         - Quote whole rupee totals only — no decimal paise.
+        - Do NOT mention market averages, moving averages, or historical baselines.
 
         COVER THESE POINTS (one bullet each):
         - **Lowest Total:** which quote is cheapest overall and by roughly how much.
-        - **Price vs Baseline:** who tends to price above or below the moving average baseline on common work.
-        - **Scope Difference:** call out apples-to-oranges — a lower total may just mean fewer
-          services/items, so name what is missing or extra.
-        - **Strength:** which vendor is the better choice for a key service category and why.
-        - **Recommendation:** a clear, practical suggestion on which to pick or what to confirm.
+        - **By Space:** name 1-2 rooms where one vendor is clearly cheaper (use space labels like GF-Bedroom1).
+        - **Scope Difference:** apples-to-oranges — lumpsum vs itemized (e.g. electrical lighting), or rooms/items only one vendor quoted.
+        - **Strength:** which vendor is stronger for a key space and why.
+        - **Recommendation:** a clear, practical suggestion on which to pick or what to confirm with vendors.
         """
 
         ai_report = _generate_recommendation(summary_prompt, chart_data)
@@ -496,8 +484,61 @@ def _unwrap_quote_payload(quote_entry: dict) -> dict:
     return quote_entry
 
 
+def _nested_oid(obj) -> str:
+    if not isinstance(obj, dict):
+        return ""
+    raw = obj.get("_id") or obj.get("id") or ""
+    if isinstance(raw, dict):
+        raw = raw.get("$oid") or raw.get("_id") or ""
+    return str(raw or "").strip()
+
+
+def _nested_name(obj, fallback: str = "") -> str:
+    if isinstance(obj, dict):
+        return str(obj.get("name") or fallback or "").strip()
+    return fallback
+
+
+def _bind_catalog_ids_from_cache(df):
+    """Resolve missing ObjectIds from cached JSON maps — no live Tatva HTTP."""
+    try:
+        from services.tatva_catalog import (
+            resolve_pricing_method_id,
+            resolve_sub_service_id,
+        )
+    except Exception:
+        return df
+
+    if "sub_service_id" not in df.columns:
+        df["sub_service_id"] = ""
+    if "pricing_method_id" not in df.columns:
+        df["pricing_method_id"] = ""
+
+    def _fill_sub(row):
+        existing = str(row.get("sub_service_id") or "").strip()
+        if existing:
+            return existing
+        return resolve_sub_service_id(row.get("sub_service")) or ""
+
+    def _fill_pm(row):
+        existing = str(row.get("pricing_method_id") or "").strip()
+        if existing:
+            return existing
+        return resolve_pricing_method_id(row.get("pricing_method")) or ""
+
+    df["sub_service_id"] = df.apply(_fill_sub, axis=1)
+    df["pricing_method_id"] = df.apply(_fill_pm, axis=1)
+    return df
+
+
 def mongodb_quotes_to_dataframe(quotes_list: list):
     """Build a comparison DataFrame directly from Tatva/MongoDB quote JSON."""
+    try:
+        from services.tatva_catalog import register_from_work_item
+    except Exception as exc:
+        print(f"ℹ️ Catalog harvest skipped: {exc}")
+        register_from_work_item = None
+
     rows = []
     for quote_entry in quotes_list:
         quote_data = _unwrap_quote_payload(quote_entry)
@@ -522,21 +563,27 @@ def mongodb_quotes_to_dataframe(quotes_list: list):
 
         for section in quote_data.get("workSummary") or []:
             for service_obj in section.get("services") or []:
-                category_name = (
-                    (service_obj.get("serviceId") or {}).get("name") or "General"
-                )
+                service_ref = service_obj.get("serviceId") or {}
+                category_name = _nested_name(service_ref, "General")
+                service_id = _nested_oid(service_ref)
                 for work_item in service_obj.get("workItems") or []:
+                    if register_from_work_item:
+                        try:
+                            register_from_work_item(work_item, persist=False)
+                        except Exception:
+                            pass
+                    sub_ref = work_item.get("subService") or {}
                     sub_service_name = (
-                        (work_item.get("subService") or {}).get("name")
+                        _nested_name(sub_ref)
                         or work_item.get("workTitle")
                         or "General Service"
                     )
+                    space_raw = str(work_item.get("workTitle") or "").strip()
                     pricing_list = work_item.get("pricingInput") or []
                     pricing = pricing_list[0] if pricing_list else {}
                     amount = float(pricing.get("grandTotal") or pricing.get("amount") or 0)
-                    pricing_method = (
-                        (work_item.get("pricingMethod") or {}).get("name") or "Unit"
-                    )
+                    pm_ref = work_item.get("pricingMethod") or {}
+                    pricing_method = _nested_name(pm_ref, "Unit")
                     rows.append({
                         "vendor_name": vendor_key,
                         "company": company,
@@ -547,19 +594,24 @@ def mongodb_quotes_to_dataframe(quotes_list: list):
                         "client_name": client_detail.get("clientName") or "",
                         "service_type": quote_service_type,
                         "service_category": category_name,
+                        "service_id": service_id,
                         "sub_service": sub_service_name,
-                        "work_title": work_item.get("workTitle") or "",
-                        "item_name": work_item.get("workTitle") or "",
+                        "sub_service_id": _nested_oid(sub_ref),
+                        "work_title": space_raw,
+                        "space_raw": space_raw,
+                        "item_name": sub_service_name,
                         "description": str(work_item.get("description") or "").replace("&nbsp;", " "),
                         "quantity": pricing.get("quantity") or 0,
                         "pricing_method": pricing_method,
+                        "pricing_method_id": _nested_oid(pm_ref),
                         "rate": pricing.get("rate") or 0,
                         "amount": amount,
                     })
 
     if not rows:
         raise ValueError("No line items found in quote payloads.")
-    return pd.DataFrame(rows)
+    df = pd.DataFrame(rows)
+    return _bind_catalog_ids_from_cache(df)
     
 def handle_chat_query(session_id, user_message):
     print(f"💬 Processing chat query for Session: {session_id}...")

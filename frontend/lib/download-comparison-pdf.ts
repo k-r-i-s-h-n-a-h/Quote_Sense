@@ -1,7 +1,7 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { groupTableData, sumSubServiceRow, lineItemDescription } from "./compare-matrix";
-import { type VendorLabel, type VendorMeta, formatQuoteCountLabel } from "./format";
+import { groupTableData, sumSubServiceRow } from "./compare-matrix";
+import { type VendorLabel, type VendorMeta } from "./format";
 
 type TableRow = Record<string, unknown>;
 
@@ -23,8 +23,7 @@ function pdfLayout(vendorCount: number) {
       subGap: 3,
       headMinHeight: 14,
       cellPad: 2,
-      descShare: 0.26,
-      avgWidth: 22,
+      descShare: 0.32,
       vendorTruncate: 18,
       variantTruncate: 16,
     };
@@ -40,15 +39,13 @@ function pdfLayout(vendorCount: number) {
     subGap: 3.5,
     headMinHeight: 16,
     cellPad: 2.5,
-    descShare: 0.3,
-    avgWidth: 24,
-    vendorTruncate: 20,
-    variantTruncate: 18,
+      descShare: 0.36,
+      vendorTruncate: 20,
+      variantTruncate: 18,
   };
 }
 
 const SUB_ROW_FILL: [number, number, number] = [226, 232, 240];
-const SUB_AVG_FILL: [number, number, number] = [224, 231, 255];
 const SUB_GAP_FILL: [number, number, number] = [248, 250, 252];
 
 /** ASCII-safe currency — avoids broken ₹ glyph in standard PDF fonts. */
@@ -96,16 +93,14 @@ function buildColumnStyles(
   tableWidth: number,
   layout: ReturnType<typeof pdfLayout>
 ): Record<number, { cellWidth: number; halign?: "right" | "left" }> {
-  const descWidth = Math.min(52, tableWidth * layout.descShare);
-  const avgWidth = layout.avgWidth;
-  const vendorWidth = (tableWidth - descWidth - avgWidth) / Math.max(vendors.length, 1);
+  const descWidth = Math.min(62, tableWidth * layout.descShare);
+  const vendorWidth = (tableWidth - descWidth) / Math.max(vendors.length, 1);
 
   const styles: Record<number, { cellWidth: number; halign?: "right" | "left" }> = {
     0: { cellWidth: descWidth, halign: "left" },
-    1: { cellWidth: avgWidth, halign: "right" },
   };
   vendors.forEach((_, i) => {
-    styles[i + 2] = { cellWidth: vendorWidth, halign: "right" };
+    styles[i + 1] = { cellWidth: vendorWidth, halign: "right" };
   });
   return styles;
 }
@@ -188,7 +183,7 @@ export async function downloadComparisonPdf(
   const vendorHeaders = vendors.map((v) =>
     vendorHeaderCell(v, vendorLabels, vendorMeta, true, layout.vendorTruncate, layout.variantTruncate)
   );
-  const head = [["Service Description", "Moving Avg", ...vendorHeaders]];
+  const head = [["Space / work", ...vendorHeaders]];
 
   type BodyCell =
     | string
@@ -201,28 +196,31 @@ export async function downloadComparisonPdf(
   const body: BodyCell[][] = [];
   const pad = layout.cellPad;
 
-  for (const cat of groupTableData(tableData)) {
-    body.push([
-      {
-        content: cat.category.toUpperCase(),
-        colSpan: vendors.length + 2,
-        styles: {
-          font: FONT,
-          fillColor: [238, 242, 255],
-          textColor: [30, 58, 138],
-          fontStyle: "bold",
-          fontSize: layout.category,
-          cellPadding: { top: 2, bottom: 2, left: 3, right: 3 },
+  const grouped = groupTableData(tableData);
+  for (const cat of grouped) {
+    if (grouped.length > 1) {
+      body.push([
+        {
+          content: cat.category.toUpperCase(),
+          colSpan: vendors.length + 1,
+          styles: {
+            font: FONT,
+            fillColor: [238, 242, 255],
+            textColor: [30, 58, 138],
+            fontStyle: "bold",
+            fontSize: layout.category,
+            cellPadding: { top: 2, bottom: 2, left: 3, right: 3 },
+          },
         },
-      },
-    ]);
-    for (let subIdx = 0; subIdx < cat.subs.length; subIdx++) {
-      const sub = cat.subs[subIdx];
-      if (subIdx > 0) {
+      ]);
+    }
+    for (let spaceIdx = 0; spaceIdx < cat.spaces.length; spaceIdx++) {
+      const spaceGroup = cat.spaces[spaceIdx];
+      if (spaceIdx > 0) {
         body.push([
           {
             content: "",
-            colSpan: vendors.length + 2,
+            colSpan: vendors.length + 1,
             styles: {
               fillColor: SUB_GAP_FILL,
               minCellHeight: layout.subGap,
@@ -233,11 +231,10 @@ export async function downloadComparisonPdf(
         ]);
       }
 
-      const totals = sumSubServiceRow(sub.rows, vendors);
-      const subAvg = totals.moving_average;
-      const subAvgText = subAvg > 0 ? formatPdfAmount(subAvg) : "—";
+      const spaceRows = spaceGroup.subs.flatMap((s) => s.rows);
+      const totals = sumSubServiceRow(spaceRows, vendors);
 
-      const subCellStyle = {
+      const spaceCellStyle = {
         font: FONT,
         fillColor: SUB_ROW_FILL,
         fontStyle: "bold" as const,
@@ -248,27 +245,17 @@ export async function downloadComparisonPdf(
 
       body.push([
         {
-          content: sub.sub.toUpperCase(),
+          content: spaceGroup.space.toUpperCase(),
           styles: {
-            ...subCellStyle,
+            ...spaceCellStyle,
             fontSize: layout.subTotalLabel,
             textColor: [30, 41, 59],
-          },
-        },
-        {
-          content: subAvgText,
-          styles: {
-            ...subCellStyle,
-            fontSize: layout.subTotalAmount,
-            textColor: [49, 46, 129],
-            fillColor: SUB_AVG_FILL,
-            halign: "right" as const,
           },
         },
         ...vendors.map((v) => ({
           content: formatPdfPrice(totals[v]),
           styles: {
-            ...subCellStyle,
+            ...spaceCellStyle,
             fontSize: layout.subTotalAmount,
             textColor: [15, 23, 42],
             halign: "right" as const,
@@ -276,19 +263,11 @@ export async function downloadComparisonPdf(
         })),
       ]);
 
-      for (const row of sub.rows) {
-        const avg = Number(row.moving_average ?? row.market_average) || 0;
-        const weight = Number(row.moving_weight) || 0;
-        let avgText = avg > 0 ? formatPdfAmount(avg) : "—";
-        const quoteCountLabel = formatQuoteCountLabel(weight);
-        if (quoteCountLabel) avgText += `\n${quoteCountLabel}`;
-
-        const { title, room } = lineItemDescription(row);
-        const desc = room ? `${title}\n${room}` : title;
-
+      for (const sub of spaceGroup.subs) {
+        const subTotals = sumSubServiceRow(sub.rows, vendors);
         body.push([
           {
-            content: desc,
+            content: sub.sub,
             styles: {
               font: FONT,
               fontSize: layout.body,
@@ -296,8 +275,7 @@ export async function downloadComparisonPdf(
               textColor: [51, 65, 85],
             },
           },
-          avgText,
-          ...vendors.map((v) => formatPdfPrice(row[v])),
+          ...vendors.map((v) => formatPdfPrice(subTotals[v])),
         ]);
       }
     }

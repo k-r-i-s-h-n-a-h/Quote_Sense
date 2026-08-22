@@ -79,8 +79,8 @@ export default function RecommendationView({ text }: { text: string }) {
       )}
 
       <p className="mt-5 text-[11px] text-stone-400 leading-relaxed">
-        Based on totals, scope coverage, and market moving-average baselines in
-        this comparison. Inspect the matrix below before making a final decision.
+        Based on totals and room-by-room scope in this comparison. Review the
+        matrix above before making a final decision.
       </p>
     </div>
   );

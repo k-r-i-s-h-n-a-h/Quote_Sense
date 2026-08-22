@@ -4,15 +4,9 @@ import React, { useMemo } from "react";
 import {
   buildVendorLabels,
   formatInrFull,
-  formatQuoteCountLabel,
-  priceVsBaseline,
   type VendorMeta,
 } from "@/lib/format";
-import {
-  groupTableData,
-  sumSubServiceRow,
-  lineItemDescription,
-} from "@/lib/compare-matrix";
+import { groupTableData, sumSubServiceRow } from "@/lib/compare-matrix";
 import { vendorColor } from "@/lib/vendor-colors";
 
 type Props = {
@@ -34,14 +28,15 @@ export default function ComparisonMatrix({
   );
 
   const grouped = useMemo(() => groupTableData(tableData), [tableData]);
+  const colCount = vendors.length + 1;
 
   return (
     <section className="qs-card p-5 md:p-6 overflow-hidden">
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-5">
         <div>
-          <h2 className="qs-section-title">Category comparison</h2>
+          <h2 className="qs-section-title">Tatva Quotes Comparison Matrix</h2>
           <p className="qs-section-sub">
-            Line items with sub-service totals per vendor and market estimate.
+            Cost by room, with sub-services listed under each space.
           </p>
         </div>
         {onDownloadPdf ? (
@@ -70,17 +65,11 @@ export default function ComparisonMatrix({
       </div>
 
       <div className="overflow-x-auto border border-stone-200 rounded-lg qs-table-scroll max-h-[70vh]">
-        <table className="w-full text-left border-collapse min-w-[900px]">
+        <table className="w-full text-left border-collapse min-w-[720px]">
           <thead>
             <tr className="text-stone-500 uppercase text-[10px] font-bold tracking-widest">
-              <th className="p-4 border-b border-stone-200 w-[250px] bg-stone-50">
-                Service description
-              </th>
-              <th className="p-4 border-b border-stone-200 text-right w-[140px] bg-[var(--ai-soft)] text-[var(--ai)]">
-                <div>Market est.</div>
-                <div className="text-[9px] font-normal normal-case tracking-normal text-indigo-400 mt-0.5 leading-tight">
-                  Historical avg × item qty
-                </div>
+              <th className="p-4 border-b border-stone-200 w-[280px] bg-stone-50">
+                Space / work
               </th>
               {vendors.map((vendor, i) => {
                 const info = vendorLabels[vendor];
@@ -131,26 +120,28 @@ export default function ComparisonMatrix({
           <tbody className="divide-y divide-stone-100">
             {grouped.map((cat, ci) => (
               <React.Fragment key={ci}>
-                <tr className="bg-stone-900/[0.03]">
-                  <td
-                    colSpan={vendors.length + 2}
-                    className="p-3 pl-4 text-sm font-bold text-stone-800 uppercase tracking-wider border-y border-stone-200"
-                  >
-                    {cat.category}
-                  </td>
-                </tr>
+                {grouped.length > 1 ? (
+                  <tr className="bg-stone-900/[0.03]">
+                    <td
+                      colSpan={colCount}
+                      className="p-3 pl-4 text-sm font-bold text-stone-800 uppercase tracking-wider border-y border-stone-200"
+                    >
+                      {cat.category}
+                    </td>
+                  </tr>
+                ) : null}
 
-                {cat.subs.map((sub, si) => {
-                  const subTotals = sumSubServiceRow(sub.rows, vendors);
-                  const subBaseline = subTotals.moving_average;
-                  const isLastInCategory = si === cat.subs.length - 1;
+                {cat.spaces.map((spaceGroup, si) => {
+                  const spaceRows = spaceGroup.subs.flatMap((s) => s.rows);
+                  const spaceTotals = sumSubServiceRow(spaceRows, vendors);
+                  const isLastSpace = si === cat.spaces.length - 1;
 
                   return (
-                    <React.Fragment key={si}>
+                    <React.Fragment key={spaceGroup.space}>
                       {si > 0 && (
                         <tr role="presentation">
                           <td
-                            colSpan={vendors.length + 2}
+                            colSpan={colCount}
                             className="h-3 p-0 bg-[var(--background)] border-0"
                           />
                         </tr>
@@ -159,24 +150,17 @@ export default function ComparisonMatrix({
                       <tr className="bg-stone-200/70 border-y-2 border-stone-300">
                         <td className="py-3 pl-5 pr-4 border-l-4 border-[var(--accent)]">
                           <div className="text-xs font-extrabold text-stone-800 uppercase tracking-wide">
-                            {sub.sub}
+                            {spaceGroup.space}
                           </div>
-                        </td>
-                        <td
-                          className="px-3 py-3 text-right align-middle bg-indigo-100/50 border-r border-stone-300"
-                          title="Sum of all line-item market estimates for this service"
-                        >
-                          {subBaseline > 0 ? (
-                            <div className="text-base font-extrabold text-indigo-900 tabular-nums">
-                              {formatInrFull(subBaseline)}
+                          {spaceGroup.spaceRaw &&
+                          spaceGroup.spaceRaw !== spaceGroup.space ? (
+                            <div className="text-[10px] text-stone-500 mt-0.5 font-normal normal-case tracking-normal">
+                              {spaceGroup.spaceRaw}
                             </div>
-                          ) : (
-                            <span className="text-sm text-stone-400">—</span>
-                          )}
+                          ) : null}
                         </td>
                         {vendors.map((vendor, vIdx) => {
-                          const value = Number(subTotals[vendor]) || 0;
-                          const vs = priceVsBaseline(value, subBaseline);
+                          const value = Number(spaceTotals[vendor]) || 0;
                           return (
                             <td
                               key={vIdx}
@@ -189,15 +173,7 @@ export default function ComparisonMatrix({
                                   N/A
                                 </span>
                               ) : (
-                                <span
-                                  className={`text-base font-extrabold ${
-                                    vs === "below"
-                                      ? "text-emerald-800"
-                                      : vs === "above"
-                                        ? "text-amber-800"
-                                        : "text-stone-900"
-                                  }`}
-                                >
+                                <span className="text-base font-extrabold text-stone-900">
                                   {formatInrFull(value)}
                                 </span>
                               )}
@@ -206,75 +182,53 @@ export default function ComparisonMatrix({
                         })}
                       </tr>
 
-                      {sub.rows.map((row, idx) => {
-                        const baseline =
-                          Number(row.moving_average ?? row.market_average) || 0;
-                        const weight = Number(row.moving_weight) || 0;
-                        const { title, room } = lineItemDescription(row);
-                        const isLastLineItem = idx === sub.rows.length - 1;
+                      {spaceGroup.subs.map((sub, idx) => {
+                        const subTotals = sumSubServiceRow(sub.rows, vendors);
+                        const isLast = idx === spaceGroup.subs.length - 1;
+                        const pricing = String(
+                          (sub.rows[0] as { pricing_method?: string } | undefined)
+                            ?.pricing_method || ""
+                        );
                         return (
                           <tr
-                            key={idx}
-                            className={`hover:bg-stone-50/80 transition-colors group bg-white ${
-                              isLastLineItem && !isLastInCategory
+                            key={`${spaceGroup.space}-${sub.sub}`}
+                            className={`hover:bg-stone-50/80 transition-colors bg-white ${
+                              isLast && !isLastSpace
                                 ? "border-b-2 border-stone-200"
                                 : ""
                             }`}
                           >
-                            <td className="py-2.5 pl-12 pr-4 max-w-[320px] border-l-4 border-transparent">
+                            <td className="py-2.5 pl-12 pr-4 max-w-[360px] border-l-4 border-transparent">
                               <div className="text-sm font-medium text-stone-800 leading-tight">
-                                {title}
+                                {sub.sub}
                               </div>
-                              {room && (
-                                <div className="text-[10px] text-stone-400 mt-0.5 uppercase tracking-wide">
-                                  {room}
+                              {pricing ? (
+                                <div className="text-[10px] text-stone-400 mt-0.5">
+                                  {pricing}
                                 </div>
-                              )}
-                            </td>
-                            <td
-                              className="px-4 py-2.5 text-right align-top bg-indigo-50/15 border-r border-indigo-100/40"
-                              title="Market Est. from historical averages across past sessions"
-                            >
-                              {baseline > 0 ? (
-                                <>
-                                  <div className="text-sm font-medium text-indigo-700 tabular-nums">
-                                    {formatInrFull(baseline)}
+                              ) : null}
+                              {(() => {
+                                const items = Array.from(
+                                  new Set(
+                                    sub.rows.flatMap((r) =>
+                                      Array.isArray((r as { breakdown?: { item?: string }[] }).breakdown)
+                                        ? (r as { breakdown: { item?: string }[] }).breakdown
+                                            .map((b) => String(b.item || "").trim())
+                                            .filter(Boolean)
+                                        : []
+                                    )
+                                  )
+                                ).filter((name) => name.toLowerCase() !== sub.sub.toLowerCase());
+                                if (items.length === 0) return null;
+                                return (
+                                  <div className="text-[10px] text-stone-400 mt-0.5 leading-snug">
+                                    {items.join(" · ")}
                                   </div>
-                                  {weight > 0 && (
-                                    <div className="text-[10px] text-stone-400 mt-0.5">
-                                      {formatQuoteCountLabel(weight)}
-                                    </div>
-                                  )}
-                                  {(() => {
-                                    const ratePerUnit =
-                                      Number(
-                                        (row as any).market_rate_per_unit
-                                      ) || 0;
-                                    const pm = String(
-                                      (row as any).pricing_method || ""
-                                    );
-                                    if (ratePerUnit > 0 && pm) {
-                                      return (
-                                        <div className="text-[9px] text-indigo-300 mt-0.5 tabular-nums">
-                                          ₹
-                                          {ratePerUnit.toLocaleString("en-IN")}/
-                                          {pm}
-                                        </div>
-                                      );
-                                    }
-                                    return null;
-                                  })()}
-                                </>
-                              ) : (
-                                <span className="text-sm text-stone-300">—</span>
-                              )}
+                                );
+                              })()}
                             </td>
                             {vendors.map((vendor, vIdx) => {
-                              const value = row[vendor];
-                              const vs = priceVsBaseline(
-                                Number(value),
-                                baseline
-                              );
+                              const value = Number(subTotals[vendor]) || 0;
                               return (
                                 <td
                                   key={vIdx}
@@ -287,16 +241,8 @@ export default function ComparisonMatrix({
                                       N/A
                                     </span>
                                   ) : (
-                                    <span
-                                      className={`text-sm font-medium ${
-                                        vs === "below"
-                                          ? "text-emerald-700"
-                                          : vs === "above"
-                                            ? "text-amber-700"
-                                            : "text-stone-700"
-                                      }`}
-                                    >
-                                      {formatInrFull(Number(value))}
+                                    <span className="text-sm font-medium text-stone-700">
+                                      {formatInrFull(value)}
                                     </span>
                                   )}
                                 </td>
@@ -314,11 +260,8 @@ export default function ComparisonMatrix({
         </table>
       </div>
       <p className="text-[11px] text-stone-400 mt-3">
-        <span className="text-emerald-700 font-medium">Green</span> = below
-        market est. ·{" "}
-        <span className="text-amber-700 font-medium">Amber</span> = above market
-        est. · Market est. uses historical averages across past sessions, not
-        only vendors in this comparison.
+        Header totals are the sum of sub-services in that space. N/A means that
+        vendor did not quote this work in this room.
       </p>
     </section>
   );

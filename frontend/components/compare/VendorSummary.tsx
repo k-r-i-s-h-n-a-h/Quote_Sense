@@ -4,7 +4,6 @@ import { useMemo } from "react";
 import {
   buildVendorLabels,
   formatInrFull,
-  priceVsBaseline,
   type VendorMeta,
 } from "@/lib/format";
 import { vendorColor } from "@/lib/vendor-colors";
@@ -29,21 +28,13 @@ function relativeLabel(total: number, min: number, max: number): string {
 export default function VendorSummary({
   chartData,
   vendors,
-  tableData,
+  tableData: _tableData,
   meta,
 }: Props) {
   const labels = useMemo(
     () => buildVendorLabels(vendors, meta),
     [vendors, meta]
   );
-
-  const marketTotal = useMemo(() => {
-    let sum = 0;
-    for (const row of tableData) {
-      sum += Number(row.moving_average ?? row.market_average) || 0;
-    }
-    return sum;
-  }, [tableData]);
 
   const rows = useMemo(() => {
     const byVendor = new Map(chartData.map((d) => [d.vendor, Number(d.total) || 0]));
@@ -53,15 +44,6 @@ export default function VendorSummary({
 
     return vendors.map((vendor, index) => {
       const total = byVendor.get(vendor) || 0;
-      const vsMarket =
-        marketTotal > 0 && total > 0
-          ? priceVsBaseline(total, marketTotal)
-          : "neutral";
-      const diffPct =
-        marketTotal > 0 && total > 0
-          ? ((total - marketTotal) / marketTotal) * 100
-          : null;
-
       return {
         vendor,
         total,
@@ -69,11 +51,9 @@ export default function VendorSummary({
         label: labels[vendor]?.label || vendor.split(" (")[0],
         full: labels[vendor]?.full || vendor,
         position: relativeLabel(total, min, max),
-        vsMarket,
-        diffPct,
       };
     });
-  }, [chartData, vendors, labels, marketTotal]);
+  }, [chartData, vendors, labels]);
 
   if (rows.length === 0) return null;
 
@@ -81,12 +61,7 @@ export default function VendorSummary({
     <section className="qs-card p-5 md:p-6">
       <div className="mb-4">
         <h2 className="qs-section-title">Vendor overview</h2>
-        <p className="qs-section-sub">
-          Totals at a glance
-          {marketTotal > 0
-            ? " with position versus the summed market estimate for this matrix."
-            : "."}
-        </p>
+        <p className="qs-section-sub">Totals at a glance.</p>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {rows.map((row) => (
@@ -112,21 +87,6 @@ export default function VendorSummary({
               <span className="rounded-md bg-white border border-stone-200 px-1.5 py-0.5 text-stone-600">
                 {row.position}
               </span>
-              {row.diffPct != null && (
-                <span
-                  className={`rounded-md px-1.5 py-0.5 font-medium ${
-                    row.vsMarket === "below"
-                      ? "bg-[var(--success-soft)] text-[var(--success)]"
-                      : row.vsMarket === "above"
-                        ? "bg-[var(--warning-soft)] text-[var(--warning)]"
-                        : "bg-stone-100 text-stone-600"
-                  }`}
-                >
-                  {row.diffPct === 0
-                    ? "At market est."
-                    : `${row.diffPct > 0 ? "+" : ""}${row.diffPct.toFixed(1)}% vs market est.`}
-                </span>
-              )}
             </div>
           </article>
         ))}

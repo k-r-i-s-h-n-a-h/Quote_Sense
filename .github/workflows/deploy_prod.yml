@@ -5,7 +5,7 @@ on:
     branches: [main]
 
 concurrency:
-  group: vercel-dev
+  group: vercel-prod
   cancel-in-progress: false
 
 env:
@@ -45,8 +45,10 @@ jobs:
       - name: Sync Tatva API URL on Vercel
         working-directory: ./frontend
         run: |
-          printf '%s' 'https://devopsapi.withtatva.ai' | vercel env add TATVA_API_BASE production --token=$VERCEL_TOKEN --force || true
-          printf '%s' 'https://devopsapi.withtatva.ai' | vercel env add TATVA_API_BASE preview --token=$VERCEL_TOKEN --force || true
+          # Prod QuoteSense must hit opsapi so OTP/profile/projects match ops.withtatva.ai
+          # (admin.ops.withtatva.ai/otp-records). devopsapi is the DEV pairing only.
+          printf '%s' 'https://opsapi.withtatva.ai' | vercel env add TATVA_API_BASE production --token=$VERCEL_TOKEN --force || true
+          printf '%s' 'https://opsapi.withtatva.ai' | vercel env add TATVA_API_BASE preview --token=$VERCEL_TOKEN --force || true
 
       - name: Deploy to Vercel
         working-directory: ./frontend

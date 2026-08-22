@@ -24,6 +24,7 @@ import {
   getUserDisplayName,
   getUserInitial,
   userNeedsName,
+  withResolvedName,
 } from "../user-display";
 import {
   groupTableData,
@@ -231,6 +232,12 @@ describe("user-display", () => {
     expect(userNeedsName({ firstName: "Ann", lastName: "Rao" })).toBe(false);
   });
 
+  it("moves a phone stored in email onto phoneNumber", () => {
+    const normalized = withResolvedName({ email: "9999910620" });
+    expect(normalized.email).toBeUndefined();
+    expect(normalized.phoneNumber).toBe("9999910620");
+  });
+
   it("initial letter", () => {
     expect(getUserInitial({ name: "divya" })).toBe("D");
     expect(getUserInitial(null)).toBe("?");
@@ -238,26 +245,38 @@ describe("user-display", () => {
 });
 
 describe("compare-matrix", () => {
-  it("groups rows by category/sub-service", () => {
+  it("groups rows by category then canonical space then sub-service", () => {
     const groups = groupTableData([
-      { category: "Flooring", sub_service: "Tile", item_name: "A" },
-      { category: "Flooring", sub_service: "Tile", item_name: "B" },
-      { category: "Paint", sub_service: "Wall", item_name: "C" },
+      { category: "Interiors", space: "GF-Bedroom1", sub_service: "Wardrobe", item_name: "Wardrobe" },
+      { category: "Interiors", space: "GF-Bedroom1", sub_service: "Loft", item_name: "Loft" },
+      { category: "Interiors", space: "Kitchen", sub_service: "Cabinets", item_name: "Cabinets" },
     ]);
-    expect(groups).toHaveLength(2);
-    expect(groups[0].subs[0].rows).toHaveLength(2);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].spaces).toHaveLength(2);
+    expect(groups[0].spaces[0].space).toBe("GF-Bedroom1");
+    expect(groups[0].spaces[0].subs).toHaveLength(2);
+    expect(groups[0].spaces[1].space).toBe("Kitchen");
+  });
+
+  it("clusters Bedroom 1 + GF Bedroom 1 when space is already canonical", () => {
+    const groups = groupTableData([
+      { space: "GF-Bedroom1", space_raw: "Bedroom 1", sub_service: "Wardrobe", VendorA: 100 },
+      { space: "GF-Bedroom1", space_raw: "Ground Floor Bedroom 1", sub_service: "Wardrobe", VendorB: 90 },
+    ]);
+    expect(groups[0].spaces).toHaveLength(1);
+    expect(groups[0].spaces[0].space).toBe("GF-Bedroom1");
+    expect(groups[0].spaces[0].subs[0].rows).toHaveLength(2);
   });
 
   it("sums sub-service rows", () => {
     const totals = sumSubServiceRow(
       [
-        { VendorA: 100, moving_average: 90 },
-        { VendorA: 50, moving_average: 40 },
+        { VendorA: 100 },
+        { VendorA: 50 },
       ],
       ["VendorA"]
     );
     expect(totals.VendorA).toBe(150);
-    expect(totals.moving_average).toBe(130);
   });
 
   it("lineItemDescription drops redundant room", () => {

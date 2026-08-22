@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Start backend outside Cursor agent sandbox (so macOS File Provider / I/O is not restricted)
 set -e
-cd /Users/krishnahonnikhere/Desktop/tatvaops-quotesense/backend
+cd "$(dirname "$0")"
 export PYTHONUNBUFFERED=1
 # free port
 if lsof -nP -tiTCP:8001 -sTCP:LISTEN >/dev/null 2>&1; then

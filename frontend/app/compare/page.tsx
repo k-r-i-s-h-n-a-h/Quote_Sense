@@ -46,6 +46,9 @@ const VendorChart = dynamic(() => import("../../components/VendorChart"), {
   ),
 });
 
+/** Ask QuoteSense is kept in the tree but gated off for the space-first compare slice. */
+const SHOW_COMPARE_CHAT = false;
+
 /** True when report text is an error payload, not an AI recommendation. */
 function isErrorReport(report: string): boolean {
   const t = report.trim();
@@ -820,10 +823,6 @@ function QuoteSenseContent() {
           />
         )}
 
-        {report && tableData.length > 0 && !isErrorReport(report) && (
-          <RecommendationView text={report} />
-        )}
-
         {chartData.length > 0 && (
           <section className="qs-card p-5 md:p-6">
             <h2 className="qs-section-title">Cost comparison</h2>
@@ -851,18 +850,8 @@ function QuoteSenseContent() {
           />
         )}
 
-        {sessionId && tableData.length > 0 && (
-          <CompareChat
-            sessionId={sessionId}
-            chatHistory={chatHistory}
-            chatInput={chatInput}
-            isChatting={isChatting}
-            onInputChange={setChatInput}
-            onSubmit={handleChatSubmit}
-            onSuggestion={(text) => {
-              void sendChatMessage(text);
-            }}
-          />
+        {report && tableData.length > 0 && !isErrorReport(report) && (
+          <RecommendationView text={report} />
         )}
 
         {report && tableData.length > 0 && !isErrorReport(report) && (
@@ -882,6 +871,20 @@ function QuoteSenseContent() {
               New comparison
             </button>
           </div>
+        )}
+
+        {SHOW_COMPARE_CHAT && sessionId && tableData.length > 0 && (
+          <CompareChat
+            sessionId={sessionId}
+            chatHistory={chatHistory}
+            chatInput={chatInput}
+            isChatting={isChatting}
+            onInputChange={setChatInput}
+            onSubmit={handleChatSubmit}
+            onSuggestion={(text) => {
+              void sendChatMessage(text);
+            }}
+          />
         )}
       </div>
     </main>

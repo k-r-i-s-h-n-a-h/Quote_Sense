@@ -6,29 +6,245 @@ import {
   formatInrFull,
   type VendorMeta,
 } from "@/lib/format";
-import { groupTableData, sumSubServiceRow } from "@/lib/compare-matrix";
+import {
+  coverageIndex,
+  groupTableData,
+  isSpaceComparable,
+  sumSubServiceRow,
+} from "@/lib/compare-matrix";
+import {
+  amountOf,
+  parseCellStatus,
+  type BundleRow,
+  type CoverageEntry,
+  type SpaceRow,
+} from "@/lib/compare-types";
 import { vendorColor } from "@/lib/vendor-colors";
 
 type Props = {
-  tableData: Record<string, any>[];
+  tableData: SpaceRow[];
   vendors: string[];
   vendorMeta?: Record<string, VendorMeta>;
   onDownloadPdf?: () => void;
+  /** Optional MatrixV1 tiers. Absent for a legacy payload. */
+  spaceTier?: SpaceRow[];
+  bundleTier?: BundleRow[];
+  projectTier?: SpaceRow[];
+  coverage?: CoverageEntry[];
 };
+
+/**
+ * Renders one vendor cell. A zero is only "N/A" when the vendor genuinely did
+ * not quote it — if the amount sits inside a bundle we say so instead. The old
+ * table showed all three cases identically, which made a vendor with a bundled
+ * scope look like a vendor with a missing scope.
+ */
+function AmountCell({
+  row,
+  vendor,
+  strong,
+}: {
+  row: SpaceRow;
+  vendor: string;
+  strong?: boolean;
+}) {
+  const value = amountOf(row, vendor);
+  const { status, bundleLabel } = parseCellStatus(row.coverage?.[vendor]);
+
+  if (value > 0) {
+    return (
+      <td className="px-4 py-2.5 text-right tabular-nums">
+        <span
+          className={
+            strong
+              ? "text-base font-extrabold text-stone-900"
+              : "text-sm font-medium text-stone-700"
+          }
+        >
+          {formatInrFull(value)}
+        </span>
+      </td>
+    );
+  }
+
+  if (status === "incl_in_bundle") {
+    return (
+      <td className="px-4 py-2.5 text-right align-middle">
+        <span
+          className="text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 inline-block leading-tight"
+          title={`Included in this vendor's ${bundleLabel} bundle — not a missing item`}
+        >
+          incl. in {bundleLabel || "bundle"}
+        </span>
+      </td>
+    );
+  }
+
+  return (
+    <td className="px-4 py-2.5 text-right tabular-nums opacity-50">
+      <span
+        className={
+          strong
+            ? "text-sm font-semibold text-rose-400 italic"
+            : "text-sm font-medium text-rose-300 italic"
+        }
+      >
+        N/A
+      </span>
+    </td>
+  );
+}
 
 export default function ComparisonMatrix({
   tableData,
   vendors,
   vendorMeta = {},
   onDownloadPdf,
+  spaceTier,
+  bundleTier = [],
+  projectTier,
+  coverage = [],
 }: Props) {
   const vendorLabels = useMemo(
     () => buildVendorLabels(vendors, vendorMeta),
     [vendors, vendorMeta]
   );
 
-  const grouped = useMemo(() => groupTableData(tableData), [tableData]);
+  // Prefer the tiers when present; fall back to the flat payload so an older
+  // backend renders exactly as before.
+  const spaceRows = spaceTier ?? tableData;
+  const grouped = useMemo(() => groupTableData(spaceRows), [spaceRows]);
+  const projectGrouped = useMemo(
+    () => (projectTier?.length ? groupTableData(projectTier) : []),
+    [projectTier]
+  );
+  const coverIdx = useMemo(() => coverageIndex(coverage), [coverage]);
   const colCount = vendors.length + 1;
+
+  const renderSpaces = (
+    spaces: ReturnType<typeof groupTableData>[number]["spaces"]
+  ) =>
+    spaces.map((spaceGroup, si) => {
+      const spaceRowsInGroup = spaceGroup.subs.flatMap((s) => s.rows);
+      const spaceTotals = sumSubServiceRow(spaceRowsInGroup, vendors);
+      const comparable = isSpaceComparable(
+        coverIdx,
+        spaceGroup.spaceId,
+        vendors
+      );
+      const isLastSpace = si === spaces.length - 1;
+
+      return (
+        <React.Fragment key={spaceGroup.spaceId || spaceGroup.space}>
+          {si > 0 && (
+            <tr role="presentation">
+              <td
+                colSpan={colCount}
+                className="h-3 p-0 bg-[var(--background)] border-0"
+              />
+            </tr>
+          )}
+
+          <tr className="bg-stone-200/70 border-y-2 border-stone-300">
+            <td className="py-3 pl-5 pr-4 border-l-4 border-[var(--accent)]">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-extrabold text-stone-800 uppercase tracking-wide">
+                  {spaceGroup.space}
+                </span>
+                {!comparable && (
+                  <span
+                    className="text-[9px] font-semibold text-amber-800 bg-amber-100 border border-amber-300 rounded px-1.5 py-0.5 uppercase tracking-wide"
+                    title="A vendor bundled part of this room's scope, so these totals are not like-for-like"
+                  >
+                    scope differs
+                  </span>
+                )}
+              </div>
+              {spaceGroup.spaceRaw &&
+              spaceGroup.spaceRaw !== spaceGroup.space ? (
+                <div className="text-[10px] text-stone-500 mt-0.5 font-normal normal-case tracking-normal">
+                  {spaceGroup.spaceRaw}
+                </div>
+              ) : null}
+            </td>
+            {vendors.map((vendor, vIdx) => {
+              const value = Number(spaceTotals[vendor]) || 0;
+              return (
+                <td
+                  key={vIdx}
+                  className={`px-3 py-3 text-right tabular-nums align-middle ${
+                    value === 0 ? "opacity-50" : ""
+                  } ${!comparable ? "opacity-70" : ""}`}
+                >
+                  {value === 0 ? (
+                    <span className="text-sm font-semibold text-rose-400 italic">
+                      N/A
+                    </span>
+                  ) : (
+                    <span className="text-base font-extrabold text-stone-900">
+                      {formatInrFull(value)}
+                    </span>
+                  )}
+                </td>
+              );
+            })}
+          </tr>
+
+          {spaceGroup.subs.map((sub, idx) => {
+            const isLast = idx === spaceGroup.subs.length - 1;
+            const first = sub.rows[0] ?? {};
+            const pricing = String(first.pricing_method || "");
+            // A work row can be fed by several vendor lines; merge their
+            // amounts but keep the first row's coverage semantics.
+            const merged: SpaceRow = {
+              ...first,
+              ...Object.fromEntries(
+                vendors.map((v) => [v, sumSubServiceRow(sub.rows, vendors)[v]])
+              ),
+            };
+            const items = Array.from(
+              new Set(
+                sub.rows.flatMap((r) =>
+                  Array.isArray(r.breakdown)
+                    ? r.breakdown
+                        .map((b) => String(b.item || "").trim())
+                        .filter(Boolean)
+                    : []
+                )
+              )
+            ).filter((name) => name.toLowerCase() !== sub.sub.toLowerCase());
+
+            return (
+              <tr
+                key={`${spaceGroup.spaceId}-${sub.workKey}`}
+                className={`hover:bg-stone-50/80 transition-colors bg-white ${
+                  isLast && !isLastSpace ? "border-b-2 border-stone-200" : ""
+                }`}
+              >
+                <td className="py-2.5 pl-12 pr-4 max-w-[360px] border-l-4 border-transparent">
+                  <div className="text-sm font-medium text-stone-800 leading-tight">
+                    {sub.sub}
+                  </div>
+                  {pricing ? (
+                    <div className="text-[10px] text-stone-400 mt-0.5">
+                      {pricing}
+                    </div>
+                  ) : null}
+                  {items.length > 0 ? (
+                    <div className="text-[10px] text-stone-400 mt-0.5 leading-snug">
+                      {items.join(" · ")}
+                    </div>
+                  ) : null}
+                </td>
+                {vendors.map((vendor, vIdx) => (
+                  <AmountCell key={vIdx} row={merged} vendor={vendor} />
+                ))}
+              </tr>
+            );
+          })}
+        </React.Fragment>
+      );
+    });
 
   return (
     <section className="qs-card p-5 md:p-6 overflow-hidden">
@@ -130,138 +346,114 @@ export default function ComparisonMatrix({
                     </td>
                   </tr>
                 ) : null}
-
-                {cat.spaces.map((spaceGroup, si) => {
-                  const spaceRows = spaceGroup.subs.flatMap((s) => s.rows);
-                  const spaceTotals = sumSubServiceRow(spaceRows, vendors);
-                  const isLastSpace = si === cat.spaces.length - 1;
-
-                  return (
-                    <React.Fragment key={spaceGroup.space}>
-                      {si > 0 && (
-                        <tr role="presentation">
-                          <td
-                            colSpan={colCount}
-                            className="h-3 p-0 bg-[var(--background)] border-0"
-                          />
-                        </tr>
-                      )}
-
-                      <tr className="bg-stone-200/70 border-y-2 border-stone-300">
-                        <td className="py-3 pl-5 pr-4 border-l-4 border-[var(--accent)]">
-                          <div className="text-xs font-extrabold text-stone-800 uppercase tracking-wide">
-                            {spaceGroup.space}
-                          </div>
-                          {spaceGroup.spaceRaw &&
-                          spaceGroup.spaceRaw !== spaceGroup.space ? (
-                            <div className="text-[10px] text-stone-500 mt-0.5 font-normal normal-case tracking-normal">
-                              {spaceGroup.spaceRaw}
-                            </div>
-                          ) : null}
-                        </td>
-                        {vendors.map((vendor, vIdx) => {
-                          const value = Number(spaceTotals[vendor]) || 0;
-                          return (
-                            <td
-                              key={vIdx}
-                              className={`px-3 py-3 text-right tabular-nums align-middle ${
-                                value === 0 ? "opacity-50" : ""
-                              }`}
-                            >
-                              {value === 0 ? (
-                                <span className="text-sm font-semibold text-rose-400 italic">
-                                  N/A
-                                </span>
-                              ) : (
-                                <span className="text-base font-extrabold text-stone-900">
-                                  {formatInrFull(value)}
-                                </span>
-                              )}
-                            </td>
-                          );
-                        })}
-                      </tr>
-
-                      {spaceGroup.subs.map((sub, idx) => {
-                        const subTotals = sumSubServiceRow(sub.rows, vendors);
-                        const isLast = idx === spaceGroup.subs.length - 1;
-                        const pricing = String(
-                          (sub.rows[0] as { pricing_method?: string } | undefined)
-                            ?.pricing_method || ""
-                        );
-                        return (
-                          <tr
-                            key={`${spaceGroup.space}-${sub.sub}`}
-                            className={`hover:bg-stone-50/80 transition-colors bg-white ${
-                              isLast && !isLastSpace
-                                ? "border-b-2 border-stone-200"
-                                : ""
-                            }`}
-                          >
-                            <td className="py-2.5 pl-12 pr-4 max-w-[360px] border-l-4 border-transparent">
-                              <div className="text-sm font-medium text-stone-800 leading-tight">
-                                {sub.sub}
-                              </div>
-                              {pricing ? (
-                                <div className="text-[10px] text-stone-400 mt-0.5">
-                                  {pricing}
-                                </div>
-                              ) : null}
-                              {(() => {
-                                const items = Array.from(
-                                  new Set(
-                                    sub.rows.flatMap((r) =>
-                                      Array.isArray((r as { breakdown?: { item?: string }[] }).breakdown)
-                                        ? (r as { breakdown: { item?: string }[] }).breakdown
-                                            .map((b) => String(b.item || "").trim())
-                                            .filter(Boolean)
-                                        : []
-                                    )
-                                  )
-                                ).filter((name) => name.toLowerCase() !== sub.sub.toLowerCase());
-                                if (items.length === 0) return null;
-                                return (
-                                  <div className="text-[10px] text-stone-400 mt-0.5 leading-snug">
-                                    {items.join(" · ")}
-                                  </div>
-                                );
-                              })()}
-                            </td>
-                            {vendors.map((vendor, vIdx) => {
-                              const value = Number(subTotals[vendor]) || 0;
-                              return (
-                                <td
-                                  key={vIdx}
-                                  className={`px-4 py-2.5 text-right tabular-nums ${
-                                    value === 0 ? "opacity-50" : ""
-                                  }`}
-                                >
-                                  {value === 0 ? (
-                                    <span className="text-sm font-medium text-rose-300 italic">
-                                      N/A
-                                    </span>
-                                  ) : (
-                                    <span className="text-sm font-medium text-stone-700">
-                                      {formatInrFull(value)}
-                                    </span>
-                                  )}
-                                </td>
-                              );
-                            })}
-                          </tr>
-                        );
-                      })}
-                    </React.Fragment>
-                  );
-                })}
+                {renderSpaces(cat.spaces)}
               </React.Fragment>
             ))}
+
+            {bundleTier.length > 0 && (
+              <>
+                <tr role="presentation">
+                  <td
+                    colSpan={colCount}
+                    className="h-4 p-0 bg-[var(--background)] border-0"
+                  />
+                </tr>
+                <tr className="bg-amber-50 border-y-2 border-amber-200">
+                  <td
+                    colSpan={colCount}
+                    className="p-3 pl-4 border-l-4 border-amber-400"
+                  >
+                    <div className="text-sm font-bold text-amber-900 uppercase tracking-wider">
+                      Bundled scopes
+                    </div>
+                    <div className="text-[10px] text-amber-800 mt-0.5 font-normal normal-case tracking-normal">
+                      One vendor priced these as a single lump sum while another
+                      itemised them. Excluded from the room totals above.
+                    </div>
+                  </td>
+                </tr>
+                {bundleTier.map((bundle, bi) => (
+                  <tr key={bundle.bundle_id || bi} className="bg-white">
+                    <td className="py-3 pl-8 pr-4 max-w-[360px] border-l-4 border-amber-200">
+                      <div className="text-sm font-semibold text-stone-800 leading-tight">
+                        {bundle.bundle_label}
+                      </div>
+                      {bundle.covered_spaces?.length ? (
+                        <div className="text-[10px] text-stone-500 mt-0.5">
+                          Covers: {bundle.covered_spaces.join(" · ")}
+                        </div>
+                      ) : null}
+                      {bundle.covered_items?.length ? (
+                        <div className="text-[10px] text-stone-400 mt-0.5 leading-snug">
+                          {bundle.covered_items.join(" · ")}
+                        </div>
+                      ) : null}
+                      {bundle.overlap_flags?.length ? (
+                        <div className="text-[10px] text-rose-700 bg-rose-50 border border-rose-200 rounded px-1.5 py-0.5 mt-1 inline-block leading-snug">
+                          Also billed separately:{" "}
+                          {bundle.overlap_flags.join(", ")} — confirm it is not
+                          counted twice
+                        </div>
+                      ) : null}
+                    </td>
+                    {vendors.map((vendor, vIdx) => {
+                      const value = amountOf(bundle, vendor);
+                      const basis = bundle.basis?.[vendor] ?? "none";
+                      const count = bundle.line_counts?.[vendor] ?? 0;
+                      return (
+                        <td
+                          key={vIdx}
+                          className="px-4 py-3 text-right tabular-nums align-middle"
+                        >
+                          {value > 0 ? (
+                            <>
+                              <div className="text-sm font-bold text-stone-900">
+                                {formatInrFull(value)}
+                              </div>
+                              <div className="text-[9px] text-stone-500 mt-0.5 normal-case">
+                                {basis === "bundle"
+                                  ? "lump sum"
+                                  : `sum of ${count} item${count === 1 ? "" : "s"}`}
+                              </div>
+                            </>
+                          ) : (
+                            <span className="text-sm font-medium text-rose-300 italic">
+                              N/A
+                            </span>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </>
+            )}
+
+            {projectGrouped.length > 0 && (
+              <>
+                <tr role="presentation">
+                  <td
+                    colSpan={colCount}
+                    className="h-4 p-0 bg-[var(--background)] border-0"
+                  />
+                </tr>
+                {projectGrouped.map((cat, ci) => (
+                  <React.Fragment key={`proj-${ci}`}>
+                    {renderSpaces(cat.spaces)}
+                  </React.Fragment>
+                ))}
+              </>
+            )}
           </tbody>
         </table>
       </div>
       <p className="text-[11px] text-stone-400 mt-3">
-        Header totals are the sum of sub-services in that space. N/A means that
-        vendor did not quote this work in this room.
+        Header totals are the sum of sub-services in that space.{" "}
+        <span className="font-medium text-rose-400">N/A</span> means that vendor
+        did not quote this work;{" "}
+        <span className="font-medium text-amber-700">incl. in …</span> means the
+        price sits inside that vendor&apos;s bundle, so it is not missing.
+        Bundled amounts are excluded from room totals by design.
       </p>
     </section>
   );

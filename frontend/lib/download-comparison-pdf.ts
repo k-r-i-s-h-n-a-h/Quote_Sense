@@ -1,9 +1,28 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { groupTableData, sumSubServiceRow } from "./compare-matrix";
+import {
+  coverageIndex,
+  groupTableData,
+  isSpaceComparable,
+  sumSubServiceRow,
+} from "./compare-matrix";
+import {
+  amountOf,
+  parseCellStatus,
+  type BundleRow,
+  type CoverageEntry,
+  type SpaceRow,
+} from "./compare-types";
 import { type VendorLabel, type VendorMeta } from "./format";
 
-type TableRow = Record<string, unknown>;
+type TableRow = SpaceRow;
+
+/** Optional MatrixV1 tiers. Absent for a legacy payload, which exports as before. */
+export type PdfTiers = {
+  bundleTier?: BundleRow[];
+  projectTier?: SpaceRow[];
+  coverage?: CoverageEntry[];
+};
 
 /** jsPDF built-in Helvetica — clean sans-serif for comparison exports. */
 const FONT = "helvetica";
@@ -61,6 +80,20 @@ function formatPdfAmount(value: number): string {
 function formatPdfPrice(value: unknown): string {
   if (value === 0 || value === undefined || value === null) return "N/A";
   return formatPdfAmount(Number(value));
+}
+
+/**
+ * Cell text for a work row. The PDF has no tooltips and gets forwarded to people
+ * who never saw the app, so a bundled amount must not print as a bare "N/A" —
+ * that is how a vendor gets wrongly excluded from a shortlist.
+ */
+function cellText(row: SpaceRow, vendor: string, total: number): string {
+  if (total > 0) return formatPdfAmount(total);
+  const { status, bundleLabel } = parseCellStatus(row.coverage?.[vendor]);
+  if (status === "incl_in_bundle") {
+    return `incl. in ${bundleLabel || "bundle"}`;
+  }
+  return "N/A";
 }
 
 function truncate(text: string, maxLen: number): string {
@@ -145,7 +178,8 @@ export async function downloadComparisonPdf(
   tableData: TableRow[],
   vendors: string[],
   vendorLabels: Record<string, VendorLabel>,
-  vendorMeta: Record<string, VendorMeta> = {}
+  vendorMeta: Record<string, VendorMeta> = {},
+  tiers: PdfTiers = {}
 ): Promise<void> {
   const layout = pdfLayout(vendors.length);
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
@@ -196,7 +230,17 @@ export async function downloadComparisonPdf(
   const body: BodyCell[][] = [];
   const pad = layout.cellPad;
 
-  const grouped = groupTableData(tableData);
+  const bundleTier = tiers.bundleTier ?? [];
+  const projectTier = tiers.projectTier ?? [];
+  const coverIdx = coverageIndex(tiers.coverage ?? []);
+
+  // Project-level rows are exported after the bundle section, so the space tier
+  // here excludes them when the tiers are available.
+  const spaceRows = projectTier.length
+    ? tableData.filter((r) => String(r.space_id ?? "") !== "project_level")
+    : tableData;
+
+  const grouped = groupTableData(spaceRows);
   for (const cat of grouped) {
     if (grouped.length > 1) {
       body.push([
@@ -243,13 +287,24 @@ export async function downloadComparisonPdf(
         lineWidth: 0.2,
       };
 
+      const comparable = isSpaceComparable(
+        coverIdx,
+        spaceGroup.spaceId,
+        vendors
+      );
+      const spaceTitle = comparable
+        ? spaceGroup.space.toUpperCase()
+        : `${spaceGroup.space.toUpperCase()}  (scope differs — not like-for-like)`;
+
       body.push([
         {
-          content: spaceGroup.space.toUpperCase(),
+          content: spaceTitle,
           styles: {
             ...spaceCellStyle,
             fontSize: layout.subTotalLabel,
-            textColor: [30, 41, 59],
+            textColor: comparable
+              ? [30, 41, 59]
+              : ([146, 64, 14] as [number, number, number]),
           },
         },
         ...vendors.map((v) => ({
@@ -265,6 +320,7 @@ export async function downloadComparisonPdf(
 
       for (const sub of spaceGroup.subs) {
         const subTotals = sumSubServiceRow(sub.rows, vendors);
+        const first = sub.rows[0] ?? ({} as SpaceRow);
         body.push([
           {
             content: sub.sub,
@@ -275,8 +331,100 @@ export async function downloadComparisonPdf(
               textColor: [51, 65, 85],
             },
           },
-          ...vendors.map((v) => formatPdfPrice(subTotals[v])),
+          ...vendors.map((v) => cellText(first, v, Number(subTotals[v]) || 0)),
         ]);
+      }
+    }
+  }
+
+  if (bundleTier.length > 0) {
+    body.push([
+      {
+        content: "BUNDLED SCOPES (excluded from the room totals above)",
+        colSpan: vendors.length + 1,
+        styles: {
+          font: FONT,
+          fillColor: [254, 243, 199],
+          textColor: [146, 64, 14],
+          fontStyle: "bold",
+          fontSize: layout.category,
+          cellPadding: { top: 2, bottom: 2, left: 3, right: 3 },
+        },
+      },
+    ]);
+
+    for (const bundle of bundleTier) {
+      const detail = [
+        bundle.covered_spaces?.length
+          ? `Covers: ${bundle.covered_spaces.join(", ")}`
+          : "",
+        bundle.overlap_flags?.length
+          ? `Also billed separately: ${bundle.overlap_flags.join(", ")} — confirm not counted twice`
+          : "",
+      ]
+        .filter(Boolean)
+        .join("\n");
+
+      body.push([
+        {
+          content: `${bundle.bundle_label}${detail ? `\n${detail}` : ""}`,
+          styles: {
+            font: FONT,
+            fontSize: layout.body,
+            cellPadding: { top: pad, bottom: pad, left: 8, right: pad },
+            textColor: [51, 65, 85],
+          },
+        },
+        // The basis matters: a lump sum and a sum of itemised lines are not the
+        // same kind of number, and the reader cannot hover a tooltip here.
+        ...vendors.map((v) => {
+          const value = amountOf(bundle, v);
+          if (value <= 0) return "N/A";
+          const basis = bundle.basis?.[v] ?? "none";
+          const count = bundle.line_counts?.[v] ?? 0;
+          const note =
+            basis === "bundle"
+              ? "lump sum"
+              : `sum of ${count} item${count === 1 ? "" : "s"}`;
+          return `${formatPdfAmount(value)}\n(${note})`;
+        }),
+      ]);
+    }
+  }
+
+  if (projectTier.length > 0) {
+    body.push([
+      {
+        content: "PROJECT-LEVEL (no specific room)",
+        colSpan: vendors.length + 1,
+        styles: {
+          font: FONT,
+          fillColor: [241, 245, 249],
+          textColor: [30, 41, 59],
+          fontStyle: "bold",
+          fontSize: layout.category,
+          cellPadding: { top: 2, bottom: 2, left: 3, right: 3 },
+        },
+      },
+    ]);
+    for (const cat of groupTableData(projectTier)) {
+      for (const spaceGroup of cat.spaces) {
+        for (const sub of spaceGroup.subs) {
+          const subTotals = sumSubServiceRow(sub.rows, vendors);
+          const first = sub.rows[0] ?? ({} as SpaceRow);
+          body.push([
+            {
+              content: sub.sub,
+              styles: {
+                font: FONT,
+                fontSize: layout.body,
+                cellPadding: { top: pad, bottom: pad, left: 8, right: pad },
+                textColor: [51, 65, 85],
+              },
+            },
+            ...vendors.map((v) => cellText(first, v, Number(subTotals[v]) || 0)),
+          ]);
+        }
       }
     }
   }
@@ -319,6 +467,25 @@ export async function downloadComparisonPdf(
     rowPageBreak: "avoid",
     horizontalPageBreak: false,
   });
+
+  // The footnote replaces tooltips the printed page cannot have.
+  const finalY =
+    (doc as unknown as { lastAutoTable?: { finalY: number } }).lastAutoTable
+      ?.finalY ?? tableStartY;
+  if (finalY < doc.internal.pageSize.getHeight() - 22) {
+    doc.setFont(FONT, "normal");
+    doc.setFontSize(6.5);
+    doc.setTextColor(120, 113, 108);
+    doc.text(
+      [
+        '"N/A" = that vendor did not quote this work.  "incl. in ..." = the price sits inside that vendor\'s bundle, so it is NOT missing.',
+        "Bundled amounts are excluded from room totals by design. Rooms marked \"scope differs\" are not like-for-like comparisons.",
+      ],
+      margin,
+      finalY + 6
+    );
+    doc.setTextColor(0, 0, 0);
+  }
 
   doc.save("comparator.pdf");
 }

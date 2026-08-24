@@ -1,9 +1,43 @@
-/** Comparison matrix grouping: category → canonical space → sub-service rows. */
+/**
+ * F2 — Comparison matrix grouping: category -> canonical space -> work row.
+ *
+ * Grouping keys on `space_id` and `work_key`, which the backend already
+ * resolved. The previous version keyed the sub-service level on the raw display
+ * string, which duplicated the backend's identity decision and did it badly: a
+ * label is not an identifier, so `Side table` and `Side Table` were split.
+ *
+ * The `||` fallbacks keep a legacy payload (no `space_id` / `work_key`) grouping
+ * exactly as it used to, which is what lets the frontend deploy independently.
+ *
+ * See frontend/docs/plan/02-grouping.md.
+ */
 
-export type CompareTableRow = Record<string, unknown>;
+import {
+  amountOf,
+  type CoverageEntry,
+  type MatrixV1,
+  type SpaceRow,
+  type Vendor,
+} from "./compare-types";
 
-export type SubGroup = { sub: string; rows: CompareTableRow[] };
-export type SpaceGroup = { space: string; spaceRaw: string; subs: SubGroup[] };
+export type CompareTableRow = SpaceRow;
+
+export type SubGroup = {
+  /** Display label. */
+  sub: string;
+  /** Canonical work key, or the label when absent. */
+  workKey: string;
+  rows: CompareTableRow[];
+};
+
+export type SpaceGroup = {
+  space: string;
+  spaceId: string;
+  /** Distinct vendor wordings that folded into this space. */
+  spaceRaw: string;
+  subs: SubGroup[];
+};
+
 export type CatGroup = { category: string; spaces: SpaceGroup[] };
 
 export type AmountTotals = {
@@ -19,7 +53,21 @@ function spaceOf(row: CompareTableRow): string {
   return String(row.space || row.room || "Project-level").trim() || "Project-level";
 }
 
-/** Sum amounts for vendors across rows (space header or sub-service). */
+function spaceIdOf(row: CompareTableRow): string {
+  const id = String(row.space_id ?? "").trim();
+  return id || spaceOf(row);
+}
+
+function subLabelOf(row: CompareTableRow): string {
+  return String(row.sub_service || row.item_name || "General");
+}
+
+function workKeyOf(row: CompareTableRow): string {
+  const key = String(row.work_key ?? "").trim();
+  return key || subLabelOf(row);
+}
+
+/** Sum amounts for vendors across rows (space header or work row). */
 export function sumSubServiceRow(
   rows: CompareTableRow[],
   vendors: string[]
@@ -29,7 +77,7 @@ export function sumSubServiceRow(
 
   for (const row of rows) {
     for (const v of vendors) {
-      totals[v] += Number(row[v]) || 0;
+      totals[v] += amountOf(row, v);
     }
   }
 
@@ -40,6 +88,10 @@ export function sumSubServiceRow(
   return totals;
 }
 
+/**
+ * Nest rows for rendering. Insertion-ordered throughout: the backend already
+ * sorted rows into quote-reading order, so this must never sort.
+ */
 export function groupTableData(rows: CompareTableRow[]): CatGroup[] {
   const cats: CatGroup[] = [];
   const catIdx = new Map<string, number>();
@@ -49,8 +101,10 @@ export function groupTableData(rows: CompareTableRow[]): CatGroup[] {
   for (const item of rows) {
     const category = String(item.category || "Other");
     const space = spaceOf(item);
+    const spaceId = spaceIdOf(item);
     const spaceRaw = String(item.space_raw || "").trim();
-    const sub = String(item.sub_service || item.item_name || "General");
+    const sub = subLabelOf(item);
+    const workKey = workKeyOf(item);
 
     if (!catIdx.has(category)) {
       catIdx.set(category, cats.length);
@@ -58,24 +112,51 @@ export function groupTableData(rows: CompareTableRow[]): CatGroup[] {
     }
     const cat = cats[catIdx.get(category)!];
 
-    const spaceKey = `${category}||${space}`;
+    const spaceKey = `${category}||${spaceId}`;
     if (!spaceIdx.has(spaceKey)) {
       spaceIdx.set(spaceKey, cat.spaces.length);
-      cat.spaces.push({ space, spaceRaw, subs: [] });
+      cat.spaces.push({ space, spaceId, spaceRaw, subs: [] });
     }
     const spaceGroup = cat.spaces[spaceIdx.get(spaceKey)!];
     if (spaceRaw && !spaceGroup.spaceRaw.includes(spaceRaw)) {
       spaceGroup.spaceRaw = [spaceGroup.spaceRaw, spaceRaw].filter(Boolean).join(" · ");
     }
 
-    const subKey = `${spaceKey}||${sub}`;
+    const subKey = `${spaceKey}||${workKey}`;
     if (!subIdx.has(subKey)) {
       subIdx.set(subKey, spaceGroup.subs.length);
-      spaceGroup.subs.push({ sub, rows: [] });
+      spaceGroup.subs.push({ sub, workKey, rows: [] });
     }
     spaceGroup.subs[subIdx.get(subKey)!].rows.push(item);
   }
   return cats;
+}
+
+/**
+ * Coverage lookup keyed `${space_id}||${vendor}`. A Map because the matrix
+ * queries it once per header cell.
+ */
+export function coverageIndex(
+  entries: CoverageEntry[]
+): Map<string, CoverageEntry> {
+  const index = new Map<string, CoverageEntry>();
+  for (const entry of entries) {
+    index.set(`${entry.space_id}||${entry.vendor}`, entry);
+  }
+  return index;
+}
+
+/** True when every vendor's total for this space is a like-for-like figure. */
+export function isSpaceComparable(
+  index: Map<string, CoverageEntry>,
+  spaceId: string,
+  vendors: Vendor[]
+): boolean {
+  for (const vendor of vendors) {
+    const entry = index.get(`${spaceId}||${vendor}`);
+    if (entry && !entry.comparable) return false;
+  }
+  return true;
 }
 
 export function lineItemDescription(row: CompareTableRow): {
@@ -88,4 +169,9 @@ export function lineItemDescription(row: CompareTableRow): {
     return { title, room: "" };
   }
   return { title, room: space };
+}
+
+/** Convenience for callers holding a whole payload rather than loose rows. */
+export function groupMatrix(matrix: MatrixV1): CatGroup[] {
+  return groupTableData(matrix.spaceTier ?? matrix.tableData ?? []);
 }

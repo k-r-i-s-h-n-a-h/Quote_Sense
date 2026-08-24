@@ -1,0 +1,482 @@
+{
+  "vendor_name": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+  "company": "TATA CONSULTANCY SERVICES LIMITED",
+  "source_filename": "QGT3A1I",
+  "quote_number": "QGT3A1I",
+  "quote_date": "2026-08-21",
+  "grand_total": 1031710.27,
+  "service_category": "Interiors",
+  "service_type": "midlevel",
+  "items": [
+    {
+      "sub_service": "Wall Panels",
+      "item_name": "Wall Panels",
+      "space_raw": "Foyer area",
+      "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+      "description": "Decor wall panelling with louvers",
+      "quantity": 20,
+      "rate": 1250.0,
+      "amount": 29500.0
+    },
+    {
+      "sub_service": "ledges",
+      "item_name": "ledges",
+      "space_raw": "Foyer area",
+      "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+      "description": "Foyer area ledges",
+      "quantity": 8,
+      "rate": 950.0,
+      "amount": 8968.0
+    },
+    {
+      "sub_service": "Console unit",
+      "item_name": "Console unit",
+      "space_raw": "Foyer area",
+      "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+      "description": "Foyer Console unit storage - Matt / Hi Glossy Laminates Finish for shutters using HDHMR Greenply brand & Century or Merino external laminates & Carcass made by using Greenply Brand IS-303 Grade Plywood.",
+      "quantity": 12,
+      "rate": 1650.0,
+      "amount": 23364.0
+    },
+    {
+      "sub_service": "Wall Decor",
+      "item_name": "Wall Decor",
+      "space_raw": ": Foyer area",
+      "pricing_method": "Fixed Amount / Lump Sum",
+      "description": "Wall Decor with PVC wall Beeding",
+      "quantity": 1,
+      "rate": 7500.0,
+      "amount": 8850.0
+    },
+    {
+      "sub_service": "Decorative Lights",
+      "item_name": "Decorative Lights",
+      "space_raw": "Foyer area",
+      "pricing_method": "Per Point",
+      "description": "Decorative Lights",
+      "quantity": 1,
+      "rate": 4000.0,
+      "amount": 4720.0
+    },
+    {
+      "sub_service": "TV Units",
+      "item_name": "TV Units",
+      "space_raw": "Living area",
+      "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+      "description": "Tv unit Carcass storage - Matt / Hi Glossy Laminates Finish for shutters using HDHMR Greenply brand & Carcass made by using Greenply Brand IS-303 Grade Plywood.",
+      "quantity": 8,
+      "rate": 1650.0,
+      "amount": 15576.0
+    },
+    {
+      "sub_service": "TV Units",
+      "item_name": "TV Units",
+      "space_raw": "Living area",
+      "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+      "description": "Tv unit panelling - Matt / Hi Glossy Laminates Finish for shutters using HDHMR Greenply brand & Carcass made by using Greenply Brand IS-303 Grade Plywood.",
+      "quantity": 35,
+      "rate": 950.0,
+      "amount": 39235.0
+    },
+    {
+      "sub_service": "False ceiling with painting",
+      "item_name": "False ceiling with painting",
+      "space_raw": "Living area",
+      "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+      "description": "Flase ceiling only living area - Gyproc Board-Saint Gobain brand & Branded channels and with Asian brand Trackter Emulsion painting.",
+      "quantity": 350,
+      "rate": 120.0,
+      "amount": 49560.0
+    },
+    {
+      "sub_service": "Wall Decor",
+      "item_name": "Wall Decor",
+      "space_raw": "Living area",
+      "pricing_method": "Fixed Amount / Lump Sum",
+      "description": "Wall Decor - Pvc wall beeding",
+      "quantity": 1,
+      "rate": 7500.0,
+      "amount": 8850.0
+    },
+    {
+      "sub_service": "Spot lights",
+      "item_name": "Spot lights",
+      "space_raw": "Living area",
+      "pricing_method": "Per Unit / Each",
+      "description": "Ceiling spot lights with fixing charges & all materials inclusive for provisions",
+      "quantity": 15,
+      "rate": 950.0,
+      "amount": 16815.0
+    },
+    {
+      "sub_service": "Crockery Base unit",
+      "item_name": "Crockery Base unit",
+      "space_raw": "Dining area",
+      "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+      "description": "Crockery base unit - Matt / Hi Glossy Laminates Finish for shutters using HDHMR Greenply brand & Carcass made by using Greenply Brand IS-303 Grade Plywood.",
+      "quantity": 12,
+      "rate": 1650.0,
+      "amount": 23364.0
+    },
+    {
+      "sub_service": "Crockery Wall unit",
+      "item_name": "Crockery Wall unit",
+      "space_raw": "Dining area",
+      "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+      "description": "Crockery Wall unit - Matt / Hi Glossy Laminates Finish for shutters using HDHMR Greenply brand & Carcass made by using Greenply Brand IS-303 Grade Plywood.",
+      "quantity": 8,
+      "rate": 1650.0,
+      "amount": 15576.0
+    },
+    {
+      "sub_service": "Crockery Wall unit",
+      "item_name": "Crockery Wall unit",
+      "space_raw": "Dining area",
+      "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+      "description": "Seater unit - Matt / Hi Glossy Laminates Finish for shutters using HDHMR Greenply brand & Carcass made by using Greenply Brand IS-303 Grade Plywood.",
+      "quantity": 16,
+      "rate": 1650.0,
+      "amount": 31152.0
+    },
+    {
+      "sub_service": "Dining area wall Decor",
+      "item_name": "Dining area wall Decor",
+      "space_raw": "Dining area",
+      "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+      "description": "Dining area Wall Louvers decor",
+      "quantity": 12,
+      "rate": 1250.0,
+      "amount": 17700.0
+    },
+    {
+      "sub_service": "Base Unit",
+      "item_name": "Base Unit",
+      "space_raw": "Kitchen area",
+      "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+      "description": "Kitchen base unit - Matt / Hi Glossy Laminates Finish for shutters using HDHMR Greenply brand & Carcass made by using Greenply Brand IS-710 BWP Grade Plywood.",
+      "quantity": 46,
+      "rate": 1750.0,
+      "amount": 94990.0
+    },
+    {
+      "sub_service": "Wall Unit",
+      "item_name": "Wall Unit",
+      "space_raw": "Kitchen area",
+      "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+      "description": "Kitchen Wall unit - Matt / Hi Glossy Laminates Finish for shutters using HDHMR Greenply brand & Carcass made by using Greenply Brand IS-710 BWP Grade Plywood.",
+      "quantity": 18,
+      "rate": 1750.0,
+      "amount": 37170.0
+    },
+    {
+      "sub_service": "Loft unit",
+      "item_name": "Loft unit",
+      "space_raw": "Kitchen area",
+      "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+      "description": "Kitchen Loft unit - Matt / Hi Glossy Laminates Finish for shutters using HDHMR Greenply brand & Frame & door type",
+      "quantity": 42,
+      "rate": 950.0,
+      "amount": 47082.0
+    },
+    {
+      "sub_service": "Tall Unit",
+      "item_name": "Tall Unit",
+      "space_raw": "Kitchen area",
+      "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+      "description": "Kitchen Tall unit - Matt / Hi Glossy Laminates Finish for shutters using HDHMR Greenply brand & Carcass made by using Greenply Brand IS-710 BWP Grade Plywood.",
+      "quantity": 11,
+      "rate": 1750.0,
+      "amount": 22715.0
+    },
+    {
+      "sub_service": "Rolling shutters",
+      "item_name": "Rolling shutters",
+      "space_raw": "Kitchen area",
+      "pricing_method": "Per Unit / Each",
+      "description": "Kitchen area Rolling shutters - Livsmart brand",
+      "quantity": 1,
+      "rate": 15000.0,
+      "amount": 17700.0
+    },
+    {
+      "sub_service": "Janitor Unit",
+      "item_name": "Janitor Unit",
+      "space_raw": "Kitchen area",
+      "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+      "description": "Kitchen Janitor unit - Matt / Hi Glossy Laminates Finish for shutters using HDHMR Greenply brand & Carcass made by using Greenply Brand IS-710 BWP Grade Plywood.",
+      "quantity": 7,
+      "rate": 1750.0,
+      "amount": 14455.0
+    },
+    {
+      "sub_service": "Window blinds",
+      "item_name": "Window blinds",
+      "space_raw": "Window blinds",
+      "pricing_method": "Fixed Amount / Lump Sum",
+      "description": "Window blinds (approx.)",
+      "quantity": 1,
+      "rate": 25000.0,
+      "amount": 29500.0
+    },
+    {
+      "sub_service": "Tissue paper holder",
+      "item_name": "Tissue paper holder",
+      "space_raw": "Tissue Paper holder",
+      "pricing_method": "Fixed Amount / Lump Sum",
+      "description": "Tissue paper holder",
+      "quantity": 1,
+      "rate": 2500.0,
+      "amount": 2950.0
+    },
+    {
+      "sub_service": "Profile lights Required areas",
+      "item_name": "Profile lights Required areas",
+      "space_raw": "Profile lights Required areas",
+      "pricing_method": "Running Length (rft)",
+      "description": "Profile lights - Wipro Brand",
+      "quantity": 20,
+      "rate": 790.0,
+      "amount": 18644.0
+    },
+    {
+      "sub_service": "Adaptors",
+      "item_name": "Adaptors",
+      "space_raw": "Adaptors required areas",
+      "pricing_method": "Per Unit / Each",
+      "description": "Adaptors - GM Brand",
+      "quantity": 10,
+      "rate": 850.0,
+      "amount": 10030.0
+    },
+    {
+      "sub_service": "Electrical point creations",
+      "item_name": "Electrical point creations",
+      "space_raw": "Electrical work required areas",
+      "pricing_method": "Per Unit / Each",
+      "description": "Electrical works labour charges & wires from Anchor brand Provision",
+      "quantity": 20,
+      "rate": 950.0,
+      "amount": 22420.0
+    },
+    {
+      "sub_service": "Bottle Pullouts",
+      "item_name": "Bottle Pullouts",
+      "space_raw": "Kitchen Accessories",
+      "pricing_method": "Per Unit / Each",
+      "description": "Kitchen area - Bottlepullout",
+      "quantity": 1,
+      "rate": 5384.0,
+      "amount": 6353.12
+    },
+    {
+      "sub_service": "Tandem Drawers",
+      "item_name": "Tandem Drawers",
+      "space_raw": "Kitchen Accessories",
+      "pricing_method": "Per Unit / Each",
+      "description": "Kitchen area - Tandem Drawers",
+      "quantity": 3,
+      "rate": 5850.0,
+      "amount": 20709.0
+    },
+    {
+      "sub_service": "Pvc Cutlery tray",
+      "item_name": "Pvc Cutlery tray",
+      "space_raw": "Kitchen Accessories",
+      "pricing_method": "Per Unit / Each",
+      "description": "Kitchen area - Pvc Cutlery tray",
+      "quantity": 1,
+      "rate": 1635.0,
+      "amount": 1929.3
+    },
+    {
+      "sub_service": "Soft closing hinges",
+      "item_name": "Soft closing hinges",
+      "space_raw": "Kitchen Accessories",
+      "pricing_method": "Per Unit / Each",
+      "description": "Kitchen area - Soft closing hinges (Excluding loft)",
+      "quantity": 15,
+      "rate": 385.0,
+      "amount": 6814.5
+    },
+    {
+      "sub_service": "Soft closing channels",
+      "item_name": "Soft closing channels",
+      "space_raw": "Kitchen Accessories",
+      "pricing_method": "Per Unit / Each",
+      "description": "Kitchen area -Soft Closing channels",
+      "quantity": 1,
+      "rate": 1180.0,
+      "amount": 1392.4
+    },
+    {
+      "sub_service": "Wardrobe",
+      "item_name": "Wardrobe",
+      "space_raw": "Master bedroom",
+      "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+      "description": "Master Bedroom - Matt / Hi Glossy Laminates Finish for shutters using HDHMR Greenply brand & Carcass made by using Greenply Brand IS-303 Grade Plywood.",
+      "quantity": 42,
+      "rate": 1650.0,
+      "amount": 81774.0
+    },
+    {
+      "sub_service": "Sliding Mechanism",
+      "item_name": "Sliding Mechanism",
+      "space_raw": "Master bedroom",
+      "pricing_method": "Per Unit / Each",
+      "description": "Hettich inner sliding doors mechanisms soft closing.",
+      "quantity": 1,
+      "rate": 12000.0,
+      "amount": 14160.0
+    },
+    {
+      "sub_service": "Loft & Door Type",
+      "item_name": "Loft & Door Type",
+      "space_raw": "Master bedroom",
+      "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+      "description": "Master Bedroom - Matt / Hi Glossy Laminates Finish for shutters using HDHMR Greenply brand - Loft Frame & door type",
+      "quantity": 18,
+      "rate": 950.0,
+      "amount": 20178.0
+    },
+    {
+      "sub_service": "MBR Used cloth units",
+      "item_name": "MBR Used cloth units",
+      "space_raw": "Used cloth unit",
+      "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+      "description": "MBR Used cloth storages - Matt / Hi Glossy Laminates Finish for shutters using HDHMR Greenply brand & Carcass made by using Greenply Brand IS-303 Grade Plywood.",
+      "quantity": 7,
+      "rate": 1650.0,
+      "amount": 13629.0
+    },
+    {
+      "sub_service": "Dressing Unit",
+      "item_name": "Dressing Unit",
+      "space_raw": "MBR Dressing unit",
+      "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+      "description": "MBR Dressing unit - Matt / Hi Glossy Laminates Finish for shutters using HDHMR Greenply brand & Carcass made by using Greenply Brand IS-303 Grade Plywood.",
+      "quantity": 11,
+      "rate": 1650.0,
+      "amount": 21417.0
+    },
+    {
+      "sub_service": "MBR Used cloth units",
+      "item_name": "MBR Used cloth units",
+      "space_raw": "MBR Dressing Mirror",
+      "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+      "description": "Dressing Mirror",
+      "quantity": 6,
+      "rate": 400.0,
+      "amount": 2832.0
+    },
+    {
+      "sub_service": "Study Table",
+      "item_name": "Study Table",
+      "space_raw": "MBR Study unit",
+      "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+      "description": "MBR Study unit - Matt / Hi Glossy Laminates Finish for shutters using HDHMR Greenply brand & Carcass made by using Greenply Brand IS-303 Grade Plywood.",
+      "quantity": 12,
+      "rate": 1650.0,
+      "amount": 23364.0
+    },
+    {
+      "sub_service": "Foldable Mechanism",
+      "item_name": "Foldable Mechanism",
+      "space_raw": "MBR Study unit",
+      "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+      "description": "Study unit Foldable mechanism",
+      "quantity": 1,
+      "rate": 2000.0,
+      "amount": 2360.0
+    },
+    {
+      "sub_service": "King Size Bed",
+      "item_name": "King Size Bed",
+      "space_raw": "MBR King size bed",
+      "pricing_method": "Per Unit / Each",
+      "description": "King size Bed with Hydralic liftups (Livsmart brand) - Matt / Hi Glossy Laminates Finish for shutters using HDHMR Greenply brand.",
+      "quantity": 1,
+      "rate": 47500.0,
+      "amount": 56050.0
+    },
+    {
+      "sub_service": "Side Table",
+      "item_name": "Side Table",
+      "space_raw": "MBR side table",
+      "pricing_method": "Per Unit / Each",
+      "description": "MBR Side table - Matt / Hi Glossy Laminates Finish for shutters using HDHMR Greenply brand & Carcass made by using Greenply Brand IS-303 Grade Plywood.",
+      "quantity": 1,
+      "rate": 8000.0,
+      "amount": 9440.0
+    },
+    {
+      "sub_service": "Vanity Units",
+      "item_name": "Vanity Units",
+      "space_raw": "MBR Vanity unit",
+      "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+      "description": "Vanity unit base storages - Matt / Hi Glossy Laminates Finish for shutters using HDHMR Greenply brand & Carcass made by using Greenply Brand IS-710 BWP Grade Plywood.",
+      "quantity": 6,
+      "rate": 1750.0,
+      "amount": 12390.0
+    },
+    {
+      "sub_service": "Bathroom glass partitions",
+      "item_name": "Bathroom glass partitions",
+      "space_raw": "MBR Glass partitions",
+      "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+      "description": "Bathroom glass partitions - Toughfend glasses",
+      "quantity": 44,
+      "rate": 750.0,
+      "amount": 38940.0
+    },
+    {
+      "sub_service": "Vanity Units",
+      "item_name": "Vanity Units",
+      "space_raw": "MBR vanity Mirror",
+      "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+      "description": "Normal mirror",
+      "quantity": 4,
+      "rate": 400.0,
+      "amount": 1888.0
+    },
+    {
+      "sub_service": "Study Table",
+      "item_name": "Study Table",
+      "space_raw": "Kids Bedroom",
+      "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+      "description": "Study unit - Matt / Hi Glossy Laminates Finish for shutters using HDHMR Greenply brand & Carcass made by using Greenply Brand IS-303 Grade Plywood.",
+      "quantity": 12,
+      "rate": 1650.0,
+      "amount": 23364.0
+    },
+    {
+      "sub_service": "Foldable Mechanism",
+      "item_name": "Foldable Mechanism",
+      "space_raw": "Kids Bedroom",
+      "pricing_method": "Per Unit / Each",
+      "description": "Study unit Foldable Mechanism",
+      "quantity": 1,
+      "rate": 2000.0,
+      "amount": 2360.0
+    },
+    {
+      "sub_service": "Wall Decor",
+      "item_name": "Wall Decor",
+      "space_raw": "Kids Bedroom",
+      "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+      "description": "Wall Decor with louvers",
+      "quantity": 25,
+      "rate": 1250.0,
+      "amount": 36875.0
+    },
+    {
+      "sub_service": "Vanity Units",
+      "item_name": "Vanity Units",
+      "space_raw": "Common vanity unit",
+      "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+      "description": "Vanity unit base storages - Matt / Hi Glossy Laminates Finish for shutters using HDHMR Greenply brand & Carcass made by using Greenply Brand IS-710 BWP Grade Plywood.",
+      "quantity": 6,
+      "rate": 1750.0,
+      "amount": 12390.0
+    }
+  ]
+}

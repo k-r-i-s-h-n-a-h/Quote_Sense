@@ -1,15 +1,21 @@
-"""Space clustering + lighting rollup for compare."""
+"""Space clustering (S3) and its interaction with the rest of the pipeline."""
 
 from __future__ import annotations
 
 import os
 
+# Deterministic: the LLM overlays are refinements, never the source of truth.
 os.environ["GEMINI_SPACE_LLM"] = "0"
+os.environ["GEMINI_WORK_LLM"] = "0"
 
 import pandas as pd
 
-from services.space_clusters import cluster_spaces_heuristic, apply_space_clusters
-from services.work_rollup import apply_work_rollup
+from services.space_clusters import (
+    apply_space_clusters,
+    cluster_spaces_heuristic,
+    is_room_label,
+    resolve_space,
+)
 
 
 def test_bedroom_aliases_merge_to_gf_bedroom1():
@@ -72,52 +78,58 @@ def test_apply_space_clusters_column():
     assert list(out["space"]) == ["GF-Bedroom1", "GF-Bedroom1", "Kitchen"]
 
 
-def test_lighting_lumpsum_vs_itemized_rollups():
-    df = pd.DataFrame(
-        [
-            {
-                "vendor_name": "INT360",
-                "space": "Project-level",
-                "space_raw": "Electrical",
-                "sub_service": "Electrical Works",
-                "item_name": "Electrical Works",
-                "item_label": "Electrical Works",
-                "pricing_method": "Lump Sum",
-                "description": "",
-                "amount": 100000,
-            },
-            {
-                "vendor_name": "Excess",
-                "space": "Project-level",
-                "space_raw": "Spot lights",
-                "sub_service": "Spot lights",
-                "item_name": "Spot lights",
-                "item_label": "Spot lights",
-                "pricing_method": "Unit",
-                "description": "",
-                "amount": 40000,
-            },
-            {
-                "vendor_name": "Excess",
-                "space": "Project-level",
-                "space_raw": "Profile lights",
-                "sub_service": "Profile lights",
-                "item_name": "Profile lights",
-                "item_label": "Profile lights",
-                "pricing_method": "Unit",
-                "description": "",
-                "amount": 20000,
-            },
-        ]
+def test_item_name_in_space_column_is_not_a_room():
+    """The phantom-space bug: `Used cloth unit` became its own room.
+
+    It is an item name with no room prefix, so the old literal blocklist missed
+    it, while the room sat in plain sight in the line's own description.
+    """
+    row = {
+        "space_raw": "Used cloth unit",
+        "item_name": "MBR Used cloth units",
+        "description": "MBR Used cloth storages - laminate finish.",
+    }
+    assert is_room_label(row["space_raw"], row["item_name"]) is False
+    resolved = resolve_space(row)
+    assert resolved["space"] == "Master-Bedroom"
+    assert resolved["space_source"] == "description"
+
+
+def test_room_prefixed_item_labels_fold_into_their_room():
+    for raw in ("MBR Dressing unit", "MBR Dressing Mirror", "MBR Study unit"):
+        assert resolve_space({"space_raw": raw})["space"] == "Master-Bedroom"
+    assert resolve_space({"space_raw": "Kitchen Accessories"})["space"] == "Kitchen"
+    assert (
+        resolve_space({"space_raw": "Common vanity unit"})["space"]
+        == "Common-Washroom"
     )
-    out = apply_work_rollup(df)
-    assert set(out["sub_service"].unique()) == {"Electrical / lighting"}
+
+
+def test_explicit_room_outranks_a_description_hint():
+    explicit = resolve_space({"space_raw": "Master bedroom", "description": "Kitchen unit"})
+    assert explicit["space"] == "Master-Bedroom"
+    assert explicit["space_source"] == "space_raw"
+    # Confidence must reflect that a description-derived room is a weaker signal.
+    derived = resolve_space(
+        {"space_raw": "Used cloth unit", "description": "MBR storages"}
+    )
+    assert derived["space_confidence"] < explicit["space_confidence"]
+
+
+def test_project_wide_items_have_no_room():
+    for raw in (
+        "Window blinds",
+        "Tissue Paper holder",
+        "Profile lights Required areas",
+        "Electrical work required areas",
+    ):
+        assert resolve_space({"space_raw": raw})["space"] == "Project-level"
 
 
 def test_run_comparison_omits_moving_average(monkeypatch):
     monkeypatch.setattr(
         "services.comparator._generate_recommendation",
-        lambda prompt, chart: "- **Lowest Total:** Excess is cheaper.",
+        lambda prompt, chart, bundles=None: "- **Lowest Total:** Excess is cheaper.",
     )
     from services.comparator import run_comparison
 
@@ -213,32 +225,35 @@ def test_mongodb_keeps_nested_object_ids(monkeypatch):
 
 
 def test_wardrobe_does_not_roll_into_lighting():
+    """A non-family line must survive S4 untouched, in its own room."""
+    from services.bundles import apply_bundles, family_of
+    from services.work_catalog import apply_work_catalog
+
     df = pd.DataFrame(
         [
             {
                 "vendor_name": "A",
-                "space": "GF-Bedroom1",
                 "space_raw": "Bedroom 1",
                 "sub_service": "Wardrobe",
                 "item_name": "Wardrobe",
-                "item_label": "Wardrobe",
                 "pricing_method": "Per Sqft",
                 "description": "",
                 "amount": 50000,
             },
             {
                 "vendor_name": "B",
-                "space": "Project-level",
                 "space_raw": "Electrical",
                 "sub_service": "Electrical Works",
                 "item_name": "Electrical",
-                "item_label": "Electrical",
                 "pricing_method": "Lump Sum",
                 "description": "",
                 "amount": 80000,
             },
         ]
     )
-    out = apply_work_rollup(df)
+    out = apply_bundles(apply_space_clusters(apply_work_catalog(df)))
     wardrobe = out[out["sub_service"] == "Wardrobe"]
     assert len(wardrobe) == 1
+    assert wardrobe.iloc[0]["space"] == "GF-Bedroom1"
+    assert wardrobe.iloc[0]["scope"] == "space"
+    assert family_of(wardrobe.iloc[0]) != "lighting"

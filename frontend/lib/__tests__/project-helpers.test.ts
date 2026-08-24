@@ -27,10 +27,20 @@ import {
   withResolvedName,
 } from "../user-display";
 import {
+  coverageIndex,
   groupTableData,
+  isSpaceComparable,
   lineItemDescription,
   sumSubServiceRow,
 } from "../compare-matrix";
+import {
+  amountOf,
+  bundleRowsOf,
+  coverageOf,
+  parseCellStatus,
+  projectRowsOf,
+  spaceRowsOf,
+} from "../compare-types";
 
 describe("unwrapApiList", () => {
   it("unwraps nested data.docs", () => {
@@ -287,6 +297,130 @@ describe("compare-matrix", () => {
     expect(
       lineItemDescription({ work_item: "Wardrobe", room: "Bedroom" })
     ).toEqual({ title: "Wardrobe", room: "Bedroom" });
+  });
+
+  it("groups on work_key so differently worded labels share a row", () => {
+    const groups = groupTableData([
+      {
+        space_id: "mbr",
+        space: "Master-Bedroom",
+        work_key: "alias:side_table",
+        sub_service: "Side table",
+        VendorA: 14160,
+      },
+      {
+        space_id: "mbr",
+        space: "Master-Bedroom",
+        work_key: "alias:side_table",
+        sub_service: "Side Table",
+        VendorB: 9440,
+      },
+    ]);
+    expect(groups[0].spaces[0].subs).toHaveLength(1);
+    expect(groups[0].spaces[0].subs[0].rows).toHaveLength(2);
+  });
+
+  it("keeps different work_keys apart even when labels match", () => {
+    const groups = groupTableData([
+      { space_id: "kitchen", work_key: "alias:base_unit", sub_service: "Unit" },
+      { space_id: "kitchen", work_key: "alias:wall_unit", sub_service: "Unit" },
+    ]);
+    expect(groups[0].spaces[0].subs).toHaveLength(2);
+  });
+
+  it("falls back to the label when a legacy payload has no work_key", () => {
+    const groups = groupTableData([
+      { space: "Kitchen", sub_service: "Base Unit", VendorA: 10 },
+      { space: "Kitchen", sub_service: "Base Unit", VendorB: 20 },
+      { space: "Kitchen", sub_service: "Wall Unit", VendorA: 30 },
+    ]);
+    expect(groups[0].spaces[0].subs).toHaveLength(2);
+    expect(groups[0].spaces[0].subs[0].rows).toHaveLength(2);
+  });
+
+  it("accumulates distinct vendor wordings on the space header", () => {
+    const groups = groupTableData([
+      { space_id: "mbr", space: "Master-Bedroom", space_raw: "Master bedroom", sub_service: "A" },
+      { space_id: "mbr", space: "Master-Bedroom", space_raw: "MBR Dressing unit", sub_service: "B" },
+      { space_id: "mbr", space: "Master-Bedroom", space_raw: "Master bedroom", sub_service: "C" },
+    ]);
+    const raw = groups[0].spaces[0].spaceRaw;
+    expect(raw).toContain("Master bedroom");
+    expect(raw).toContain("MBR Dressing unit");
+    // A repeated wording must not be listed twice.
+    expect(raw.match(/Master bedroom/g)).toHaveLength(1);
+  });
+
+  it("preserves payload order rather than sorting", () => {
+    const groups = groupTableData([
+      { space_id: "kitchen", space: "Kitchen", sub_service: "Zebra" },
+      { space_id: "foyer", space: "Foyer", sub_service: "Alpha" },
+    ]);
+    expect(groups[0].spaces.map((s) => s.space)).toEqual(["Kitchen", "Foyer"]);
+  });
+
+  it("sumSubServiceRow coerces malformed amounts to zero, not NaN", () => {
+    const totals = sumSubServiceRow(
+      [{ VendorA: "abc" }, { VendorA: 50 }],
+      ["VendorA"]
+    );
+    expect(totals.VendorA).toBe(50);
+  });
+});
+
+describe("compare coverage semantics", () => {
+  it("parses a bundled cell status and names the bundle", () => {
+    expect(parseCellStatus("incl_in_bundle:Hardware & accessories")).toEqual({
+      status: "incl_in_bundle",
+      bundleLabel: "Hardware & accessories",
+    });
+    expect(parseCellStatus("quoted").status).toBe("quoted");
+    expect(parseCellStatus("not_quoted").status).toBe("not_quoted");
+    // A legacy payload has no coverage at all; default to the old reading.
+    expect(parseCellStatus(undefined).status).toBe("not_quoted");
+  });
+
+  it("marks a space not comparable when any vendor is bundled there", () => {
+    const index = coverageIndex([
+      {
+        space_id: "kitchen",
+        space: "Kitchen",
+        vendor: "A",
+        status: "quoted",
+        comparable: false,
+      },
+      {
+        space_id: "foyer",
+        space: "Foyer",
+        vendor: "A",
+        status: "quoted",
+        comparable: true,
+      },
+    ]);
+    expect(isSpaceComparable(index, "kitchen", ["A"])).toBe(false);
+    expect(isSpaceComparable(index, "foyer", ["A"])).toBe(true);
+    // An unknown space has no bundle evidence, so treat it as comparable.
+    expect(isSpaceComparable(index, "living", ["A"])).toBe(true);
+  });
+
+  it("amountOf never returns NaN", () => {
+    expect(amountOf({ A: 100 }, "A")).toBe(100);
+    expect(amountOf({ A: "oops" }, "A")).toBe(0);
+    expect(amountOf({}, "A")).toBe(0);
+  });
+
+  it("tier accessors fall back to the legacy flat payload", () => {
+    const legacy = {
+      tableData: [
+        { space_id: "kitchen", sub_service: "Base" },
+        { space_id: "project_level", sub_service: "Blinds" },
+      ],
+    };
+    expect(spaceRowsOf(legacy)).toHaveLength(1);
+    expect(projectRowsOf(legacy)).toHaveLength(1);
+    // No bundle section for a payload that predates the tiers.
+    expect(bundleRowsOf(legacy)).toEqual([]);
+    expect(coverageOf(legacy)).toEqual([]);
   });
 });
 

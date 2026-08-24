@@ -67,7 +67,7 @@ Two lines from different vendors compare **only** when their `work_key` is equal
 | Field | Type | Notes |
 | --- | --- | --- |
 | `space_id` | str | Canonical cluster id, e.g. `mbr`, `kitchen`, `project_level`. |
-| `space` | str | Display label, e.g. `Master-Bedroom`. |
+| `space` | str | Display heading, taken from the vendors' own wording for this cluster, e.g. `Master Bedroom`. Cosmetic — group and assert on `space_id`. |
 | `space_confidence` | float | `0.0`–`1.0`. |
 | `space_source` | str | `space_raw`, `description`, `item_name`, `llm`, or `project_level`. |
 

@@ -82,9 +82,43 @@ first and then the description:
 `kids`/`children`, `walkin`, `washroom`/`bathroom`, `bedroom` (+ floor and number
 qualifiers).
 
-Bedroom numbering and floor prefixes are preserved: `Bedroom 1`, `Ground Floor
-Bedroom 1` and `GF Bedroom 1` all reach `gf_bedroom1`, while `Kids bedroom` stays
-`kids_bedroom`.
+Vendors abbreviate heavily on the Space/Zone column, so the table also carries an
+abbreviation layer: `L R`, `LVR`, `LIV`, `L Room` → `living`; `DNR`, `DR`, `DIN` →
+`dining`; `KIT`, `KTN` → `kitchen`; `BR n` → bedroom *n*. Without it each vendor
+spelling became its own `unique:` cluster and one living room was listed three
+times, once per vendor.
+
+### Floors are never assumed
+
+A floor prefix is only emitted when a floor is actually stated. `Bedroom 1` →
+`bedroom1`; `GF Bedroom 1` → `gf_bedroom1`; `First Floor Bedroom 1` →
+`1f_bedroom1`. `_merge_floor_variants` then folds the unqualified id into its
+floor-qualified twin **when exactly one floor is in play**, so `Bedroom 1` and
+`Ground Floor Bedroom 1` still land on one row. If both a GF and a 1F Bedroom 1
+were quoted, the unqualified label is genuinely ambiguous and stays its own
+cluster rather than being guessed into one of them.
+
+The old code defaulted the floor to `gf`, which is how the matrix came to be
+headed `GF-Bedroom1` for two quotes that never mention a floor.
+
+## Naming: the heading belongs to the vendors
+
+`space_id` is the grouping key; `space` is only the heading. They are decided
+separately, and the heading is chosen once per cluster — not per row — by
+`choose_space_label(members)`:
+
+1. Consider only members that are room labels (an item name is never a heading).
+2. Prefer the most spelled-out room words: `Living Room` (2) beats `L R` (0).
+3. Reject candidates carrying an item noun — `MBR Study unit`, `Kitchen
+   Accessories` place the row but cannot head the column.
+4. Break ties on shortest, then alphabetical: `Dining` over `Dining area`.
+5. Only if nothing readable survives, fall back to `_CLUSTER_LABELS`
+   (`living` → `Living`), so a cluster of pure abbreviations still reads.
+
+Consequences worth stating plainly: a cluster whose members never mention a floor
+cannot acquire one, and a row placed by its description borrows the room string a
+sibling row supplied. Assertions therefore belong on `space_id`, never on `space`
+— the heading legitimately changes with the quotes.
 
 ## Merge discipline
 
@@ -95,11 +129,26 @@ rooms' costs and is much harder to notice than a missing merge.
 
 ## LLM overlay
 
-Same shape as before, with one change: the prompt now receives **row context**
-(label plus sample item names and descriptions) rather than bare labels, so it can
-tell `Used cloth unit` is an MBR item. Deterministic result computed first; 8s
-timeout; any failure returns the heuristic untouched. The overlay may merge and
-relabel, never invent a room that no line mentions.
+The prompt receives **row context** (label plus sample item names and
+descriptions) rather than bare labels, so it can tell `Used cloth unit` is an MBR
+item. Deterministic result computed first; 8s timeout; any failure returns the
+heuristic untouched.
+
+Two rules define what it is allowed to do:
+
+- **It groups, it does not name.** The response carries members only, no
+  canonical field. Naming stayed with the model in the first version, and the
+  example `{"canonical": "GF-Bedroom1"}` in the prompt was enough for it to coin
+  `GF-Living Room` by analogy from labels containing no floor at all.
+- **Anchors are immutable.** Every label already placed in a named room is sent
+  as context with its group id. The model may attach a loose label to an anchor,
+  but a row can never be moved out of one, and a cluster naming two anchors is
+  discarded.
+
+Movable labels are `project_level` rows **and** `unique:` rows. Restricting this
+to `project_level` is what kept the living-room abbreviations apart: they had
+already been parked in their own `unique:` clusters and so were never offered for
+merging.
 
 ## Kill switches
 
@@ -110,9 +159,12 @@ relabel, never invent a room that no line mentions.
 
 ## Tests
 
-`tests/test_space_compare.py` (existing assertions all still hold):
+`tests/test_space_compare.py`:
 
-- bedroom aliases merge to `GF-Bedroom1`,
+- bedroom aliases merge into one cluster, headed by vendor wording,
+- an unqualified bedroom never acquires a floor, and stays separate when both
+  floors are quoted,
+- `L R` / `LVR` / `Living Room` are one cluster headed `Living Room`,
 - kitchen and bedroom stay apart,
 - `MBR` and `Walk-in closet` do not merge,
 - spot lights / adaptors / electrical → `Project-level`,
@@ -141,8 +193,17 @@ a room whose name resembles the item (a room actually called `Pooja` on a pooja
 unit line). Tighten the pattern and add a test.
 
 **Symptom: two spellings of one room are still separate.**
-Add a room token or a qualifier. Do not solve this by merging in the LLM prompt —
-deterministic first, always.
+Add a room token, an abbreviation pattern, or a qualifier. Do not solve this by
+merging in the LLM prompt — deterministic first, always.
+
+**Symptom: the heading names a room or a floor nobody quoted.**
+Naming is `choose_space_label`, not the model and not `_room_token`. Either a
+`_CLUSTER_LABELS` fallback fired because no member was readable, or an item noun
+is missing from `_ITEM_NOUN_RE`. Never add the wording to the prompt.
+
+**Symptom: the heading is an item, like `MBR Study unit`.**
+Add its noun to `_ITEM_NOUN_RE`. The row is grouped correctly; only the heading
+choice is wrong.
 
 **Symptom: two different rooms merged.**
 The serious failure. Find the token that over-matched, narrow it to a word

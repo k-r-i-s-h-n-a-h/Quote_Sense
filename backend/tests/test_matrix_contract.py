@@ -8,6 +8,7 @@ tests/fixtures/README.md for the catalogue.
 from __future__ import annotations
 
 import os
+import re
 
 os.environ["GEMINI_WORK_LLM"] = "0"
 os.environ["GEMINI_SPACE_LLM"] = "0"
@@ -31,12 +32,17 @@ def matrix(module_mocker=None):
         comparator._generate_recommendation = original
 
 
-def rows_named(matrix, label, space=None):
+def rows_named(matrix, label, space_id=None):
+    """Look rows up by `space_id`, never by the heading.
+
+    The heading is chosen from the vendors' own wording and changes with the
+    quotes; the id is the stable grouping key, so assertions belong on it.
+    """
     out = []
     for row in matrix["spaceTier"] + matrix["projectTier"]:
         if row["sub_service"].casefold() != label.casefold():
             continue
-        if space and row["space"] != space:
+        if space_id and row["space_id"] != space_id:
             continue
         out.append(row)
     return out
@@ -108,49 +114,62 @@ def test_phantom_space_is_gone(matrix):
 
 
 def test_expected_rooms_exist(matrix):
-    spaces = {row["space"] for row in matrix["spaceTier"]}
+    spaces = {row["space_id"] for row in matrix["spaceTier"]}
     for room in (
-        "Foyer",
-        "Living",
-        "Dining",
-        "Kitchen",
-        "Master-Bedroom",
-        "Kids-Bedroom",
-        "Common-Washroom",
+        "foyer",
+        "living",
+        "dining",
+        "kitchen",
+        "mbr",
+        "kids_bedroom",
+        "common_washroom",
     ):
         assert room in spaces
 
 
+def test_headings_come_from_the_quotes(matrix):
+    """No heading may contain a word neither vendor wrote.
+
+    The invented "GF-" prefix is the case that prompted this: the quotes never
+    mention a floor, so the matrix must not either.
+    """
+    df = load_golden_df()
+    quoted = " ".join(str(v) for v in df["space_raw"].fillna("").tolist()).casefold()
+    for row in matrix["spaceTier"]:
+        for word in re.findall(r"[a-z]+", row["space"].casefold()):
+            assert word in quoted, f"{row['space']} invents '{word}'"
+
+
 def test_used_cloth_storage_compares_across_vendors(matrix):
     """Was stranded in a phantom room, so the two vendors never met."""
-    rows = rows_named(matrix, "Used cloth storage", "Master-Bedroom")
+    rows = rows_named(matrix, "Used cloth storage", "mbr")
     assert len(rows) == 1
     assert rows[0][VENDOR_A] == 23954
     assert rows[0][VENDOR_B] == 13629
 
 
 @pytest.mark.parametrize(
-    "label,space,amount_a,amount_b",
+    "label,space_id,amount_a,amount_b",
     [
-        ("Side table", "Master-Bedroom", 14160, 9440),
-        ("Rolling shutter", "Kitchen", 27258, 17700),
-        ("False ceiling", "Living", 61950, 49560),
-        ("Loft", "Kitchen", 60534, 47082),
-        ("Crockery units", "Dining", 38940, 70092),
-        ("Study table", "Kids-Bedroom", 14160, 23364),
+        ("Side table", "mbr", 14160, 9440),
+        ("Rolling shutter", "kitchen", 27258, 17700),
+        ("False ceiling", "living", 61950, 49560),
+        ("Loft", "kitchen", 60534, 47082),
+        ("Crockery units", "dining", 38940, 70092),
+        ("Study table", "kids_bedroom", 14160, 23364),
     ],
 )
-def test_equivalent_work_lands_on_one_row(matrix, label, space, amount_a, amount_b):
-    rows = rows_named(matrix, label, space)
-    assert len(rows) == 1, f"{label} in {space} produced {len(rows)} rows"
+def test_equivalent_work_lands_on_one_row(matrix, label, space_id, amount_a, amount_b):
+    rows = rows_named(matrix, label, space_id)
+    assert len(rows) == 1, f"{label} in {space_id} produced {len(rows)} rows"
     assert rows[0][VENDOR_A] == amount_a
     assert rows[0][VENDOR_B] == amount_b
 
 
 def test_base_and_wall_units_stay_separate(matrix):
     """The dangerous direction: a false merge would silently sum both."""
-    base = rows_named(matrix, "Base unit", "Kitchen")
-    wall = rows_named(matrix, "Wall unit", "Kitchen")
+    base = rows_named(matrix, "Base unit", "kitchen")
+    wall = rows_named(matrix, "Wall unit", "kitchen")
     assert len(base) == 1 and len(wall) == 1
     assert base[0]["work_key"] != wall[0]["work_key"]
 
@@ -181,16 +200,16 @@ def test_bundled_cells_are_not_reported_as_not_quoted(matrix):
     ]
     assert len(bundled) == 5
     for row in bundled:
-        assert row["space"] == "Kitchen"
+        assert row["space_id"] == "kitchen"
         assert row[VENDOR_A] == 0
 
 
 def test_space_with_a_bundle_is_flagged_not_comparable(matrix):
     by_space = {}
     for entry in matrix["coverage"]:
-        by_space.setdefault(entry["space"], set()).add(entry["comparable"])
-    assert by_space["Kitchen"] == {False}
-    assert by_space["Foyer"] == {True}
+        by_space.setdefault(entry["space_id"], set()).add(entry["comparable"])
+    assert by_space["kitchen"] == {False}
+    assert by_space["foyer"] == {True}
 
 
 def test_coverage_covers_every_space_and_vendor(matrix):

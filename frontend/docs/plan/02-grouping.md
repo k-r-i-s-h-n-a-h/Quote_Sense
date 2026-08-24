@@ -51,9 +51,14 @@ ahead of the backend.
 ## Space aliases
 
 A space group collects the distinct `space_raw` strings that contributed to it, so
-the header can show `Master-Bedroom` with `MBR Dressing unit · Used cloth unit ·
+the header can show `Master Bedroom` with `MBR Dressing unit · Used cloth unit ·
 MBR Study unit` beneath. This is how a user verifies a merge was correct — without
 it, canonicalisation is invisible and untrustworthy.
+
+The header itself is `row.space`, which the backend already picked from the
+vendors' own wording for that cluster, so it will not read `GF-Bedroom1` for
+quotes that never mention a floor. Render it as given; do not prettify or
+re-derive it here, or the header and the aliases beneath it stop agreeing.
 
 ## Coverage lookup
 

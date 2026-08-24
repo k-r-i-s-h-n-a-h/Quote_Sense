@@ -116,6 +116,41 @@ export function coverageOf(matrix: MatrixV1): CoverageEntry[] {
   return matrix.coverage ?? [];
 }
 
+/** True when at least one vendor priced this family as a single lumpsum. */
+export function isLumpSumBundle(row: BundleRow): boolean {
+  if (row.has_bundle) return true;
+  return Object.values(row.basis ?? {}).some((b) => b === "bundle");
+}
+
+/** Split bundle-tier rows into customer-facing sections. */
+export function partitionBundleRows(rows: BundleRow[]): {
+  lumpSums: BundleRow[];
+  scattered: BundleRow[];
+} {
+  const lumpSums: BundleRow[] = [];
+  const scattered: BundleRow[] = [];
+  for (const row of rows) {
+    if (isLumpSumBundle(row)) lumpSums.push(row);
+    else scattered.push(row);
+  }
+  return { lumpSums, scattered };
+}
+
+/** Short customer-facing note under a bundle amount — no internal jargon. */
+export function bundlePriceNote(
+  row: BundleRow,
+  vendor: Vendor
+): string {
+  const basis = row.basis?.[vendor] ?? "none";
+  const count = row.line_counts?.[vendor] ?? 0;
+  if (basis === "bundle") return "Package price";
+  if (basis === "itemized") {
+    if (count <= 1) return "Itemised";
+    return `Itemised · ${count} lines`;
+  }
+  return "";
+}
+
 /**
  * Rebuild each vendor's quote total from the three tiers.
  *

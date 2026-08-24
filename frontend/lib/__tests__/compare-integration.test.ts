@@ -13,7 +13,9 @@ import {
   amountOf,
   bundleRowsOf,
   coverageOf,
+  isLumpSumBundle,
   parseCellStatus,
+  partitionBundleRows,
   projectRowsOf,
   reconcileQuoteTotals,
   spaceRowsOf,
@@ -98,6 +100,14 @@ describe("golden MatrixV1 payload", () => {
     expect(hardware.basis?.[A]).toBe("bundle");
     expect(hardware.basis?.[B]).toBe("itemized");
     expect(hardware.overlap_flags?.length).toBeGreaterThan(0);
+  });
+
+  it("splits true lumpsums from scattered itemised families", () => {
+    const { lumpSums, scattered } = partitionBundleRows(bundleRowsOf(matrix));
+    expect(lumpSums.map((r) => r.bundle_family)).toContain("hardware");
+    expect(scattered.map((r) => r.bundle_family)).toContain("lighting");
+    expect(lumpSums.every(isLumpSumBundle)).toBe(true);
+    expect(scattered.every((r) => !isLumpSumBundle(r))).toBe(true);
   });
 
   it("keeps every bundle amount out of the space totals", () => {

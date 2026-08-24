@@ -8,7 +8,9 @@ import {
 } from "./compare-matrix";
 import {
   amountOf,
+  bundlePriceNote,
   parseCellStatus,
+  partitionBundleRows,
   reconcileQuoteTotals,
   type BundleRow,
   type CoverageEntry,
@@ -93,7 +95,7 @@ function cellText(row: SpaceRow, vendor: string, total: number): string {
   if (total > 0) return formatPdfAmount(total);
   const { status, bundleLabel } = parseCellStatus(row.coverage?.[vendor]);
   if (status === "incl_in_bundle") {
-    return `incl. in ${bundleLabel || "bundle"}`;
+    return `incl. in ${bundleLabel || "package"}`;
   }
   return "N/A";
 }
@@ -296,7 +298,7 @@ export async function downloadComparisonPdf(
       );
       const spaceTitle = comparable
         ? spaceGroup.space.toUpperCase()
-        : `${spaceGroup.space.toUpperCase()}  (scope differs — not like-for-like)`;
+        : `${spaceGroup.space.toUpperCase()}  (scopes differ — not like-for-like)`;
 
       body.push([
         {
@@ -340,64 +342,81 @@ export async function downloadComparisonPdf(
   }
 
   if (bundleTier.length > 0) {
-    body.push([
-      {
-        content: "BUNDLED SCOPES (excluded from the space totals above)",
-        colSpan: vendors.length + 1,
-        styles: {
-          font: FONT,
-          fillColor: [254, 243, 199],
-          textColor: [146, 64, 14],
-          fontStyle: "bold",
-          fontSize: layout.category,
-          cellPadding: { top: 2, bottom: 2, left: 3, right: 3 },
-        },
-      },
-    ]);
+    const { lumpSums, scattered } = partitionBundleRows(bundleTier);
 
-    for (const bundle of bundleTier) {
-      const detail = [
-        bundle.covered_spaces?.length
-          ? `Covers: ${bundle.covered_spaces.join(", ")}`
-          : "",
-        bundle.overlap_flags?.length
-          ? `Also billed separately: ${bundle.overlap_flags.join(", ")} — confirm not counted twice`
-          : "",
-      ]
-        .filter(Boolean)
-        .join("\n");
-
+    const pushBundleSection = (
+      title: string,
+      rows: BundleRow[],
+      fill: [number, number, number],
+      text: [number, number, number]
+    ) => {
+      if (rows.length === 0) return;
       body.push([
         {
-          content: `${bundle.bundle_label}${detail ? `\n${detail}` : ""}`,
+          content: title,
+          colSpan: vendors.length + 1,
           styles: {
             font: FONT,
-            fontSize: layout.body,
-            cellPadding: { top: pad, bottom: pad, left: 8, right: pad },
-            textColor: [51, 65, 85],
+            fillColor: fill,
+            textColor: text,
+            fontStyle: "bold",
+            fontSize: layout.category,
+            cellPadding: { top: 2, bottom: 2, left: 3, right: 3 },
           },
         },
-        // The basis matters: a lump sum and a sum of itemised lines are not the
-        // same kind of number, and the reader cannot hover a tooltip here.
-        ...vendors.map((v) => {
-          const value = amountOf(bundle, v);
-          if (value <= 0) return "N/A";
-          const basis = bundle.basis?.[v] ?? "none";
-          const count = bundle.line_counts?.[v] ?? 0;
-          const note =
-            basis === "bundle"
-              ? "lump sum"
-              : `sum of ${count} item${count === 1 ? "" : "s"}`;
-          return `${formatPdfAmount(value)}\n(${note})`;
-        }),
       ]);
-    }
+      for (const bundle of rows) {
+        const detail = [
+          bundle.covered_spaces?.length
+            ? `Across: ${bundle.covered_spaces.join(", ")}`
+            : "",
+          bundle.overlap_flags?.length
+            ? `May overlap with a separate line for ${bundle.overlap_flags.join(", ")} — confirm with the vendor`
+            : "",
+        ]
+          .filter(Boolean)
+          .join("\n");
+
+        body.push([
+          {
+            content: `${bundle.bundle_label}${detail ? `\n${detail}` : ""}`,
+            styles: {
+              font: FONT,
+              fontSize: layout.body,
+              cellPadding: { top: pad, bottom: pad, left: 8, right: pad },
+              textColor: [51, 65, 85],
+            },
+          },
+          ...vendors.map((v) => {
+            const value = amountOf(bundle, v);
+            if (value <= 0) return "N/A";
+            const note = bundlePriceNote(bundle, v);
+            return note
+              ? `${formatPdfAmount(value)}\n(${note})`
+              : formatPdfAmount(value);
+          }),
+        ]);
+      }
+    };
+
+    pushBundleSection(
+      "LUMP SUM PACKAGES (not included in the space totals above)",
+      lumpSums,
+      [254, 243, 199],
+      [146, 64, 14]
+    );
+    pushBundleSection(
+      "SAME WORK, DIFFERENT SPACES (line items already listed above)",
+      scattered,
+      [224, 242, 254],
+      [7, 89, 133]
+    );
   }
 
   if (projectTier.length > 0) {
     body.push([
       {
-        content: "PROJECT-LEVEL (no specific room)",
+        content: "WHOLE HOME (not tied to one space)",
         colSpan: vendors.length + 1,
         styles: {
           font: FONT,
@@ -440,8 +459,7 @@ export async function downloadComparisonPdf(
   );
   body.push([
     {
-      content:
-        "QUOTE TOTAL (original quote = spaces + bundled lumpsums + project-level + other)",
+      content: "QUOTE TOTAL",
       styles: {
         font: FONT,
         fillColor: [28, 25, 23],
@@ -453,22 +471,8 @@ export async function downloadComparisonPdf(
     },
     ...vendors.map((v) => {
       const parts = quoteTotals[v];
-      const detail = [
-        `${formatPdfAmount(parts?.rooms ?? 0)} spaces`,
-        (parts?.bundles ?? 0) > 0
-          ? `${formatPdfAmount(parts.bundles)} bundled`
-          : "",
-        (parts?.project ?? 0) > 0
-          ? `${formatPdfAmount(parts.project)} project`
-          : "",
-        (parts?.other ?? 0) > 0
-          ? `${formatPdfAmount(parts.other)} other`
-          : "",
-      ]
-        .filter(Boolean)
-        .join(" · ");
       return {
-        content: `${formatPdfAmount(parts?.total ?? 0)}\n${detail}`,
+        content: formatPdfAmount(parts?.total ?? 0),
         styles: {
           font: FONT,
           fillColor: [28, 25, 23],
@@ -531,8 +535,8 @@ export async function downloadComparisonPdf(
     doc.setTextColor(120, 113, 108);
     doc.text(
       [
-        '"N/A" = that vendor did not quote this work.  "incl. in ..." = the price sits inside that vendor\'s bundle, so it is NOT missing.',
-        "Bundled lumpsums sit under Bundled scopes and are added back in Quote total so the figure matches the original quote.",
+        '"N/A" = that vendor did not quote this work.  "incl. in ..." = price is already inside that vendor\'s package.',
+        "Lump sum packages are separate from space totals. \"Same work, different spaces\" summarises work already listed above.",
       ],
       margin,
       finalY + 6

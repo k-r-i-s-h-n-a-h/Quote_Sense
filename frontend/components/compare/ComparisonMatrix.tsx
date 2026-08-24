@@ -14,7 +14,9 @@ import {
 } from "@/lib/compare-matrix";
 import {
   amountOf,
+  bundlePriceNote,
   parseCellStatus,
+  partitionBundleRows,
   reconcileQuoteTotals,
   type BundleRow,
   type CoverageEntry,
@@ -75,9 +77,9 @@ function AmountCell({
       <td className="px-4 py-2.5 text-right align-middle">
         <span
           className="text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 inline-block leading-tight"
-          title={`Included in this vendor's ${bundleLabel} bundle — not a missing item`}
+          title={`Included in this vendor's ${bundleLabel} package — not a missing item`}
         >
-          incl. in {bundleLabel || "bundle"}
+          incl. in {bundleLabel || "package"}
         </span>
       </td>
     );
@@ -135,6 +137,110 @@ export default function ComparisonMatrix({
       ),
     [vendors, spaceRows, bundleTier, projectTier, quotedTotals]
   );
+  const { lumpSums, scattered } = useMemo(
+    () => partitionBundleRows(bundleTier),
+    [bundleTier]
+  );
+
+  const renderBundleRows = (
+    rows: BundleRow[],
+    accent: "amber" | "sky"
+  ) =>
+    rows.map((bundle, bi) => (
+      <tr key={bundle.bundle_id || bi} className="bg-white">
+        <td
+          className={`py-3 pl-8 pr-4 max-w-[360px] border-l-4 ${
+            accent === "amber" ? "border-amber-200" : "border-sky-200"
+          }`}
+        >
+          <div className="text-sm font-semibold text-stone-800 leading-tight">
+            {bundle.bundle_label}
+          </div>
+          {bundle.covered_spaces?.length ? (
+            <div className="text-[10px] text-stone-500 mt-0.5">
+              Across: {bundle.covered_spaces.join(" · ")}
+            </div>
+          ) : null}
+          {bundle.overlap_flags?.length ? (
+            <div className="text-[10px] text-rose-700 bg-rose-50 border border-rose-200 rounded px-1.5 py-0.5 mt-1 inline-block leading-snug">
+              May overlap with a separate line for{" "}
+              {bundle.overlap_flags.join(", ")} — confirm with the vendor
+            </div>
+          ) : null}
+        </td>
+        {vendors.map((vendor, vIdx) => {
+          const value = amountOf(bundle, vendor);
+          const note = bundlePriceNote(bundle, vendor);
+          return (
+            <td
+              key={vIdx}
+              className="px-4 py-3 text-right tabular-nums align-middle"
+            >
+              {value > 0 ? (
+                <>
+                  <div className="text-sm font-bold text-stone-900">
+                    {formatInrFull(value)}
+                  </div>
+                  {note ? (
+                    <div className="text-[9px] text-stone-500 mt-0.5 normal-case">
+                      {note}
+                    </div>
+                  ) : null}
+                </>
+              ) : (
+                <span className="text-sm font-medium text-rose-300 italic">
+                  N/A
+                </span>
+              )}
+            </td>
+          );
+        })}
+      </tr>
+    ));
+
+  const renderSectionHeader = (
+    title: string,
+    subtitle: string,
+    tone: "amber" | "sky"
+  ) => (
+    <>
+      <tr role="presentation">
+        <td
+          colSpan={colCount}
+          className="h-4 p-0 bg-[var(--background)] border-0"
+        />
+      </tr>
+      <tr
+        className={
+          tone === "amber"
+            ? "bg-amber-50 border-y-2 border-amber-200"
+            : "bg-sky-50 border-y-2 border-sky-200"
+        }
+      >
+        <td
+          colSpan={colCount}
+          className={`p-3 pl-4 border-l-4 ${
+            tone === "amber" ? "border-amber-400" : "border-sky-400"
+          }`}
+        >
+          <div
+            className={`text-sm font-bold uppercase tracking-wider ${
+              tone === "amber" ? "text-amber-900" : "text-sky-900"
+            }`}
+          >
+            {title}
+          </div>
+          <div
+            className={`text-[10px] mt-0.5 font-normal normal-case tracking-normal ${
+              tone === "amber" ? "text-amber-800" : "text-sky-800"
+            }`}
+          >
+            {subtitle}
+          </div>
+        </td>
+      </tr>
+    </>
+  );
 
   const renderSpaces = (
     spaces: ReturnType<typeof groupTableData>[number]["spaces"]
@@ -169,9 +275,9 @@ export default function ComparisonMatrix({
                 {!comparable && (
                   <span
                     className="text-[9px] font-semibold text-amber-800 bg-amber-100 border border-amber-300 rounded px-1.5 py-0.5 uppercase tracking-wide"
-                    title="A vendor bundled part of this room's scope, so these totals are not like-for-like"
+                    title="Vendors priced this space differently, so these totals are not like-for-like"
                   >
-                    scope differs
+                    scopes differ
                   </span>
                 )}
               </div>
@@ -267,7 +373,7 @@ export default function ComparisonMatrix({
         <div>
           <h2 className="qs-section-title">Tatva Quotes Comparison Matrix</h2>
           <p className="qs-section-sub">
-            Cost by room, with sub-services listed under each space.
+            Cost by space, with work items listed under each.
           </p>
         </div>
         {onDownloadPdf ? (
@@ -365,82 +471,25 @@ export default function ComparisonMatrix({
               </React.Fragment>
             ))}
 
-            {bundleTier.length > 0 && (
+            {lumpSums.length > 0 && (
               <>
-                <tr role="presentation">
-                  <td
-                    colSpan={colCount}
-                    className="h-4 p-0 bg-[var(--background)] border-0"
-                  />
-                </tr>
-                <tr className="bg-amber-50 border-y-2 border-amber-200">
-                  <td
-                    colSpan={colCount}
-                    className="p-3 pl-4 border-l-4 border-amber-400"
-                  >
-                    <div className="text-sm font-bold text-amber-900 uppercase tracking-wider">
-                      Bundled scopes
-                    </div>
-                    <div className="text-[10px] text-amber-800 mt-0.5 font-normal normal-case tracking-normal">
-                      One vendor priced these as a single lump sum while another
-                      itemised them. Excluded from the space totals above.
-                    </div>
-                  </td>
-                </tr>
-                {bundleTier.map((bundle, bi) => (
-                  <tr key={bundle.bundle_id || bi} className="bg-white">
-                    <td className="py-3 pl-8 pr-4 max-w-[360px] border-l-4 border-amber-200">
-                      <div className="text-sm font-semibold text-stone-800 leading-tight">
-                        {bundle.bundle_label}
-                      </div>
-                      {bundle.covered_spaces?.length ? (
-                        <div className="text-[10px] text-stone-500 mt-0.5">
-                          Covers: {bundle.covered_spaces.join(" · ")}
-                        </div>
-                      ) : null}
-                      {bundle.covered_items?.length ? (
-                        <div className="text-[10px] text-stone-400 mt-0.5 leading-snug">
-                          {bundle.covered_items.join(" · ")}
-                        </div>
-                      ) : null}
-                      {bundle.overlap_flags?.length ? (
-                        <div className="text-[10px] text-rose-700 bg-rose-50 border border-rose-200 rounded px-1.5 py-0.5 mt-1 inline-block leading-snug">
-                          Also billed separately:{" "}
-                          {bundle.overlap_flags.join(", ")} — confirm it is not
-                          counted twice
-                        </div>
-                      ) : null}
-                    </td>
-                    {vendors.map((vendor, vIdx) => {
-                      const value = amountOf(bundle, vendor);
-                      const basis = bundle.basis?.[vendor] ?? "none";
-                      const count = bundle.line_counts?.[vendor] ?? 0;
-                      return (
-                        <td
-                          key={vIdx}
-                          className="px-4 py-3 text-right tabular-nums align-middle"
-                        >
-                          {value > 0 ? (
-                            <>
-                              <div className="text-sm font-bold text-stone-900">
-                                {formatInrFull(value)}
-                              </div>
-                              <div className="text-[9px] text-stone-500 mt-0.5 normal-case">
-                                {basis === "bundle"
-                                  ? "lump sum"
-                                  : `sum of ${count} item${count === 1 ? "" : "s"}`}
-                              </div>
-                            </>
-                          ) : (
-                            <span className="text-sm font-medium text-rose-300 italic">
-                              N/A
-                            </span>
-                          )}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
+                {renderSectionHeader(
+                  "Lump sum packages",
+                  "One vendor gave a single package price for several items; another listed them separately. Package prices are not included in the space totals above.",
+                  "amber"
+                )}
+                {renderBundleRows(lumpSums, "amber")}
+              </>
+            )}
+
+            {scattered.length > 0 && (
+              <>
+                {renderSectionHeader(
+                  "Same work, different spaces",
+                  "Vendors placed this work under different spaces. Totals below are for easy comparison — the line items already appear in the spaces above.",
+                  "sky"
+                )}
+                {renderBundleRows(scattered, "sky")}
               </>
             )}
 
@@ -451,6 +500,16 @@ export default function ComparisonMatrix({
                     colSpan={colCount}
                     className="h-4 p-0 bg-[var(--background)] border-0"
                   />
+                </tr>
+                <tr className="bg-stone-100 border-y border-stone-200">
+                  <td colSpan={colCount} className="p-3 pl-4">
+                    <div className="text-sm font-bold text-stone-800 uppercase tracking-wider">
+                      Whole home
+                    </div>
+                    <div className="text-[10px] text-stone-500 mt-0.5 font-normal normal-case tracking-normal">
+                      Work not tied to one space.
+                    </div>
+                  </td>
                 </tr>
                 {projectGrouped.map((cat, ci) => (
                   <React.Fragment key={`proj-${ci}`}>
@@ -472,16 +531,7 @@ export default function ComparisonMatrix({
                   Quote total
                 </div>
                 <div className="text-[10px] text-stone-300 mt-0.5 font-normal normal-case tracking-normal">
-                  Original quote amount — spaces
-                  {bundleTier.some((b) =>
-                    vendors.some((v) => b.basis?.[v] === "bundle")
-                  )
-                    ? " + bundled lumpsums"
-                    : ""}
-                  {projectTier?.length ? " + project-level" : ""}
-                  {vendors.some((v) => (quoteTotals[v]?.other ?? 0) > 0)
-                    ? " + other (tax / round-off)"
-                    : ""}
+                  Each vendor&apos;s full quoted amount
                 </div>
               </td>
               {vendors.map((vendor, vIdx) => {
@@ -494,18 +544,6 @@ export default function ComparisonMatrix({
                     <div className="text-base font-extrabold">
                       {formatInrFull(parts?.total ?? 0)}
                     </div>
-                    <div className="text-[9px] text-stone-400 mt-0.5 normal-case leading-snug">
-                      {formatInrFull(parts?.rooms ?? 0)} spaces
-                      {(parts?.bundles ?? 0) > 0
-                        ? ` · ${formatInrFull(parts.bundles)} bundled`
-                        : ""}
-                      {(parts?.project ?? 0) > 0
-                        ? ` · ${formatInrFull(parts.project)} project`
-                        : ""}
-                      {(parts?.other ?? 0) > 0
-                        ? ` · ${formatInrFull(parts.other)} other`
-                        : ""}
-                    </div>
                   </td>
                 );
               })}
@@ -514,14 +552,11 @@ export default function ComparisonMatrix({
         </table>
       </div>
       <p className="text-[11px] text-stone-400 mt-3">
-        Header totals are the sum of sub-services in that space.{" "}
+        Space headers add up the work listed under them.{" "}
         <span className="font-medium text-rose-400">N/A</span> means that vendor
-        did not quote this work;{" "}
+        did not quote this work.{" "}
         <span className="font-medium text-amber-700">incl. in …</span> means the
-        price sits inside that vendor&apos;s bundle, so it is not missing.
-        Bundled lumpsums are listed in{" "}
-        <span className="font-medium text-amber-800">Bundled scopes</span> and
-        added back in the Quote total so the figure matches the original quote.
+        price is already inside that vendor&apos;s package, so it is not missing.
       </p>
     </section>
   );

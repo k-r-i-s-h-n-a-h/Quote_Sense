@@ -20,6 +20,7 @@ import {
   toProjectSummary,
 } from "../project-types";
 import type { TatvaUser } from "../tatva-api";
+import { isAccessTokenExpired } from "../auth";
 import {
   getUserDisplayName,
   getUserInitial,
@@ -41,6 +42,25 @@ import {
   projectRowsOf,
   spaceRowsOf,
 } from "../compare-types";
+
+function jwtWithExpiry(exp: number): string {
+  const payload = btoa(JSON.stringify({ exp }))
+    .replaceAll("+", "-")
+    .replaceAll("/", "_")
+    .replaceAll("=", "");
+  return `header.${payload}.signature`;
+}
+
+describe("cached auth token", () => {
+  it("rejects an expired JWT before showing authenticated UI", () => {
+    expect(isAccessTokenExpired(jwtWithExpiry(100), 101)).toBe(true);
+  });
+
+  it("keeps a live JWT and lets the profile endpoint validate opaque tokens", () => {
+    expect(isAccessTokenExpired(jwtWithExpiry(101), 100)).toBe(false);
+    expect(isAccessTokenExpired("opaque-token", 100)).toBe(false);
+  });
+});
 
 describe("unwrapApiList", () => {
   it("unwraps nested data.docs", () => {

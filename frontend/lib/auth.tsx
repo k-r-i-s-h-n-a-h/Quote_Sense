@@ -83,6 +83,22 @@ function decodeJwtPayload(token: string): Record<string, unknown> | null {
   }
 }
 
+/**
+ * Reject a cached JWT once its `exp` time has passed.
+ *
+ * Some Tatva environments return opaque access tokens, so a token that cannot
+ * be decoded is left for the profile API to validate. Only a JWT with an
+ * explicit, expired `exp` claim is rejected locally.
+ */
+export function isAccessTokenExpired(
+  token: string,
+  nowSeconds = Date.now() / 1000
+): boolean {
+  const payload = decodeJwtPayload(token);
+  const expiresAt = Number(payload?.exp);
+  return Number.isFinite(expiresAt) && expiresAt > 0 && expiresAt <= nowSeconds;
+}
+
 /** Read user id from a Tatva JWT payload when PM does not send user_id. */
 function getUserIdFromJwt(token: string): string | null {
   const payload = decodeJwtPayload(token);
@@ -317,6 +333,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         headers: { Authorization: `Bearer ${token}` },
         signal: AbortSignal.timeout(12_000),
       });
+      if (res.status === 401 || res.status === 403) {
+        clearSession();
+        return;
+      }
       if (!res.ok) return;
       const data = await res.json();
       const profile = parseProfileFromResponse(data);
@@ -329,7 +349,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch {
       /* keep cached user */
     }
-  }, []);
+  }, [clearSession]);
 
   useEffect(() => {
     let cancelled = false;
@@ -349,9 +369,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const stored = readStoredUser();
         const token = localStorage.getItem(TOKEN_KEY);
         if (stored && token) {
+          if (isAccessTokenExpired(token)) {
+            clearSession();
+            return;
+          }
           setFromPmSso(readAuthSource() === "sso");
           setUser(stored);
-          refreshProfile().catch(() => {});
+          // Keep the auth gate loading until the server accepts the cached
+          // token. This prevents the dashboard/name modal flashing before an
+          // expired or revoked session is redirected to /login.
+          await refreshProfile();
         }
       } finally {
         if (!cancelled) {
@@ -364,7 +391,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [refreshProfile]);
+  }, [clearSession, refreshProfile]);
 
   const sendOtp = useCallback(async (phoneNumber: string) => {
     setOtpError(null);

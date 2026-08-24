@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { getAuthToken, getAuthUserId, useAuth } from "@/lib/auth";
+import { getUserDisplayName } from "@/lib/user-display";
 
 type ProfileModalProps = {
   open: boolean;
@@ -24,9 +25,9 @@ export default function ProfileModal({ open, onClose }: ProfileModalProps) {
 
   const syncFormFromUser = (u: NonNullable<typeof user>) => {
     setForm({
-      name: u.name || u.fullName || "",
+      name: getUserDisplayName(u, ""),
       username: u.username || "",
-      email: u.email || "",
+      email: u.email?.includes("@") ? u.email : "",
     });
   };
 
@@ -62,7 +63,6 @@ export default function ProfileModal({ open, onClose }: ProfileModalProps) {
 
   if (!open || !user) return null;
 
-  const displayName = user.name || user.fullName || "User";
   const userId = getAuthUserId(user);
 
   const handleSave = async () => {
@@ -152,7 +152,9 @@ export default function ProfileModal({ open, onClose }: ProfileModalProps) {
                   </svg>
                 </span>
               </div>
-              <h3 className="mt-4 text-lg font-bold text-slate-900">{displayName}</h3>
+              <h3 className="mt-4 text-lg font-bold text-slate-900">
+                {getUserDisplayName(user, "User")}
+              </h3>
               <p className="text-sm text-slate-500">Customer Account</p>
             </div>
 
@@ -176,9 +178,9 @@ export default function ProfileModal({ open, onClose }: ProfileModalProps) {
                     onClick={() => {
                       setEditing(false);
                       setForm({
-                        name: user.name || user.fullName || "",
+                        name: getUserDisplayName(user, ""),
                         username: user.username || "",
-                        email: user.email || "",
+                        email: user.email?.includes("@") ? user.email : "",
                       });
                     }}
                     className="px-4 py-2 text-sm text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50"

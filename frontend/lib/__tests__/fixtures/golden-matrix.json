@@ -1,0 +1,3012 @@
+{
+ "contract_version": "MatrixV1",
+ "chartData": [
+  {
+   "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+   "total": 1031710.27
+  },
+  {
+   "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+   "total": 1150444.54
+  }
+ ],
+ "spaceTier": [
+  {
+   "category": "Interiors",
+   "space_id": "foyer",
+   "space": "Foyer",
+   "space_raw": "Foyer \u00b7 Foyer area",
+   "work_key": "alias:wall_panels",
+   "sub_service": "Wall panels",
+   "sub_service_id": "6995808b25ccc8cecd1ddd82",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Wall panels",
+   "room": "Foyer",
+   "work_item": "Wall panels",
+   "taxonomy": "Wall panels",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [
+    {
+     "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+     "item": "Wall Panels",
+     "amount": 12036
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "Wall Panels",
+     "amount": 29500
+    }
+   ],
+   "INFOSYS LIMITED (Q2OE1CX)": 12036,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 29500,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "foyer",
+   "space": "Foyer",
+   "space_raw": "Foyer \u00b7 Foyer area",
+   "work_key": "alias:console_unit",
+   "sub_service": "Console unit",
+   "sub_service_id": "6a744d317ddf2bf3991fbf03",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Console unit",
+   "room": "Foyer",
+   "work_item": "Console unit",
+   "taxonomy": "Console unit",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [
+    {
+     "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+     "item": "Console unit",
+     "amount": 41418
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "Console unit",
+     "amount": 23364
+    }
+   ],
+   "INFOSYS LIMITED (Q2OE1CX)": 41418,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 23364,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "foyer",
+   "space": "Foyer",
+   "space_raw": ": Foyer area \u00b7 Foyer",
+   "work_key": "alias:wall_decor",
+   "sub_service": "Wall decor",
+   "sub_service_id": "6a744f5a7ddf2bf3991fc079",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Wall decor",
+   "room": "Foyer",
+   "work_item": "Wall decor",
+   "taxonomy": "Wall decor",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [
+    {
+     "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+     "item": "Wall Decor",
+     "amount": 25488
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "Wall Decor",
+     "amount": 8850
+    }
+   ],
+   "INFOSYS LIMITED (Q2OE1CX)": 25488,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 8850,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "foyer",
+   "space": "Foyer",
+   "space_raw": "Foyer area",
+   "work_key": "alias:ledges",
+   "sub_service": "Ledges",
+   "sub_service_id": "",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Ledges",
+   "room": "Foyer",
+   "work_item": "Ledges",
+   "taxonomy": "Ledges",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [],
+   "INFOSYS LIMITED (Q2OE1CX)": 0,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 8968,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "not_quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "foyer",
+   "space": "Foyer",
+   "space_raw": "Foyer area",
+   "work_key": "alias:lighting_points",
+   "sub_service": "Lighting points",
+   "sub_service_id": "",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Lighting points",
+   "room": "Foyer",
+   "work_item": "Lighting points",
+   "taxonomy": "Lighting points",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Per Point",
+   "breakdown": [],
+   "INFOSYS LIMITED (Q2OE1CX)": 0,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 4720,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "not_quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "living",
+   "space": "Living",
+   "space_raw": "Living \u00b7 Living area",
+   "work_key": "alias:tv_units",
+   "sub_service": "TV units",
+   "sub_service_id": "69957f7c25ccc8cecd1ddc8f",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "TV units",
+   "room": "Living",
+   "work_item": "TV units",
+   "taxonomy": "TV units",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [
+    {
+     "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+     "item": "TV Units",
+     "amount": 47908
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "TV Units",
+     "amount": 15576
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "TV Units",
+     "amount": 39235
+    }
+   ],
+   "INFOSYS LIMITED (Q2OE1CX)": 47908,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 54811,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "living",
+   "space": "Living",
+   "space_raw": "Living \u00b7 Living area",
+   "work_key": "alias:wall_decor",
+   "sub_service": "Wall decor",
+   "sub_service_id": "6a744f5a7ddf2bf3991fc079",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Wall decor",
+   "room": "Living",
+   "work_item": "Wall decor",
+   "taxonomy": "Wall decor",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [
+    {
+     "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+     "item": "Wall Decor",
+     "amount": 35400
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "Wall Decor",
+     "amount": 8850
+    }
+   ],
+   "INFOSYS LIMITED (Q2OE1CX)": 35400,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 8850,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "living",
+   "space": "Living",
+   "space_raw": "Living area",
+   "work_key": "alias:false_ceiling",
+   "sub_service": "False ceiling",
+   "sub_service_id": "",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "False ceiling",
+   "room": "Living",
+   "work_item": "False ceiling",
+   "taxonomy": "False ceiling",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [
+    {
+     "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+     "item": "False Ceiling",
+     "amount": 61950
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "False ceiling with painting",
+     "amount": 49560
+    }
+   ],
+   "INFOSYS LIMITED (Q2OE1CX)": 61950,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 49560,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "living",
+   "space": "Living",
+   "space_raw": "Living area",
+   "work_key": "alias:lighting_points",
+   "sub_service": "Lighting points",
+   "sub_service_id": "",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Lighting points",
+   "room": "Living",
+   "work_item": "Lighting points",
+   "taxonomy": "Lighting points",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Per Unit / Each",
+   "breakdown": [],
+   "INFOSYS LIMITED (Q2OE1CX)": 0,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 16815,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "not_quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "dining",
+   "space": "Dining",
+   "space_raw": "Dining area \u00b7 dining area",
+   "work_key": "alias:crockery_units",
+   "sub_service": "Crockery units",
+   "sub_service_id": "",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Crockery units",
+   "room": "Dining",
+   "work_item": "Crockery units",
+   "taxonomy": "Crockery units",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [
+    {
+     "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+     "item": "Crockery Units",
+     "amount": 38940
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "Crockery Base unit",
+     "amount": 23364
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "Crockery Wall unit",
+     "amount": 15576
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "Crockery Wall unit",
+     "amount": 31152
+    }
+   ],
+   "INFOSYS LIMITED (Q2OE1CX)": 38940,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 70092,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "dining",
+   "space": "Dining",
+   "space_raw": "Dining \u00b7 Dining area",
+   "work_key": "alias:wall_decor",
+   "sub_service": "Wall decor",
+   "sub_service_id": "",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Wall decor",
+   "room": "Dining",
+   "work_item": "Wall decor",
+   "taxonomy": "Wall decor",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [
+    {
+     "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+     "item": "Wall Decor",
+     "amount": 17700
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "Dining area wall Decor",
+     "amount": 17700
+    }
+   ],
+   "INFOSYS LIMITED (Q2OE1CX)": 17700,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 17700,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "dining",
+   "space": "Dining",
+   "space_raw": "Dining area",
+   "work_key": "alias:bench_seating",
+   "sub_service": "Bench seating",
+   "sub_service_id": "6a744d127ddf2bf3991fbeef",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Bench seating",
+   "room": "Dining",
+   "work_item": "Bench seating",
+   "taxonomy": "Bench seating",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Per Unit / Each",
+   "breakdown": [],
+   "INFOSYS LIMITED (Q2OE1CX)": 40120,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 0,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "not_quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "kitchen",
+   "space": "Kitchen",
+   "space_raw": "Kitchen area \u00b7 Modular Kitchen",
+   "work_key": "alias:base_unit",
+   "sub_service": "Base unit",
+   "sub_service_id": "6a64b0c64522d787799841ea",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Base unit",
+   "room": "Kitchen",
+   "work_item": "Base unit",
+   "taxonomy": "Base unit",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [
+    {
+     "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+     "item": "Base Unit",
+     "amount": 77880
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "Base Unit",
+     "amount": 94990
+    }
+   ],
+   "INFOSYS LIMITED (Q2OE1CX)": 77880,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 94990,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "kitchen",
+   "space": "Kitchen",
+   "space_raw": "Kitchen area \u00b7 Modular Kitchen",
+   "work_key": "alias:wall_unit",
+   "sub_service": "Wall unit",
+   "sub_service_id": "6a744f657ddf2bf3991fc083",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Wall unit",
+   "room": "Kitchen",
+   "work_item": "Wall unit",
+   "taxonomy": "Wall unit",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [
+    {
+     "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+     "item": "Wall Unit",
+     "amount": 35046
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "Wall Unit",
+     "amount": 37170
+    }
+   ],
+   "INFOSYS LIMITED (Q2OE1CX)": 35046,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 37170,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "kitchen",
+   "space": "Kitchen",
+   "space_raw": "Kitchen area \u00b7 Modular Kitchen",
+   "work_key": "alias:loft",
+   "sub_service": "Loft",
+   "sub_service_id": "",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Loft",
+   "room": "Kitchen",
+   "work_item": "Loft",
+   "taxonomy": "Loft",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [
+    {
+     "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+     "item": "Loft",
+     "amount": 60534
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "Loft unit",
+     "amount": 47082
+    }
+   ],
+   "INFOSYS LIMITED (Q2OE1CX)": 60534,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 47082,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "kitchen",
+   "space": "Kitchen",
+   "space_raw": "Kitchen area \u00b7 Modular Kitchen",
+   "work_key": "alias:rolling_shutter",
+   "sub_service": "Rolling shutter",
+   "sub_service_id": "",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Rolling shutter",
+   "room": "Kitchen",
+   "work_item": "Rolling shutter",
+   "taxonomy": "Rolling shutter",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [
+    {
+     "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+     "item": "Rolling Shutter",
+     "amount": 27258
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "Rolling shutters",
+     "amount": 17700
+    }
+   ],
+   "INFOSYS LIMITED (Q2OE1CX)": 27258,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 17700,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "kitchen",
+   "space": "Kitchen",
+   "space_raw": "Kitchen area \u00b7 Modular Kitchen",
+   "work_key": "alias:janitor_unit",
+   "sub_service": "Janitor unit",
+   "sub_service_id": "6a744de27ddf2bf3991fbf7b",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Janitor unit",
+   "room": "Kitchen",
+   "work_item": "Janitor unit",
+   "taxonomy": "Janitor unit",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [
+    {
+     "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+     "item": "Janitor Unit",
+     "amount": 19470
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "Janitor Unit",
+     "amount": 14455
+    }
+   ],
+   "INFOSYS LIMITED (Q2OE1CX)": 19470,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 14455,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "kitchen",
+   "space": "Kitchen",
+   "space_raw": "Modular Kitchen",
+   "work_key": "alias:additional_storage",
+   "sub_service": "Additional storage",
+   "sub_service_id": "",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Additional storage",
+   "room": "Kitchen",
+   "work_item": "Additional storage",
+   "taxonomy": "Additional storage",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [],
+   "INFOSYS LIMITED (Q2OE1CX)": 19470,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 0,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "not_quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "kitchen",
+   "space": "Kitchen",
+   "space_raw": "Modular Kitchen",
+   "work_key": "alias:lighting_points",
+   "sub_service": "Lighting points",
+   "sub_service_id": "",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Lighting points",
+   "room": "Kitchen",
+   "work_item": "Lighting points",
+   "taxonomy": "Lighting points",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Running Length (rft)",
+   "breakdown": [],
+   "INFOSYS LIMITED (Q2OE1CX)": 17700,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 0,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "not_quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "kitchen",
+   "space": "Kitchen",
+   "space_raw": "Kitchen area",
+   "work_key": "alias:tall_unit",
+   "sub_service": "Tall unit",
+   "sub_service_id": "6a744f0d7ddf2bf3991fc03d",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Tall unit",
+   "room": "Kitchen",
+   "work_item": "Tall unit",
+   "taxonomy": "Tall unit",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [],
+   "INFOSYS LIMITED (Q2OE1CX)": 0,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 22715,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "not_quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "kitchen",
+   "space": "Kitchen",
+   "space_raw": "Kitchen Accessories",
+   "work_key": "alias:bottle_pullouts",
+   "sub_service": "Bottle pullouts",
+   "sub_service_id": "6a69f51d4522d78779984b79",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Bottle pullouts",
+   "room": "Kitchen",
+   "work_item": "Bottle pullouts",
+   "taxonomy": "Bottle pullouts",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Per Unit / Each",
+   "breakdown": [],
+   "INFOSYS LIMITED (Q2OE1CX)": 0,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 6353,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "incl_in_bundle:Hardware & accessories",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "kitchen",
+   "space": "Kitchen",
+   "space_raw": "Kitchen Accessories",
+   "work_key": "alias:tandem_drawers",
+   "sub_service": "Tandem drawers",
+   "sub_service_id": "",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Tandem drawers",
+   "room": "Kitchen",
+   "work_item": "Tandem drawers",
+   "taxonomy": "Tandem drawers",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Per Unit / Each",
+   "breakdown": [],
+   "INFOSYS LIMITED (Q2OE1CX)": 0,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 20709,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "incl_in_bundle:Hardware & accessories",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "kitchen",
+   "space": "Kitchen",
+   "space_raw": "Kitchen Accessories",
+   "work_key": "alias:cutlery_tray",
+   "sub_service": "Cutlery tray",
+   "sub_service_id": "",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Cutlery tray",
+   "room": "Kitchen",
+   "work_item": "Cutlery tray",
+   "taxonomy": "Cutlery tray",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Per Unit / Each",
+   "breakdown": [],
+   "INFOSYS LIMITED (Q2OE1CX)": 0,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 1929,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "incl_in_bundle:Hardware & accessories",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "kitchen",
+   "space": "Kitchen",
+   "space_raw": "Kitchen Accessories",
+   "work_key": "alias:soft_closing_hinges",
+   "sub_service": "Soft closing hinges",
+   "sub_service_id": "",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Soft closing hinges",
+   "room": "Kitchen",
+   "work_item": "Soft closing hinges",
+   "taxonomy": "Soft closing hinges",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Per Unit / Each",
+   "breakdown": [],
+   "INFOSYS LIMITED (Q2OE1CX)": 0,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 6814,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "incl_in_bundle:Hardware & accessories",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "kitchen",
+   "space": "Kitchen",
+   "space_raw": "Kitchen Accessories",
+   "work_key": "alias:soft_closing_channels",
+   "sub_service": "Soft closing channels",
+   "sub_service_id": "",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Soft closing channels",
+   "room": "Kitchen",
+   "work_item": "Soft closing channels",
+   "taxonomy": "Soft closing channels",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Per Unit / Each",
+   "breakdown": [],
+   "INFOSYS LIMITED (Q2OE1CX)": 0,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 1392,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "incl_in_bundle:Hardware & accessories",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "mbr",
+   "space": "Master-Bedroom",
+   "space_raw": "Master Bedroom \u00b7 Master bedroom",
+   "work_key": "alias:wardrobe",
+   "sub_service": "Wardrobe",
+   "sub_service_id": "6a744f7c7ddf2bf3991fc08e",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Wardrobe",
+   "room": "Master-Bedroom",
+   "work_item": "Wardrobe",
+   "taxonomy": "Wardrobe",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [
+    {
+     "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+     "item": "Wardrobe",
+     "amount": 85550
+    },
+    {
+     "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+     "item": "Wardrobe",
+     "amount": 24780
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "Wardrobe",
+     "amount": 81774
+    }
+   ],
+   "INFOSYS LIMITED (Q2OE1CX)": 110330,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 81774,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "mbr",
+   "space": "Master-Bedroom",
+   "space_raw": "Master bedroom",
+   "work_key": "alias:loft",
+   "sub_service": "Loft",
+   "sub_service_id": "6a5b472f895836cf85378c48",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Loft",
+   "room": "Master-Bedroom",
+   "work_item": "Loft",
+   "taxonomy": "Loft",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [
+    {
+     "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+     "item": "Loft",
+     "amount": 31388
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "Loft & Door Type",
+     "amount": 20178
+    }
+   ],
+   "INFOSYS LIMITED (Q2OE1CX)": 31388,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 20178,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "mbr",
+   "space": "Master-Bedroom",
+   "space_raw": "MBR Dressing unit \u00b7 Master bedroom",
+   "work_key": "alias:dressing_unit",
+   "sub_service": "Dressing unit",
+   "sub_service_id": "6a69f5344522d78779984b83",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Dressing unit",
+   "room": "Master-Bedroom",
+   "work_item": "Dressing unit",
+   "taxonomy": "Dressing unit",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [
+    {
+     "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+     "item": "Dressing Unit",
+     "amount": 27258
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "Dressing Unit",
+     "amount": 21417
+    }
+   ],
+   "INFOSYS LIMITED (Q2OE1CX)": 27258,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 21417,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "mbr",
+   "space": "Master-Bedroom",
+   "space_raw": "MBR Study unit \u00b7 Master bedroom",
+   "work_key": "alias:study_table",
+   "sub_service": "Study table",
+   "sub_service_id": "",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Study table",
+   "room": "Master-Bedroom",
+   "work_item": "Study table",
+   "taxonomy": "Study table",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [
+    {
+     "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+     "item": "folding study table",
+     "amount": 10620
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "Study Table",
+     "amount": 23364
+    }
+   ],
+   "INFOSYS LIMITED (Q2OE1CX)": 10620,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 23364,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "mbr",
+   "space": "Master-Bedroom",
+   "space_raw": "MBR King size bed \u00b7 Master bedroom",
+   "work_key": "alias:king_size_bed",
+   "sub_service": "King size bed",
+   "sub_service_id": "6a744df17ddf2bf3991fbf85",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "King size bed",
+   "room": "Master-Bedroom",
+   "work_item": "King size bed",
+   "taxonomy": "King size bed",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [
+    {
+     "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+     "item": "King Size Bed",
+     "amount": 63720
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "King Size Bed",
+     "amount": 56050
+    }
+   ],
+   "INFOSYS LIMITED (Q2OE1CX)": 63720,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 56050,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "mbr",
+   "space": "Master-Bedroom",
+   "space_raw": "MBR side table \u00b7 Master bedroom",
+   "work_key": "alias:side_table",
+   "sub_service": "Side table",
+   "sub_service_id": "",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Side table",
+   "room": "Master-Bedroom",
+   "work_item": "Side table",
+   "taxonomy": "Side table",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Per Unit / Each",
+   "breakdown": [
+    {
+     "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+     "item": "Side table",
+     "amount": 14160
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "Side Table",
+     "amount": 9440
+    }
+   ],
+   "INFOSYS LIMITED (Q2OE1CX)": 14160,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 9440,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "mbr",
+   "space": "Master-Bedroom",
+   "space_raw": "MBR Vanity unit \u00b7 Master bedroom",
+   "work_key": "alias:vanity_units",
+   "sub_service": "Vanity units",
+   "sub_service_id": "69957f9725ccc8cecd1ddcdc",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Vanity units",
+   "room": "Master-Bedroom",
+   "work_item": "Vanity units",
+   "taxonomy": "Vanity units",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [
+    {
+     "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+     "item": "Vanity Units",
+     "amount": 35046
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "Vanity Units",
+     "amount": 12390
+    }
+   ],
+   "INFOSYS LIMITED (Q2OE1CX)": 35046,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 12390,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "mbr",
+   "space": "Master-Bedroom",
+   "space_raw": "MBR Glass partitions \u00b7 Master bedroom",
+   "work_key": "alias:shower_enclosure",
+   "sub_service": "Shower / glass partition",
+   "sub_service_id": "",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Shower / glass partition",
+   "room": "Master-Bedroom",
+   "work_item": "Shower / glass partition",
+   "taxonomy": "Shower / glass partition",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [
+    {
+     "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+     "item": "Shower cubic",
+     "amount": 53100
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "Bathroom glass partitions",
+     "amount": 38940
+    }
+   ],
+   "INFOSYS LIMITED (Q2OE1CX)": 53100,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 38940,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "mbr",
+   "space": "Master-Bedroom",
+   "space_raw": "Master Bedroom \u00b7 Used cloth unit",
+   "work_key": "alias:used_cloth_storage",
+   "sub_service": "Used cloth storage",
+   "sub_service_id": "",
+   "work_confidence": 0.9,
+   "space_confidence": 0.7,
+   "item_name": "Used cloth storage",
+   "room": "Master-Bedroom",
+   "work_item": "Used cloth storage",
+   "taxonomy": "Used cloth storage",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [
+    {
+     "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+     "item": "Used cloth storage unit",
+     "amount": 23954
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "MBR Used cloth units",
+     "amount": 13629
+    }
+   ],
+   "INFOSYS LIMITED (Q2OE1CX)": 23954,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 13629,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "mbr",
+   "space": "Master-Bedroom",
+   "space_raw": "Master bedroom",
+   "work_key": "alias:sliding_mechanism",
+   "sub_service": "Sliding mechanism",
+   "sub_service_id": "6a744eef7ddf2bf3991fc029",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Sliding mechanism",
+   "room": "Master-Bedroom",
+   "work_item": "Sliding mechanism",
+   "taxonomy": "Sliding mechanism",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Per Unit / Each",
+   "breakdown": [],
+   "INFOSYS LIMITED (Q2OE1CX)": 0,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 14160,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "not_quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "mbr",
+   "space": "Master-Bedroom",
+   "space_raw": "MBR Dressing Mirror \u00b7 MBR vanity Mirror",
+   "work_key": "alias:mirror",
+   "sub_service": "Mirror",
+   "sub_service_id": "",
+   "work_confidence": 0.6,
+   "space_confidence": 0.95,
+   "item_name": "Mirror",
+   "room": "Master-Bedroom",
+   "work_item": "Mirror",
+   "taxonomy": "Mirror",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "MBR Used cloth units",
+     "amount": 2832
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "Vanity Units",
+     "amount": 1888
+    }
+   ],
+   "INFOSYS LIMITED (Q2OE1CX)": 0,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 4720,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "not_quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "mbr",
+   "space": "Master-Bedroom",
+   "space_raw": "MBR Study unit",
+   "work_key": "alias:foldable_mechanism",
+   "sub_service": "Foldable mechanism",
+   "sub_service_id": "",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Foldable mechanism",
+   "room": "Master-Bedroom",
+   "work_item": "Foldable mechanism",
+   "taxonomy": "Foldable mechanism",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [],
+   "INFOSYS LIMITED (Q2OE1CX)": 0,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 2360,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "not_quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "kids_bedroom",
+   "space": "Kids-Bedroom",
+   "space_raw": "Kids Bedroom \u00b7 Kids bedroom",
+   "work_key": "alias:study_table",
+   "sub_service": "Study table",
+   "sub_service_id": "",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Study table",
+   "room": "Kids-Bedroom",
+   "work_item": "Study table",
+   "taxonomy": "Study table",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [
+    {
+     "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+     "item": "folding study table",
+     "amount": 14160
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "Study Table",
+     "amount": 23364
+    }
+   ],
+   "INFOSYS LIMITED (Q2OE1CX)": 14160,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 23364,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "kids_bedroom",
+   "space": "Kids-Bedroom",
+   "space_raw": "Kids Bedroom \u00b7 Kids bedroom",
+   "work_key": "alias:wall_decor",
+   "sub_service": "Wall decor",
+   "sub_service_id": "6a744f5a7ddf2bf3991fc079",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Wall decor",
+   "room": "Kids-Bedroom",
+   "work_item": "Wall decor",
+   "taxonomy": "Wall decor",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [
+    {
+     "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+     "item": "Wall Decor",
+     "amount": 56640
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "Wall Decor",
+     "amount": 36875
+    }
+   ],
+   "INFOSYS LIMITED (Q2OE1CX)": 56640,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 36875,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "kids_bedroom",
+   "space": "Kids-Bedroom",
+   "space_raw": "Kids Bedroom",
+   "work_key": "alias:foldable_mechanism",
+   "sub_service": "Foldable mechanism",
+   "sub_service_id": "",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Foldable mechanism",
+   "room": "Kids-Bedroom",
+   "work_item": "Foldable mechanism",
+   "taxonomy": "Foldable mechanism",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Per Unit / Each",
+   "breakdown": [],
+   "INFOSYS LIMITED (Q2OE1CX)": 0,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 2360,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "not_quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "common_washroom",
+   "space": "Common-Washroom",
+   "space_raw": "Common vanity unit \u00b7 Common washroom",
+   "work_key": "alias:vanity_units",
+   "sub_service": "Vanity units",
+   "sub_service_id": "69957f9725ccc8cecd1ddcdc",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Vanity units",
+   "room": "Common-Washroom",
+   "work_item": "Vanity units",
+   "taxonomy": "Vanity units",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [
+    {
+     "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+     "item": "Vanity Units",
+     "amount": 20060
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "Vanity Units",
+     "amount": 12390
+    }
+   ],
+   "INFOSYS LIMITED (Q2OE1CX)": 20060,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 12390,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  }
+ ],
+ "bundleTier": [
+  {
+   "bundle_id": "bundle:infosys_limited_q2oe1cx_hardware_hardware_accessories",
+   "bundle_label": "Hardware & accessories",
+   "bundle_family": "hardware",
+   "covered_spaces": [
+    "Kitchen"
+   ],
+   "covered_items": [
+    "tandem drawers",
+    "bottle pullouts",
+    "rolling shutter",
+    "handles",
+    "cutlery tray",
+    "skid mat"
+   ],
+   "overlap_flags": [
+    "rolling shutter"
+   ],
+   "basis": {
+    "INFOSYS LIMITED (Q2OE1CX)": "bundle",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "itemized"
+   },
+   "line_counts": {
+    "INFOSYS LIMITED (Q2OE1CX)": 1,
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 5
+   },
+   "has_bundle": true,
+   "INFOSYS LIMITED (Q2OE1CX)": 100300,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 37198
+  },
+  {
+   "bundle_id": "family:lighting",
+   "bundle_label": "Electrical & lighting",
+   "bundle_family": "lighting",
+   "covered_spaces": [
+    "Foyer",
+    "Kitchen",
+    "Living"
+   ],
+   "covered_items": [],
+   "overlap_flags": [],
+   "basis": {
+    "INFOSYS LIMITED (Q2OE1CX)": "itemized",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "itemized"
+   },
+   "line_counts": {
+    "INFOSYS LIMITED (Q2OE1CX)": 1,
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 5
+   },
+   "has_bundle": false,
+   "INFOSYS LIMITED (Q2OE1CX)": 17700,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 72629
+  }
+ ],
+ "projectTier": [
+  {
+   "category": "Interiors",
+   "space_id": "project_level",
+   "space": "Project-level",
+   "space_raw": "Window blinds",
+   "work_key": "alias:window_blinds",
+   "sub_service": "Window blinds",
+   "sub_service_id": "",
+   "work_confidence": 0.9,
+   "space_confidence": 0.4,
+   "item_name": "Window blinds",
+   "room": "Project-level",
+   "work_item": "Window blinds",
+   "taxonomy": "Window blinds",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Fixed Amount / Lump Sum",
+   "breakdown": [],
+   "INFOSYS LIMITED (Q2OE1CX)": 0,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 29500,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "not_quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "project_level",
+   "space": "Project-level",
+   "space_raw": "Tissue Paper holder",
+   "work_key": "alias:tissue_paper_holder",
+   "sub_service": "Tissue paper holder",
+   "sub_service_id": "",
+   "work_confidence": 0.9,
+   "space_confidence": 0.4,
+   "item_name": "Tissue paper holder",
+   "room": "Project-level",
+   "work_item": "Tissue paper holder",
+   "taxonomy": "Tissue paper holder",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Fixed Amount / Lump Sum",
+   "breakdown": [],
+   "INFOSYS LIMITED (Q2OE1CX)": 0,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 2950,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "not_quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "project_level",
+   "space": "Project-level",
+   "space_raw": "Profile lights Required areas",
+   "work_key": "alias:lighting_points",
+   "sub_service": "Lighting points",
+   "sub_service_id": "",
+   "work_confidence": 0.9,
+   "space_confidence": 0.4,
+   "item_name": "Lighting points",
+   "room": "Project-level",
+   "work_item": "Lighting points",
+   "taxonomy": "Lighting points",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Running Length (rft)",
+   "breakdown": [],
+   "INFOSYS LIMITED (Q2OE1CX)": 0,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 18644,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "not_quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "project_level",
+   "space": "Project-level",
+   "space_raw": "Adaptors required areas",
+   "work_key": "alias:adaptors",
+   "sub_service": "Adaptors",
+   "sub_service_id": "",
+   "work_confidence": 0.9,
+   "space_confidence": 0.4,
+   "item_name": "Adaptors",
+   "room": "Project-level",
+   "work_item": "Adaptors",
+   "taxonomy": "Adaptors",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Per Unit / Each",
+   "breakdown": [],
+   "INFOSYS LIMITED (Q2OE1CX)": 0,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 10030,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "not_quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "project_level",
+   "space": "Project-level",
+   "space_raw": "Electrical work required areas",
+   "work_key": "alias:electrical_points",
+   "sub_service": "Electrical points",
+   "sub_service_id": "",
+   "work_confidence": 0.9,
+   "space_confidence": 0.4,
+   "item_name": "Electrical points",
+   "room": "Project-level",
+   "work_item": "Electrical points",
+   "taxonomy": "Electrical points",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Per Unit / Each",
+   "breakdown": [],
+   "INFOSYS LIMITED (Q2OE1CX)": 0,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 22420,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "not_quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  }
+ ],
+ "coverage": [
+  {
+   "space_id": "foyer",
+   "space": "Foyer",
+   "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+   "status": "quoted",
+   "comparable": true
+  },
+  {
+   "space_id": "foyer",
+   "space": "Foyer",
+   "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+   "status": "quoted",
+   "comparable": true
+  },
+  {
+   "space_id": "living",
+   "space": "Living",
+   "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+   "status": "quoted",
+   "comparable": true
+  },
+  {
+   "space_id": "living",
+   "space": "Living",
+   "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+   "status": "quoted",
+   "comparable": true
+  },
+  {
+   "space_id": "dining",
+   "space": "Dining",
+   "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+   "status": "quoted",
+   "comparable": true
+  },
+  {
+   "space_id": "dining",
+   "space": "Dining",
+   "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+   "status": "quoted",
+   "comparable": true
+  },
+  {
+   "space_id": "kitchen",
+   "space": "Kitchen",
+   "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+   "status": "quoted",
+   "comparable": false
+  },
+  {
+   "space_id": "kitchen",
+   "space": "Kitchen",
+   "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+   "status": "quoted",
+   "comparable": false
+  },
+  {
+   "space_id": "mbr",
+   "space": "Master-Bedroom",
+   "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+   "status": "quoted",
+   "comparable": true
+  },
+  {
+   "space_id": "mbr",
+   "space": "Master-Bedroom",
+   "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+   "status": "quoted",
+   "comparable": true
+  },
+  {
+   "space_id": "kids_bedroom",
+   "space": "Kids-Bedroom",
+   "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+   "status": "quoted",
+   "comparable": true
+  },
+  {
+   "space_id": "kids_bedroom",
+   "space": "Kids-Bedroom",
+   "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+   "status": "quoted",
+   "comparable": true
+  },
+  {
+   "space_id": "common_washroom",
+   "space": "Common-Washroom",
+   "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+   "status": "quoted",
+   "comparable": true
+  },
+  {
+   "space_id": "common_washroom",
+   "space": "Common-Washroom",
+   "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+   "status": "quoted",
+   "comparable": true
+  }
+ ],
+ "tableData": [
+  {
+   "category": "Interiors",
+   "space_id": "foyer",
+   "space": "Foyer",
+   "space_raw": "Foyer \u00b7 Foyer area",
+   "work_key": "alias:wall_panels",
+   "sub_service": "Wall panels",
+   "sub_service_id": "6995808b25ccc8cecd1ddd82",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Wall panels",
+   "room": "Foyer",
+   "work_item": "Wall panels",
+   "taxonomy": "Wall panels",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [
+    {
+     "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+     "item": "Wall Panels",
+     "amount": 12036
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "Wall Panels",
+     "amount": 29500
+    }
+   ],
+   "INFOSYS LIMITED (Q2OE1CX)": 12036,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 29500,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "foyer",
+   "space": "Foyer",
+   "space_raw": "Foyer \u00b7 Foyer area",
+   "work_key": "alias:console_unit",
+   "sub_service": "Console unit",
+   "sub_service_id": "6a744d317ddf2bf3991fbf03",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Console unit",
+   "room": "Foyer",
+   "work_item": "Console unit",
+   "taxonomy": "Console unit",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [
+    {
+     "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+     "item": "Console unit",
+     "amount": 41418
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "Console unit",
+     "amount": 23364
+    }
+   ],
+   "INFOSYS LIMITED (Q2OE1CX)": 41418,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 23364,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "foyer",
+   "space": "Foyer",
+   "space_raw": ": Foyer area \u00b7 Foyer",
+   "work_key": "alias:wall_decor",
+   "sub_service": "Wall decor",
+   "sub_service_id": "6a744f5a7ddf2bf3991fc079",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Wall decor",
+   "room": "Foyer",
+   "work_item": "Wall decor",
+   "taxonomy": "Wall decor",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [
+    {
+     "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+     "item": "Wall Decor",
+     "amount": 25488
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "Wall Decor",
+     "amount": 8850
+    }
+   ],
+   "INFOSYS LIMITED (Q2OE1CX)": 25488,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 8850,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "foyer",
+   "space": "Foyer",
+   "space_raw": "Foyer area",
+   "work_key": "alias:ledges",
+   "sub_service": "Ledges",
+   "sub_service_id": "",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Ledges",
+   "room": "Foyer",
+   "work_item": "Ledges",
+   "taxonomy": "Ledges",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [],
+   "INFOSYS LIMITED (Q2OE1CX)": 0,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 8968,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "not_quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "foyer",
+   "space": "Foyer",
+   "space_raw": "Foyer area",
+   "work_key": "alias:lighting_points",
+   "sub_service": "Lighting points",
+   "sub_service_id": "",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Lighting points",
+   "room": "Foyer",
+   "work_item": "Lighting points",
+   "taxonomy": "Lighting points",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Per Point",
+   "breakdown": [],
+   "INFOSYS LIMITED (Q2OE1CX)": 0,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 4720,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "not_quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "living",
+   "space": "Living",
+   "space_raw": "Living \u00b7 Living area",
+   "work_key": "alias:tv_units",
+   "sub_service": "TV units",
+   "sub_service_id": "69957f7c25ccc8cecd1ddc8f",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "TV units",
+   "room": "Living",
+   "work_item": "TV units",
+   "taxonomy": "TV units",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [
+    {
+     "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+     "item": "TV Units",
+     "amount": 47908
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "TV Units",
+     "amount": 15576
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "TV Units",
+     "amount": 39235
+    }
+   ],
+   "INFOSYS LIMITED (Q2OE1CX)": 47908,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 54811,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "living",
+   "space": "Living",
+   "space_raw": "Living \u00b7 Living area",
+   "work_key": "alias:wall_decor",
+   "sub_service": "Wall decor",
+   "sub_service_id": "6a744f5a7ddf2bf3991fc079",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Wall decor",
+   "room": "Living",
+   "work_item": "Wall decor",
+   "taxonomy": "Wall decor",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [
+    {
+     "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+     "item": "Wall Decor",
+     "amount": 35400
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "Wall Decor",
+     "amount": 8850
+    }
+   ],
+   "INFOSYS LIMITED (Q2OE1CX)": 35400,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 8850,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "living",
+   "space": "Living",
+   "space_raw": "Living area",
+   "work_key": "alias:false_ceiling",
+   "sub_service": "False ceiling",
+   "sub_service_id": "",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "False ceiling",
+   "room": "Living",
+   "work_item": "False ceiling",
+   "taxonomy": "False ceiling",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [
+    {
+     "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+     "item": "False Ceiling",
+     "amount": 61950
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "False ceiling with painting",
+     "amount": 49560
+    }
+   ],
+   "INFOSYS LIMITED (Q2OE1CX)": 61950,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 49560,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "living",
+   "space": "Living",
+   "space_raw": "Living area",
+   "work_key": "alias:lighting_points",
+   "sub_service": "Lighting points",
+   "sub_service_id": "",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Lighting points",
+   "room": "Living",
+   "work_item": "Lighting points",
+   "taxonomy": "Lighting points",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Per Unit / Each",
+   "breakdown": [],
+   "INFOSYS LIMITED (Q2OE1CX)": 0,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 16815,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "not_quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "dining",
+   "space": "Dining",
+   "space_raw": "Dining area \u00b7 dining area",
+   "work_key": "alias:crockery_units",
+   "sub_service": "Crockery units",
+   "sub_service_id": "",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Crockery units",
+   "room": "Dining",
+   "work_item": "Crockery units",
+   "taxonomy": "Crockery units",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [
+    {
+     "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+     "item": "Crockery Units",
+     "amount": 38940
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "Crockery Base unit",
+     "amount": 23364
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "Crockery Wall unit",
+     "amount": 15576
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "Crockery Wall unit",
+     "amount": 31152
+    }
+   ],
+   "INFOSYS LIMITED (Q2OE1CX)": 38940,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 70092,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "dining",
+   "space": "Dining",
+   "space_raw": "Dining \u00b7 Dining area",
+   "work_key": "alias:wall_decor",
+   "sub_service": "Wall decor",
+   "sub_service_id": "",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Wall decor",
+   "room": "Dining",
+   "work_item": "Wall decor",
+   "taxonomy": "Wall decor",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [
+    {
+     "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+     "item": "Wall Decor",
+     "amount": 17700
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "Dining area wall Decor",
+     "amount": 17700
+    }
+   ],
+   "INFOSYS LIMITED (Q2OE1CX)": 17700,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 17700,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "dining",
+   "space": "Dining",
+   "space_raw": "Dining area",
+   "work_key": "alias:bench_seating",
+   "sub_service": "Bench seating",
+   "sub_service_id": "6a744d127ddf2bf3991fbeef",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Bench seating",
+   "room": "Dining",
+   "work_item": "Bench seating",
+   "taxonomy": "Bench seating",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Per Unit / Each",
+   "breakdown": [],
+   "INFOSYS LIMITED (Q2OE1CX)": 40120,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 0,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "not_quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "kitchen",
+   "space": "Kitchen",
+   "space_raw": "Kitchen area \u00b7 Modular Kitchen",
+   "work_key": "alias:base_unit",
+   "sub_service": "Base unit",
+   "sub_service_id": "6a64b0c64522d787799841ea",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Base unit",
+   "room": "Kitchen",
+   "work_item": "Base unit",
+   "taxonomy": "Base unit",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [
+    {
+     "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+     "item": "Base Unit",
+     "amount": 77880
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "Base Unit",
+     "amount": 94990
+    }
+   ],
+   "INFOSYS LIMITED (Q2OE1CX)": 77880,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 94990,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "kitchen",
+   "space": "Kitchen",
+   "space_raw": "Kitchen area \u00b7 Modular Kitchen",
+   "work_key": "alias:wall_unit",
+   "sub_service": "Wall unit",
+   "sub_service_id": "6a744f657ddf2bf3991fc083",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Wall unit",
+   "room": "Kitchen",
+   "work_item": "Wall unit",
+   "taxonomy": "Wall unit",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [
+    {
+     "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+     "item": "Wall Unit",
+     "amount": 35046
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "Wall Unit",
+     "amount": 37170
+    }
+   ],
+   "INFOSYS LIMITED (Q2OE1CX)": 35046,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 37170,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "kitchen",
+   "space": "Kitchen",
+   "space_raw": "Kitchen area \u00b7 Modular Kitchen",
+   "work_key": "alias:loft",
+   "sub_service": "Loft",
+   "sub_service_id": "",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Loft",
+   "room": "Kitchen",
+   "work_item": "Loft",
+   "taxonomy": "Loft",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [
+    {
+     "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+     "item": "Loft",
+     "amount": 60534
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "Loft unit",
+     "amount": 47082
+    }
+   ],
+   "INFOSYS LIMITED (Q2OE1CX)": 60534,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 47082,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "kitchen",
+   "space": "Kitchen",
+   "space_raw": "Kitchen area \u00b7 Modular Kitchen",
+   "work_key": "alias:rolling_shutter",
+   "sub_service": "Rolling shutter",
+   "sub_service_id": "",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Rolling shutter",
+   "room": "Kitchen",
+   "work_item": "Rolling shutter",
+   "taxonomy": "Rolling shutter",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [
+    {
+     "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+     "item": "Rolling Shutter",
+     "amount": 27258
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "Rolling shutters",
+     "amount": 17700
+    }
+   ],
+   "INFOSYS LIMITED (Q2OE1CX)": 27258,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 17700,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "kitchen",
+   "space": "Kitchen",
+   "space_raw": "Kitchen area \u00b7 Modular Kitchen",
+   "work_key": "alias:janitor_unit",
+   "sub_service": "Janitor unit",
+   "sub_service_id": "6a744de27ddf2bf3991fbf7b",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Janitor unit",
+   "room": "Kitchen",
+   "work_item": "Janitor unit",
+   "taxonomy": "Janitor unit",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [
+    {
+     "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+     "item": "Janitor Unit",
+     "amount": 19470
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "Janitor Unit",
+     "amount": 14455
+    }
+   ],
+   "INFOSYS LIMITED (Q2OE1CX)": 19470,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 14455,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "kitchen",
+   "space": "Kitchen",
+   "space_raw": "Modular Kitchen",
+   "work_key": "alias:additional_storage",
+   "sub_service": "Additional storage",
+   "sub_service_id": "",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Additional storage",
+   "room": "Kitchen",
+   "work_item": "Additional storage",
+   "taxonomy": "Additional storage",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [],
+   "INFOSYS LIMITED (Q2OE1CX)": 19470,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 0,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "not_quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "kitchen",
+   "space": "Kitchen",
+   "space_raw": "Modular Kitchen",
+   "work_key": "alias:lighting_points",
+   "sub_service": "Lighting points",
+   "sub_service_id": "",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Lighting points",
+   "room": "Kitchen",
+   "work_item": "Lighting points",
+   "taxonomy": "Lighting points",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Running Length (rft)",
+   "breakdown": [],
+   "INFOSYS LIMITED (Q2OE1CX)": 17700,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 0,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "not_quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "kitchen",
+   "space": "Kitchen",
+   "space_raw": "Kitchen area",
+   "work_key": "alias:tall_unit",
+   "sub_service": "Tall unit",
+   "sub_service_id": "6a744f0d7ddf2bf3991fc03d",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Tall unit",
+   "room": "Kitchen",
+   "work_item": "Tall unit",
+   "taxonomy": "Tall unit",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [],
+   "INFOSYS LIMITED (Q2OE1CX)": 0,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 22715,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "not_quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "kitchen",
+   "space": "Kitchen",
+   "space_raw": "Kitchen Accessories",
+   "work_key": "alias:bottle_pullouts",
+   "sub_service": "Bottle pullouts",
+   "sub_service_id": "6a69f51d4522d78779984b79",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Bottle pullouts",
+   "room": "Kitchen",
+   "work_item": "Bottle pullouts",
+   "taxonomy": "Bottle pullouts",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Per Unit / Each",
+   "breakdown": [],
+   "INFOSYS LIMITED (Q2OE1CX)": 0,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 6353,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "incl_in_bundle:Hardware & accessories",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "kitchen",
+   "space": "Kitchen",
+   "space_raw": "Kitchen Accessories",
+   "work_key": "alias:tandem_drawers",
+   "sub_service": "Tandem drawers",
+   "sub_service_id": "",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Tandem drawers",
+   "room": "Kitchen",
+   "work_item": "Tandem drawers",
+   "taxonomy": "Tandem drawers",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Per Unit / Each",
+   "breakdown": [],
+   "INFOSYS LIMITED (Q2OE1CX)": 0,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 20709,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "incl_in_bundle:Hardware & accessories",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "kitchen",
+   "space": "Kitchen",
+   "space_raw": "Kitchen Accessories",
+   "work_key": "alias:cutlery_tray",
+   "sub_service": "Cutlery tray",
+   "sub_service_id": "",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Cutlery tray",
+   "room": "Kitchen",
+   "work_item": "Cutlery tray",
+   "taxonomy": "Cutlery tray",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Per Unit / Each",
+   "breakdown": [],
+   "INFOSYS LIMITED (Q2OE1CX)": 0,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 1929,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "incl_in_bundle:Hardware & accessories",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "kitchen",
+   "space": "Kitchen",
+   "space_raw": "Kitchen Accessories",
+   "work_key": "alias:soft_closing_hinges",
+   "sub_service": "Soft closing hinges",
+   "sub_service_id": "",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Soft closing hinges",
+   "room": "Kitchen",
+   "work_item": "Soft closing hinges",
+   "taxonomy": "Soft closing hinges",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Per Unit / Each",
+   "breakdown": [],
+   "INFOSYS LIMITED (Q2OE1CX)": 0,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 6814,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "incl_in_bundle:Hardware & accessories",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "kitchen",
+   "space": "Kitchen",
+   "space_raw": "Kitchen Accessories",
+   "work_key": "alias:soft_closing_channels",
+   "sub_service": "Soft closing channels",
+   "sub_service_id": "",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Soft closing channels",
+   "room": "Kitchen",
+   "work_item": "Soft closing channels",
+   "taxonomy": "Soft closing channels",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Per Unit / Each",
+   "breakdown": [],
+   "INFOSYS LIMITED (Q2OE1CX)": 0,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 1392,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "incl_in_bundle:Hardware & accessories",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "mbr",
+   "space": "Master-Bedroom",
+   "space_raw": "Master Bedroom \u00b7 Master bedroom",
+   "work_key": "alias:wardrobe",
+   "sub_service": "Wardrobe",
+   "sub_service_id": "6a744f7c7ddf2bf3991fc08e",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Wardrobe",
+   "room": "Master-Bedroom",
+   "work_item": "Wardrobe",
+   "taxonomy": "Wardrobe",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [
+    {
+     "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+     "item": "Wardrobe",
+     "amount": 85550
+    },
+    {
+     "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+     "item": "Wardrobe",
+     "amount": 24780
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "Wardrobe",
+     "amount": 81774
+    }
+   ],
+   "INFOSYS LIMITED (Q2OE1CX)": 110330,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 81774,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "mbr",
+   "space": "Master-Bedroom",
+   "space_raw": "Master bedroom",
+   "work_key": "alias:loft",
+   "sub_service": "Loft",
+   "sub_service_id": "6a5b472f895836cf85378c48",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Loft",
+   "room": "Master-Bedroom",
+   "work_item": "Loft",
+   "taxonomy": "Loft",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [
+    {
+     "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+     "item": "Loft",
+     "amount": 31388
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "Loft & Door Type",
+     "amount": 20178
+    }
+   ],
+   "INFOSYS LIMITED (Q2OE1CX)": 31388,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 20178,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "mbr",
+   "space": "Master-Bedroom",
+   "space_raw": "MBR Dressing unit \u00b7 Master bedroom",
+   "work_key": "alias:dressing_unit",
+   "sub_service": "Dressing unit",
+   "sub_service_id": "6a69f5344522d78779984b83",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Dressing unit",
+   "room": "Master-Bedroom",
+   "work_item": "Dressing unit",
+   "taxonomy": "Dressing unit",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [
+    {
+     "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+     "item": "Dressing Unit",
+     "amount": 27258
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "Dressing Unit",
+     "amount": 21417
+    }
+   ],
+   "INFOSYS LIMITED (Q2OE1CX)": 27258,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 21417,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "mbr",
+   "space": "Master-Bedroom",
+   "space_raw": "MBR Study unit \u00b7 Master bedroom",
+   "work_key": "alias:study_table",
+   "sub_service": "Study table",
+   "sub_service_id": "",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Study table",
+   "room": "Master-Bedroom",
+   "work_item": "Study table",
+   "taxonomy": "Study table",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [
+    {
+     "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+     "item": "folding study table",
+     "amount": 10620
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "Study Table",
+     "amount": 23364
+    }
+   ],
+   "INFOSYS LIMITED (Q2OE1CX)": 10620,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 23364,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "mbr",
+   "space": "Master-Bedroom",
+   "space_raw": "MBR King size bed \u00b7 Master bedroom",
+   "work_key": "alias:king_size_bed",
+   "sub_service": "King size bed",
+   "sub_service_id": "6a744df17ddf2bf3991fbf85",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "King size bed",
+   "room": "Master-Bedroom",
+   "work_item": "King size bed",
+   "taxonomy": "King size bed",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [
+    {
+     "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+     "item": "King Size Bed",
+     "amount": 63720
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "King Size Bed",
+     "amount": 56050
+    }
+   ],
+   "INFOSYS LIMITED (Q2OE1CX)": 63720,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 56050,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "mbr",
+   "space": "Master-Bedroom",
+   "space_raw": "MBR side table \u00b7 Master bedroom",
+   "work_key": "alias:side_table",
+   "sub_service": "Side table",
+   "sub_service_id": "",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Side table",
+   "room": "Master-Bedroom",
+   "work_item": "Side table",
+   "taxonomy": "Side table",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Per Unit / Each",
+   "breakdown": [
+    {
+     "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+     "item": "Side table",
+     "amount": 14160
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "Side Table",
+     "amount": 9440
+    }
+   ],
+   "INFOSYS LIMITED (Q2OE1CX)": 14160,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 9440,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "mbr",
+   "space": "Master-Bedroom",
+   "space_raw": "MBR Vanity unit \u00b7 Master bedroom",
+   "work_key": "alias:vanity_units",
+   "sub_service": "Vanity units",
+   "sub_service_id": "69957f9725ccc8cecd1ddcdc",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Vanity units",
+   "room": "Master-Bedroom",
+   "work_item": "Vanity units",
+   "taxonomy": "Vanity units",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [
+    {
+     "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+     "item": "Vanity Units",
+     "amount": 35046
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "Vanity Units",
+     "amount": 12390
+    }
+   ],
+   "INFOSYS LIMITED (Q2OE1CX)": 35046,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 12390,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "mbr",
+   "space": "Master-Bedroom",
+   "space_raw": "MBR Glass partitions \u00b7 Master bedroom",
+   "work_key": "alias:shower_enclosure",
+   "sub_service": "Shower / glass partition",
+   "sub_service_id": "",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Shower / glass partition",
+   "room": "Master-Bedroom",
+   "work_item": "Shower / glass partition",
+   "taxonomy": "Shower / glass partition",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [
+    {
+     "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+     "item": "Shower cubic",
+     "amount": 53100
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "Bathroom glass partitions",
+     "amount": 38940
+    }
+   ],
+   "INFOSYS LIMITED (Q2OE1CX)": 53100,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 38940,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "mbr",
+   "space": "Master-Bedroom",
+   "space_raw": "Master Bedroom \u00b7 Used cloth unit",
+   "work_key": "alias:used_cloth_storage",
+   "sub_service": "Used cloth storage",
+   "sub_service_id": "",
+   "work_confidence": 0.9,
+   "space_confidence": 0.7,
+   "item_name": "Used cloth storage",
+   "room": "Master-Bedroom",
+   "work_item": "Used cloth storage",
+   "taxonomy": "Used cloth storage",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [
+    {
+     "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+     "item": "Used cloth storage unit",
+     "amount": 23954
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "MBR Used cloth units",
+     "amount": 13629
+    }
+   ],
+   "INFOSYS LIMITED (Q2OE1CX)": 23954,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 13629,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "mbr",
+   "space": "Master-Bedroom",
+   "space_raw": "Master bedroom",
+   "work_key": "alias:sliding_mechanism",
+   "sub_service": "Sliding mechanism",
+   "sub_service_id": "6a744eef7ddf2bf3991fc029",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Sliding mechanism",
+   "room": "Master-Bedroom",
+   "work_item": "Sliding mechanism",
+   "taxonomy": "Sliding mechanism",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Per Unit / Each",
+   "breakdown": [],
+   "INFOSYS LIMITED (Q2OE1CX)": 0,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 14160,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "not_quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "mbr",
+   "space": "Master-Bedroom",
+   "space_raw": "MBR Dressing Mirror \u00b7 MBR vanity Mirror",
+   "work_key": "alias:mirror",
+   "sub_service": "Mirror",
+   "sub_service_id": "",
+   "work_confidence": 0.6,
+   "space_confidence": 0.95,
+   "item_name": "Mirror",
+   "room": "Master-Bedroom",
+   "work_item": "Mirror",
+   "taxonomy": "Mirror",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "MBR Used cloth units",
+     "amount": 2832
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "Vanity Units",
+     "amount": 1888
+    }
+   ],
+   "INFOSYS LIMITED (Q2OE1CX)": 0,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 4720,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "not_quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "mbr",
+   "space": "Master-Bedroom",
+   "space_raw": "MBR Study unit",
+   "work_key": "alias:foldable_mechanism",
+   "sub_service": "Foldable mechanism",
+   "sub_service_id": "",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Foldable mechanism",
+   "room": "Master-Bedroom",
+   "work_item": "Foldable mechanism",
+   "taxonomy": "Foldable mechanism",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [],
+   "INFOSYS LIMITED (Q2OE1CX)": 0,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 2360,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "not_quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "kids_bedroom",
+   "space": "Kids-Bedroom",
+   "space_raw": "Kids Bedroom \u00b7 Kids bedroom",
+   "work_key": "alias:study_table",
+   "sub_service": "Study table",
+   "sub_service_id": "",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Study table",
+   "room": "Kids-Bedroom",
+   "work_item": "Study table",
+   "taxonomy": "Study table",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [
+    {
+     "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+     "item": "folding study table",
+     "amount": 14160
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "Study Table",
+     "amount": 23364
+    }
+   ],
+   "INFOSYS LIMITED (Q2OE1CX)": 14160,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 23364,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "kids_bedroom",
+   "space": "Kids-Bedroom",
+   "space_raw": "Kids Bedroom \u00b7 Kids bedroom",
+   "work_key": "alias:wall_decor",
+   "sub_service": "Wall decor",
+   "sub_service_id": "6a744f5a7ddf2bf3991fc079",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Wall decor",
+   "room": "Kids-Bedroom",
+   "work_item": "Wall decor",
+   "taxonomy": "Wall decor",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [
+    {
+     "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+     "item": "Wall Decor",
+     "amount": 56640
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "Wall Decor",
+     "amount": 36875
+    }
+   ],
+   "INFOSYS LIMITED (Q2OE1CX)": 56640,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 36875,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "kids_bedroom",
+   "space": "Kids-Bedroom",
+   "space_raw": "Kids Bedroom",
+   "work_key": "alias:foldable_mechanism",
+   "sub_service": "Foldable mechanism",
+   "sub_service_id": "",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Foldable mechanism",
+   "room": "Kids-Bedroom",
+   "work_item": "Foldable mechanism",
+   "taxonomy": "Foldable mechanism",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Per Unit / Each",
+   "breakdown": [],
+   "INFOSYS LIMITED (Q2OE1CX)": 0,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 2360,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "not_quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "common_washroom",
+   "space": "Common-Washroom",
+   "space_raw": "Common vanity unit \u00b7 Common washroom",
+   "work_key": "alias:vanity_units",
+   "sub_service": "Vanity units",
+   "sub_service_id": "69957f9725ccc8cecd1ddcdc",
+   "work_confidence": 0.9,
+   "space_confidence": 0.95,
+   "item_name": "Vanity units",
+   "room": "Common-Washroom",
+   "work_item": "Vanity units",
+   "taxonomy": "Vanity units",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+   "breakdown": [
+    {
+     "vendor": "INFOSYS LIMITED (Q2OE1CX)",
+     "item": "Vanity Units",
+     "amount": 20060
+    },
+    {
+     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+     "item": "Vanity Units",
+     "amount": 12390
+    }
+   ],
+   "INFOSYS LIMITED (Q2OE1CX)": 20060,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 12390,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "project_level",
+   "space": "Project-level",
+   "space_raw": "Window blinds",
+   "work_key": "alias:window_blinds",
+   "sub_service": "Window blinds",
+   "sub_service_id": "",
+   "work_confidence": 0.9,
+   "space_confidence": 0.4,
+   "item_name": "Window blinds",
+   "room": "Project-level",
+   "work_item": "Window blinds",
+   "taxonomy": "Window blinds",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Fixed Amount / Lump Sum",
+   "breakdown": [],
+   "INFOSYS LIMITED (Q2OE1CX)": 0,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 29500,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "not_quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "project_level",
+   "space": "Project-level",
+   "space_raw": "Tissue Paper holder",
+   "work_key": "alias:tissue_paper_holder",
+   "sub_service": "Tissue paper holder",
+   "sub_service_id": "",
+   "work_confidence": 0.9,
+   "space_confidence": 0.4,
+   "item_name": "Tissue paper holder",
+   "room": "Project-level",
+   "work_item": "Tissue paper holder",
+   "taxonomy": "Tissue paper holder",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Fixed Amount / Lump Sum",
+   "breakdown": [],
+   "INFOSYS LIMITED (Q2OE1CX)": 0,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 2950,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "not_quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "project_level",
+   "space": "Project-level",
+   "space_raw": "Profile lights Required areas",
+   "work_key": "alias:lighting_points",
+   "sub_service": "Lighting points",
+   "sub_service_id": "",
+   "work_confidence": 0.9,
+   "space_confidence": 0.4,
+   "item_name": "Lighting points",
+   "room": "Project-level",
+   "work_item": "Lighting points",
+   "taxonomy": "Lighting points",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Running Length (rft)",
+   "breakdown": [],
+   "INFOSYS LIMITED (Q2OE1CX)": 0,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 18644,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "not_quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "project_level",
+   "space": "Project-level",
+   "space_raw": "Adaptors required areas",
+   "work_key": "alias:adaptors",
+   "sub_service": "Adaptors",
+   "sub_service_id": "",
+   "work_confidence": 0.9,
+   "space_confidence": 0.4,
+   "item_name": "Adaptors",
+   "room": "Project-level",
+   "work_item": "Adaptors",
+   "taxonomy": "Adaptors",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Per Unit / Each",
+   "breakdown": [],
+   "INFOSYS LIMITED (Q2OE1CX)": 0,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 10030,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "not_quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  },
+  {
+   "category": "Interiors",
+   "space_id": "project_level",
+   "space": "Project-level",
+   "space_raw": "Electrical work required areas",
+   "work_key": "alias:electrical_points",
+   "sub_service": "Electrical points",
+   "sub_service_id": "",
+   "work_confidence": 0.9,
+   "space_confidence": 0.4,
+   "item_name": "Electrical points",
+   "room": "Project-level",
+   "work_item": "Electrical points",
+   "taxonomy": "Electrical points",
+   "service_type": "MID_SEGMENT",
+   "pricing_method": "Per Unit / Each",
+   "breakdown": [],
+   "INFOSYS LIMITED (Q2OE1CX)": 0,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 22420,
+   "coverage": {
+    "INFOSYS LIMITED (Q2OE1CX)": "not_quoted",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
+   }
+  }
+ ],
+ "vendors": [
+  "INFOSYS LIMITED (Q2OE1CX)",
+  "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)"
+ ],
+ "vendorMeta": {
+  "INFOSYS LIMITED (Q2OE1CX)": {
+   "company": "INFOSYS LIMITED",
+   "filename": "Q2OE1CX",
+   "quote_number": "Q2OE1CX",
+   "quote_date": "2026-08-21"
+  },
+  "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": {
+   "company": "TATA CONSULTANCY SERVICES LIMITED",
+   "filename": "QGT3A1I",
+   "quote_number": "QGT3A1I",
+   "quote_date": "2026-08-21"
+  }
+ }
+}

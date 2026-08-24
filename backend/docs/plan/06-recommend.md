@@ -1,0 +1,107 @@
+# S6 — Recommend
+
+Turn `MatrixV1` into a short procurement narrative.
+
+**Input:** `MatrixV1` + `chartData`.
+**Output:** markdown bullets (`report`).
+
+**Module:** `services/comparator.py::_generate_recommendation`,
+`_build_fallback_report`.
+
+---
+
+## The problem this solves
+
+The old prompt asserted something false:
+
+```
+Rows are grouped by SPACE (room) then sub-service. N/A or 0 means that
+vendor did not quote that work in that space.
+```
+
+After S4, a zero can mean three different things, and only one of them is "did
+not quote". Feeding the old sentence to the model guaranteed confident wrong
+conclusions — it would report a vendor as having omitted electrical work when
+that vendor had simply bundled it, or priced it under a room.
+
+The compact matrix sent to the model also flattened the tiers away, so the model
+could not see that a lumpsum and a five-line sum are different kinds of number.
+
+## What the prompt now receives
+
+Three labelled sections instead of one flat list:
+
+1. **By space** — `spaceTier` rows, with each vendor's amount and coverage status
+   (`quoted` / `incl_in_bundle` / `not_quoted`).
+2. **Bundled scopes** — `bundleTier` rows, each with `basis` per vendor so the
+   model knows which figure is a single lumpsum and which is a sum of itemised
+   lines, plus any `overlap_flags`.
+3. **Project-level** — `projectTier` rows.
+
+Plus the per-vendor totals, unchanged.
+
+The prompt states the coverage semantics explicitly and instructs the model that
+`incl_in_bundle` must never be described as a missing item. It is also told not
+to compare a lumpsum against an itemised sum without naming it as a scope
+difference.
+
+Bundle rows are the most decision-relevant content in the whole comparison — a
+Rs 63,000 gap between one vendor's hardware lumpsum and another's itemised
+accessories is exactly what a procurement decision turns on — so they are given
+their own required bullet.
+
+## Bullets required
+
+Unchanged in shape (4–6 bullets, bold label then one sentence), with the scope
+bullet now grounded in real data rather than guesswork:
+
+- **Lowest Total**
+- **By Space** — name rooms that are `comparable`, and only those
+- **Scope Difference** — bundle rows and `not_quoted` gaps, kept distinct
+- **Watch Out** — `overlap_flags`, when any exist
+- **Recommendation**
+
+## Timeout and fallback
+
+Unchanged: the Gemini call runs in a worker thread with a hard
+`RECOMMENDATION_TIMEOUT_SEC = 45` ceiling; on timeout or error,
+`_build_fallback_report` returns deterministic bullets from the totals so a run
+always finishes with a report. The matrix is published to the frontend before
+this call starts, so a slow recommendation never blocks the table.
+
+`_build_fallback_report` gains one line when bundles exist, noting that some
+scopes are bundled and need confirming — otherwise the fallback would repeat the
+old "smaller scope" hand-wave while the data now says something specific.
+
+## Tests
+
+- the prompt contains no "N/A means did not quote" claim,
+- coverage status and `basis` reach the prompt text,
+- a mocked timeout still returns a report,
+- the fallback mentions bundles when bundles exist and stays quiet when they do
+  not.
+
+The narrative text itself is not asserted — only that the model is given correct
+inputs and that the call always terminates.
+
+---
+
+## What to change if this stage breaks
+
+**Symptom: the report contradicts the table.**
+Check what actually reached the prompt before touching prompt wording. A
+contradiction usually means the compact projection dropped a field, not that the
+model misread it.
+
+**Symptom: the report calls a bundled scope "not quoted".**
+The coverage status is missing from the projection, or the semantics sentence was
+edited out. Both are in this file's projection step.
+
+**Symptom: recommendations time out often.**
+The prompt is too large. Trim the projection — drop `breakdown` and any
+zero-amount rows before serialising. Do not raise the timeout; the fallback
+exists for this.
+
+**Do not** fix a data problem with prompt wording. If the model is drawing a
+wrong conclusion from a correct matrix, tighten the prompt. If the matrix itself
+is wrong, the fix is in S2–S5 and no amount of prompting will save it.

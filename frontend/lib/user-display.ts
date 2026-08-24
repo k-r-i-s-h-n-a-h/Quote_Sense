@@ -4,6 +4,13 @@ function asTrimmed(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
+/** Tatva JWTs sometimes put the phone in the `email` claim (no @). */
+export function looksLikePhoneNotEmail(value: string): boolean {
+  if (!value || value.includes("@")) return false;
+  const digits = value.replace(/\D/g, "");
+  return digits.length >= 10 && digits.length <= 15;
+}
+
 /**
  * Tatva / PM profiles store the display name under several keys.
  * Prefer explicit name fields; never fall back to phone number in UI.
@@ -26,15 +33,22 @@ export function resolveProfileName(
   );
 }
 
-/** Copy resolved PM/Tatva name onto name + fullName for the rest of the app. */
+/** Copy resolved PM/Tatva name onto name + fullName; never keep a phone in email. */
 export function withResolvedName(user: TatvaUser): TatvaUser {
-  const resolved = resolveProfileName(user);
-  if (!resolved) return user;
-  return {
-    ...user,
-    name: asTrimmed(user.name) || resolved,
-    fullName: asTrimmed(user.fullName) || resolved,
-  };
+  const email = asTrimmed(user.email);
+  const phone = asTrimmed(user.phoneNumber);
+  const next: TatvaUser = { ...user };
+
+  if (email && looksLikePhoneNotEmail(email)) {
+    if (!phone) next.phoneNumber = email;
+    delete next.email;
+  }
+
+  const resolved = resolveProfileName(next);
+  if (!resolved) return next;
+  next.name = asTrimmed(next.name) || resolved;
+  next.fullName = asTrimmed(next.fullName) || resolved;
+  return next;
 }
 
 export function getUserDisplayName(

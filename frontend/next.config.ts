@@ -6,6 +6,9 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: path.join(__dirname),
   },
+  // Recharts 3 pulls react-redux, which does `import * as React` then reads
+  // React.version. Next 16 webpack does not re-export that named binding.
+  transpilePackages: ["recharts", "react-redux"],
   images: {
     remotePatterns: [
       {

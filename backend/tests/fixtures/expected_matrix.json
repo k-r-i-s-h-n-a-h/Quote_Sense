@@ -1,0 +1,181 @@
+{
+  "_note": "Load-bearing assertions for the golden comparison, not a full snapshot. A full snapshot would break on every cosmetic change; these are the outcomes that define correct grouping.",
+  "vendor_a": "INFOSYS LIMITED (Q2OE1CX)",
+  "vendor_b": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
+
+  "spaces_must_not_exist": [
+    "Used cloth unit",
+    "USED CLOTH UNIT",
+    "MBR Dressing unit",
+    "MBR Dressing Mirror",
+    "MBR Study unit",
+    "MBR King size bed",
+    "MBR side table",
+    "MBR Vanity unit",
+    "MBR Glass partitions",
+    "MBR vanity Mirror",
+    "Kitchen Accessories",
+    "Common vanity unit",
+    "Window blinds",
+    "Tissue Paper holder",
+    "Profile lights Required areas",
+    "Adaptors required areas",
+    "Electrical work required areas"
+  ],
+
+  "spaces_must_exist": [
+    "Foyer",
+    "Living",
+    "Dining",
+    "Kitchen",
+    "Master-Bedroom",
+    "Kids-Bedroom",
+    "Common-Washroom",
+    "Project-level"
+  ],
+
+  "merged_rows": [
+    {
+      "why": "casing only - proved sub_key was raw vendor text",
+      "space": "Master-Bedroom",
+      "labels": ["Side table", "Side Table"],
+      "amounts": { "a": 14160, "b": 9440 }
+    },
+    {
+      "why": "casing and plural",
+      "space": "Kitchen",
+      "labels": ["Rolling Shutter", "Rolling shutters"],
+      "amounts": { "a": 27258, "b": 17700 }
+    },
+    {
+      "why": "cross-vendor synonym",
+      "space": "Living",
+      "labels": ["False Ceiling", "False ceiling with painting"],
+      "amounts": { "a": 61950, "b": 49560 }
+    },
+    {
+      "why": "cross-vendor synonym, unit is a filler word",
+      "space": "Kitchen",
+      "labels": ["Loft", "Loft unit"],
+      "amounts": { "a": 60534, "b": 47082 }
+    },
+    {
+      "why": "one-to-many - vendor b split crockery into base and wall units",
+      "space": "Dining",
+      "labels": ["Crockery Units", "Crockery Base unit", "Crockery Wall unit"],
+      "amounts": { "a": 38940, "b": 70092 }
+    },
+    {
+      "why": "vendor b put the item name in the Space/Zone column with no room prefix",
+      "space": "Master-Bedroom",
+      "labels": ["Used cloth storage unit", "MBR Used cloth units"],
+      "amounts": { "a": 23954, "b": 13629 }
+    },
+    {
+      "why": "folding study table is the same work as study table",
+      "space": "Kids-Bedroom",
+      "labels": ["folding study table", "Study Table"],
+      "amounts": { "a": 14160, "b": 23364 }
+    }
+  ],
+
+  "separate_rows": [
+    {
+      "why": "base and wall are meaningful distinctions - filler stripping must not collapse these",
+      "space": "Kitchen",
+      "labels": ["Base Unit", "Wall Unit"]
+    },
+    {
+      "why": "different rooms must never merge",
+      "spaces": ["Kitchen", "Master-Bedroom"]
+    }
+  ],
+
+  "space_resolution": [
+    {
+      "space_raw": "Used cloth unit",
+      "resolved_space": "Master-Bedroom",
+      "space_source": "description",
+      "why": "description reads 'MBR Used cloth storages'"
+    },
+    {
+      "space_raw": "MBR Dressing Mirror",
+      "resolved_space": "Master-Bedroom",
+      "space_source": "space_raw"
+    },
+    {
+      "space_raw": "Kitchen Accessories",
+      "resolved_space": "Kitchen",
+      "space_source": "space_raw"
+    },
+    {
+      "space_raw": "Common vanity unit",
+      "resolved_space": "Common-Washroom",
+      "space_source": "space_raw"
+    },
+    {
+      "space_raw": "Profile lights Required areas",
+      "resolved_space": "Project-level",
+      "space_source": "project_level"
+    },
+    {
+      "space_raw": "Window blinds",
+      "resolved_space": "Project-level",
+      "space_source": "project_level"
+    }
+  ],
+
+  "description_wins": [
+    {
+      "why": "vendor labelled a dressing mirror as used-cloth storage",
+      "space_raw": "MBR Dressing Mirror",
+      "sub_service": "MBR Used cloth units",
+      "description": "Dressing Mirror",
+      "amount": 2832,
+      "expect_work_source": "description",
+      "expect_not_grouped_with": "Used cloth storage unit"
+    }
+  ],
+
+  "bundles": [
+    {
+      "family": "hardware",
+      "why": "the real lumpsum in this comparison - work_rollup only knew lighting so this never surfaced",
+      "bundle_vendor": "a",
+      "amounts": { "a": 100300, "b": 37198 },
+      "basis": { "a": "bundle", "b": "itemized" },
+      "b_itemized_lines": [
+        "Bottle Pullouts",
+        "Tandem Drawers",
+        "Pvc Cutlery tray",
+        "Soft closing hinges",
+        "Soft closing channels"
+      ],
+      "overlap_flags_contain": "rolling shutter",
+      "overlap_why": "vendor a's Hardwares description names a rolling shutter and vendor a also bills Rolling Shutter separately at 27258"
+    },
+    {
+      "family": "lighting",
+      "why": "scope split, not a lumpsum - vendor a priced electrical inside the kitchen while vendor b left it project-level. The old two-vendor guard hid this entirely and rendered vendor a as N/A.",
+      "bundle_vendor": null,
+      "amounts": { "a": 17700, "b": 72629 },
+      "basis": { "a": "itemized", "b": "itemized" },
+      "a_lines": ["CO light provision"],
+      "b_lines": [
+        "Decorative Lights",
+        "Spot lights",
+        "Profile lights Required areas",
+        "Adaptors",
+        "Electrical point creations"
+      ]
+    }
+  ],
+
+  "invariants": [
+    "every rupee appears in exactly one tier",
+    "no bundle amount contributes to any space total",
+    "tableData equals spaceTier plus projectTier",
+    "work_key is never empty",
+    "a space is comparable=false when any vendor is incl_in_bundle there"
+  ]
+}

@@ -1,0 +1,312 @@
+{
+  "vendor_name": "INFOSYS LIMITED (Q2OE1CX)",
+  "company": "INFOSYS LIMITED",
+  "source_filename": "Q2OE1CX",
+  "quote_number": "Q2OE1CX",
+  "quote_date": "2026-08-21",
+  "grand_total": 1150444.54,
+  "service_category": "Interiors",
+  "service_type": "midlevel",
+  "items": [
+    {
+      "sub_service": "Wall Panels",
+      "item_name": "Wall Panels",
+      "space_raw": "Foyer",
+      "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+      "description": "Wall panelling with designed laminates and glass combinations",
+      "quantity": 12,
+      "rate": 850.0,
+      "amount": 12036.0
+    },
+    {
+      "sub_service": "Console unit",
+      "item_name": "Console unit",
+      "space_raw": "Foyer",
+      "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+      "description": "Shoe rack seater at foyer with plywood and laminate finish. vents and concealed handles are handle proviision",
+      "quantity": 26,
+      "rate": 1350.0,
+      "amount": 41418.0
+    },
+    {
+      "sub_service": "Wall Decor",
+      "item_name": "Wall Decor",
+      "space_raw": "Foyer",
+      "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+      "description": "Wall decor at entrance with ledges and design.",
+      "quantity": 24,
+      "rate": 900.0,
+      "amount": 25488.0
+    },
+    {
+      "sub_service": "TV Units",
+      "item_name": "TV Units",
+      "space_raw": "Living",
+      "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+      "description": "TV unit with base and wall panelling",
+      "quantity": 28,
+      "rate": 1450.0,
+      "amount": 47908.0
+    },
+    {
+      "sub_service": "Wall Decor",
+      "item_name": "Wall Decor",
+      "space_raw": "Living",
+      "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+      "description": "Wall decor",
+      "quantity": 40,
+      "rate": 750.0,
+      "amount": 35400.0
+    },
+    {
+      "sub_service": "Crockery Units",
+      "item_name": "Crockery Units",
+      "space_raw": "dining area",
+      "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+      "description": "Crockery units with base and wall storage with profile shutter combinations.",
+      "quantity": 20,
+      "rate": 1650.0,
+      "amount": 38940.0
+    },
+    {
+      "sub_service": "Wall Decor",
+      "item_name": "Wall Decor",
+      "space_raw": "Dining",
+      "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+      "description": "",
+      "quantity": 20,
+      "rate": 750.0,
+      "amount": 17700.0
+    },
+    {
+      "sub_service": "Bench Seating",
+      "item_name": "Bench Seating",
+      "space_raw": "Dining area",
+      "pricing_method": "Per Unit / Each",
+      "description": "Japanese style dining table.",
+      "quantity": 1,
+      "rate": 34000.0,
+      "amount": 40120.0
+    },
+    {
+      "sub_service": "Base Unit",
+      "item_name": "Base Unit",
+      "space_raw": "Modular Kitchen",
+      "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+      "description": "Base unit with BWP plywood with laminate finish",
+      "quantity": 40,
+      "rate": 1650.0,
+      "amount": 77880.0
+    },
+    {
+      "sub_service": "Wall Unit",
+      "item_name": "Wall Unit",
+      "space_raw": "Modular Kitchen",
+      "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+      "description": "Wall unit with plywood carcase with profile shutter combinations",
+      "quantity": 18,
+      "rate": 1650.0,
+      "amount": 35046.0
+    },
+    {
+      "sub_service": "Loft",
+      "item_name": "Loft",
+      "space_raw": "Modular Kitchen",
+      "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+      "description": "Frame loft over wall unit",
+      "quantity": 54,
+      "rate": 950.0,
+      "amount": 60534.0
+    },
+    {
+      "sub_service": "Rolling Shutter",
+      "item_name": "Rolling Shutter",
+      "space_raw": "Modular Kitchen",
+      "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+      "description": "Tall unit for rolling shutter and wicker basket provision.",
+      "quantity": 14,
+      "rate": 1650.0,
+      "amount": 27258.0
+    },
+    {
+      "sub_service": "Janitor Unit",
+      "item_name": "Janitor Unit",
+      "space_raw": "Modular Kitchen",
+      "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+      "description": "",
+      "quantity": 10,
+      "rate": 1650.0,
+      "amount": 19470.0
+    },
+    {
+      "sub_service": "Additional Storage",
+      "item_name": "Additional Storage",
+      "space_raw": "Modular Kitchen",
+      "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+      "description": "",
+      "quantity": 10,
+      "rate": 1650.0,
+      "amount": 19470.0
+    },
+    {
+      "sub_service": "CO light provision",
+      "item_name": "CO light provision",
+      "space_raw": "Modular Kitchen",
+      "pricing_method": "Running Length (rft)",
+      "description": "Strip light",
+      "quantity": 20,
+      "rate": 750.0,
+      "amount": 17700.0
+    },
+    {
+      "sub_service": "Hardwares",
+      "item_name": "Hardwares",
+      "space_raw": "Modular Kitchen",
+      "pricing_method": "Fixed Amount / Lump Sum",
+      "description": "5 tandem, 1 bottle unit, Rolling shutter, Gola handles, Cutlery tray, Anti skid mat by haffle/ livesmrt.",
+      "quantity": 1,
+      "rate": 85000.0,
+      "amount": 100300.0
+    },
+    {
+      "sub_service": "Wardrobe",
+      "item_name": "Wardrobe",
+      "space_raw": "Master bedroom",
+      "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+      "description": "Hinged wardrobe",
+      "quantity": 50,
+      "rate": 1450.0,
+      "amount": 85550.0
+    },
+    {
+      "sub_service": "Loft",
+      "item_name": "Loft",
+      "space_raw": "Master bedroom",
+      "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+      "description": "Frame loft above wardrobe",
+      "quantity": 28,
+      "rate": 950.0,
+      "amount": 31388.0
+    },
+    {
+      "sub_service": "Dressing Unit",
+      "item_name": "Dressing Unit",
+      "space_raw": "Master bedroom",
+      "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+      "description": "",
+      "quantity": 14,
+      "rate": 1650.0,
+      "amount": 27258.0
+    },
+    {
+      "sub_service": "folding study table",
+      "item_name": "folding study table",
+      "space_raw": "Master bedroom",
+      "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+      "description": "",
+      "quantity": 6,
+      "rate": 1500.0,
+      "amount": 10620.0
+    },
+    {
+      "sub_service": "King Size Bed",
+      "item_name": "King Size Bed",
+      "space_raw": "Master bedroom",
+      "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+      "description": "plywood with laminate finish with ebco hydraulic mechanism",
+      "quantity": 40,
+      "rate": 1350.0,
+      "amount": 63720.0
+    },
+    {
+      "sub_service": "Side table",
+      "item_name": "Side table",
+      "space_raw": "Master bedroom",
+      "pricing_method": "Per Unit / Each",
+      "description": "",
+      "quantity": 2,
+      "rate": 6000.0,
+      "amount": 14160.0
+    },
+    {
+      "sub_service": "Vanity Units",
+      "item_name": "Vanity Units",
+      "space_raw": "Master bedroom",
+      "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+      "description": "Vanity base unit storage with BWP plywood and laminate",
+      "quantity": 18,
+      "rate": 1650.0,
+      "amount": 35046.0
+    },
+    {
+      "sub_service": "Shower cubic",
+      "item_name": "Shower cubic",
+      "space_raw": "Master bedroom",
+      "pricing_method": "Per Unit / Each",
+      "description": "design need to finalise price",
+      "quantity": 1,
+      "rate": 45000.0,
+      "amount": 53100.0
+    },
+    {
+      "sub_service": "folding study table",
+      "item_name": "folding study table",
+      "space_raw": "Kids bedroom",
+      "pricing_method": "Per Unit / Each",
+      "description": "With folding mechanism",
+      "quantity": 1,
+      "rate": 12000.0,
+      "amount": 14160.0
+    },
+    {
+      "sub_service": "Wall Decor",
+      "item_name": "Wall Decor",
+      "space_raw": "Kids bedroom",
+      "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+      "description": "",
+      "quantity": 64,
+      "rate": 750.0,
+      "amount": 56640.0
+    },
+    {
+      "sub_service": "Vanity Units",
+      "item_name": "Vanity Units",
+      "space_raw": "Common washroom",
+      "pricing_method": "Per Unit / Each",
+      "description": "",
+      "quantity": 1,
+      "rate": 17000.0,
+      "amount": 20060.0
+    },
+    {
+      "sub_service": "False Ceiling",
+      "item_name": "False Ceiling",
+      "space_raw": "Living area",
+      "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+      "description": "",
+      "quantity": 500,
+      "rate": 105.0,
+      "amount": 61950.0
+    },
+    {
+      "sub_service": "Wardrobe",
+      "item_name": "Wardrobe",
+      "space_raw": "Master Bedroom",
+      "pricing_method": "Per Unit / Each",
+      "description": "Haffle inline sliding system for wardrobe",
+      "quantity": 1,
+      "rate": 21000.0,
+      "amount": 24780.0
+    },
+    {
+      "sub_service": "Used cloth storage unit",
+      "item_name": "Used cloth storage unit",
+      "space_raw": "Master Bedroom",
+      "pricing_method": "Area \u2013 Direct Entry (sq ft)",
+      "description": "Plywood carcass with laminate finish",
+      "quantity": 14,
+      "rate": 1450.0,
+      "amount": 23954.0
+    }
+  ]
+}

@@ -29,11 +29,17 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../'
 from services.env_config import get_gemini_client, get_supabase_client
 from services.market_rate import (
     DEFAULT_SERVICE_TYPE,
-    lookup_market_rate,
     normalize_pricing_method,
     normalize_service_type,
-    update_rates_from_dataframe,
 )
+from services.bundles import (
+    apply_bundles,
+    bundle_comparison_rows,
+    bundled_families_by_vendor,
+    bundled_space_ids,
+)
+from services.space_clusters import apply_space_clusters
+from services.work_catalog import apply_work_catalog
 
 DEBUG_LOG_PATH = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "../../.cursor/debug-b7c34a.log")
@@ -153,16 +159,7 @@ def fetch_data(session_id):
     return df
 
 
-def _line_item_key(item_label: str, room: str) -> str:
-    """Stable Supabase item_key for one comparison-matrix row."""
-    label = (item_label or "").strip()
-    loc = (room or "").strip()
-    if loc and loc.lower() not in ("", "nan", "none") and loc != label:
-        return f"{label}::{loc}"
-    return label or loc or "Unspecified"
-
-
-def _build_fallback_report(chart_data):
+def _build_fallback_report(chart_data, bundle_tier=None):
     """A deterministic, no-AI recommendation built straight from the totals.
 
     Used when the Gemini recommendation call times out or errors, so the user
@@ -187,9 +184,22 @@ def _build_fallback_report(chart_data):
             f"₹{priciest['total']:,.0f} (~{diff_pct:.0f}% more than the lowest)."
         )
     lines.append(
-        "- **Scope Check:** A lower total may just mean a smaller scope — compare the "
-        "line items in the table before deciding."
+        "- **Scope Check:** A lower total may just mean a smaller scope — compare rooms "
+        "in the matrix before deciding."
     )
+    # With bundles detected we can say something specific instead of repeating
+    # the generic scope caveat above.
+    for bundle in bundle_tier or []:
+        basis = bundle.get("basis") or {}
+        bundlers = [v for v, b in basis.items() if b == "bundle"]
+        if not bundlers:
+            continue
+        lines.append(
+            f"- **Bundled Scope:** {bundlers[0]} priced "
+            f"\"{bundle.get('bundle_label')}\" as a single lump sum, so that row is "
+            "not a like-for-like comparison — confirm what it covers."
+        )
+        break
     lines.append(
         "- **Recommendation:** This is an automatic summary (the detailed AI write-up "
         "timed out). Re-run the comparison to retry the full analysis."
@@ -197,7 +207,109 @@ def _build_fallback_report(chart_data):
     return "\n".join(lines)
 
 
-def _generate_recommendation(summary_prompt, chart_data):
+def _build_recommendation_prompt(
+    space_tier, bundle_tier, project_tier, coverage, vendors, chart_data
+):
+    """Project the tiered matrix into a prompt that states what a zero means.
+
+    The previous prompt asserted "N/A or 0 means that vendor did not quote that
+    work". After S4 that is false for any work a vendor bundled, and the model
+    would confidently report a bundled scope as a missing one. Coverage status
+    and pricing basis are now passed through explicitly.
+    """
+    def _amounts(row):
+        return {v: int(row.get(v, 0) or 0) for v in vendors}
+
+    by_space = [
+        {
+            "space": row.get("space"),
+            "work": row.get("sub_service"),
+            "pricing_method": row.get("pricing_method"),
+            "coverage": row.get("coverage") or {},
+            **_amounts(row),
+        }
+        # Drop all-zero rows: they carry no signal and inflate the prompt.
+        for row in space_tier
+        if any(_amounts(row).values())
+    ]
+    bundles = [
+        {
+            "scope": row.get("bundle_label"),
+            "covers_spaces": row.get("covered_spaces"),
+            "covers_items": row.get("covered_items"),
+            "basis": row.get("basis"),
+            "possible_double_count": row.get("overlap_flags"),
+            **_amounts(row),
+        }
+        for row in bundle_tier
+    ]
+    project = [
+        {"work": row.get("sub_service"), **_amounts(row)}
+        for row in project_tier
+        if any(_amounts(row).values())
+    ]
+    not_comparable = sorted({
+        entry["space"] for entry in coverage if not entry.get("comparable", True)
+    })
+
+    return f"""
+        You are 'QuoteSense', an expert procurement analyst for TatvaOps.
+        Analyze these quotes based strictly on the provided data.
+
+        HOW TO READ THE DATA (important):
+        - BY SPACE rows are one work item in one room. Each row has a "coverage"
+          map per vendor:
+            "quoted"          = that vendor priced this work in this room.
+            "incl_in_bundle:X" = that vendor's price for this work is inside its
+                                 bundle X. It is NOT a missing item. NEVER say
+                                 this vendor did not quote it.
+            "not_quoted"      = a genuine gap in that vendor's scope.
+        - BUNDLED SCOPES rows compare a single lumpsum against the other vendor's
+          itemised lines for the same family. The "basis" map says how each figure
+          was arrived at: "bundle" is one lump price, "itemized" is the sum of
+          several lines, "none" means nothing quoted. A lumpsum and an itemised
+          sum are NOT the same kind of number — if they differ, call it a scope
+          difference, not simply a cheaper price.
+        - "possible_double_count" lists work the bundle description names that the
+          same vendor also bills separately. Treat it as a question for the
+          vendor, not a proven error.
+        - SPACES NOT DIRECTLY COMPARABLE have a bundle overlapping them, so their
+          room totals are not like-for-like.
+
+        BY SPACE:
+        {by_space}
+
+        BUNDLED SCOPES:
+        {bundles}
+
+        PROJECT-LEVEL (no room):
+        {project}
+
+        SPACES NOT DIRECTLY COMPARABLE: {not_comparable}
+        Overall Totals: {chart_data}
+
+        Write the analysis as SHORT, POINT-WISE bullets — NOT a paragraph.
+
+        FORMAT RULES (follow exactly):
+        - Output 4 to 6 bullet points, each on its own line starting with "- ".
+        - Begin every bullet with a short bold label using double asterisks, then a colon,
+          then one concise sentence. Example: "- **Best Overall Value:** Vendor X ...".
+        - Do NOT show arithmetic breakdowns (e.g. do not write amounts as "X + Y" or "(A + B)").
+        - Quote whole rupee totals only — no decimal paise.
+        - Do NOT mention market averages, moving averages, or historical baselines.
+
+        COVER THESE POINTS (one bullet each):
+        - **Lowest Total:** which quote is cheapest overall and by roughly how much.
+        - **By Space:** name 1-2 rooms where one vendor is clearly cheaper. Only use
+          rooms that are NOT in the not-comparable list.
+        - **Scope Difference:** the biggest bundled-scope gap, naming the basis on
+          each side, plus any work only one vendor quoted.
+        - **Watch Out:** any possible_double_count, or omit this bullet if there is none.
+        - **Recommendation:** a clear, practical suggestion on which to pick or what to confirm with vendors.
+        """
+
+
+def _generate_recommendation(summary_prompt, chart_data, bundle_tier=None):
     """Run the recommendation LLM call with a hard timeout + graceful fallback.
 
     The Gemini call runs in a worker thread so we can abandon it after
@@ -222,20 +334,191 @@ def _generate_recommendation(summary_prompt, chart_data):
             f"⚠️ Recommendation timed out after {RECOMMENDATION_TIMEOUT_SEC}s — "
             "returning data-driven fallback summary."
         )
-        return _build_fallback_report(chart_data)
+        return _build_fallback_report(chart_data, bundle_tier)
     except Exception as e:
         print(f"⚠️ Recommendation generation failed: {e} — using fallback summary.")
-        return _build_fallback_report(chart_data)
+        return _build_fallback_report(chart_data, bundle_tier)
     finally:
         ex.shutdown(wait=False)
 
 
+def _build_space_rows(subset, vendors, bundled_families=None):
+    """Pivot rows into one entry per (space_id, work_key).
+
+    Both halves of the key are canonical, which is what makes `Side table` and
+    `Side Table`, or `Bedroom 1` and `GF Bedroom 1`, land on a single row. The
+    displayed label comes from the modal work label among the contributing lines
+    so the row still reads in human words.
+    """
+    if subset is None or len(subset) == 0:
+        return []
+
+    space_order = subset.groupby('space_id')['__seq'].min().to_dict()
+    work_order = subset.groupby(['space_id', 'work_key'])['__seq'].min().to_dict()
+
+    totals = (
+        subset.groupby(['space_id', 'work_key', 'vendor_name'])['amount']
+        .sum()
+        .reset_index()
+    )
+    pivot_df = totals.pivot(
+        index=['space_id', 'work_key'],
+        columns='vendor_name',
+        values='amount',
+    ).fillna(0.0)
+
+    rows = []
+    for index, amounts in pivot_df.iterrows():
+        space_id, work_key = index
+        line_slice = subset.loc[
+            (subset['space_id'] == space_id) & (subset['work_key'] == work_key)
+        ]
+        if len(line_slice) == 0:
+            continue
+
+        def _modal(column, fallback=""):
+            if column not in line_slice.columns:
+                return fallback
+            mode = line_slice[column].mode()
+            if mode.empty:
+                return fallback
+            return str(mode.iloc[0])
+
+        label = _modal('work_label') or _modal('sub_service') or str(work_key)
+        space_label = _modal('space', 'Project-level')
+        space_raws = sorted({
+            str(v).strip()
+            for v in line_slice.get('space_raw', pd.Series(dtype=str)).tolist()
+            if str(v).strip()
+        })
+
+        breakdown = []
+        if len(line_slice) > 1:
+            for _, child in line_slice.iterrows():
+                breakdown.append({
+                    "vendor": str(child.get("vendor_name") or ""),
+                    "item": str(child.get("item_label") or child.get("item_name") or ""),
+                    "amount": round(float(child.get("amount") or 0)),
+                })
+
+        row_dict = {
+            "category": _modal('service_category', 'Other'),
+            "space_id": str(space_id),
+            "space": space_label,
+            "space_raw": " · ".join(space_raws),
+            "work_key": str(work_key),
+            "sub_service": label,
+            "sub_service_id": _modal('sub_service_id'),
+            "work_confidence": float(line_slice['work_confidence'].min())
+            if 'work_confidence' in line_slice.columns else 1.0,
+            "space_confidence": float(line_slice['space_confidence'].min())
+            if 'space_confidence' in line_slice.columns else 1.0,
+            # Retained for existing consumers that read the flat shape.
+            "item_name": label,
+            "room": space_label,
+            "work_item": label,
+            "taxonomy": label,
+            "service_type": normalize_service_type(
+                _modal('service_type', DEFAULT_SERVICE_TYPE)
+            ),
+            "pricing_method": normalize_pricing_method(_modal('pricing_method', 'Unit')),
+            "breakdown": breakdown,
+            "_space_order": float(space_order.get(space_id, 1e9)),
+            "_work_order": float(work_order.get((space_id, work_key), 1e9)),
+        }
+        # Cell-level coverage. A zero is only "not quoted" when the vendor has
+        # not bundled this work's family somewhere else in the quote.
+        family = str(_modal('bundle_family'))
+        cell_coverage = {}
+        for vendor in vendors:
+            amount = float(amounts[vendor]) if vendor in amounts.index else 0.0
+            row_dict[vendor] = round(amount) if amount > 0 else 0
+            if amount > 0:
+                cell_coverage[vendor] = "quoted"
+                continue
+            bundle_label = (bundled_families or {}).get(vendor, {}).get(family)
+            if bundle_label:
+                cell_coverage[vendor] = f"incl_in_bundle:{bundle_label}"
+            else:
+                cell_coverage[vendor] = "not_quoted"
+        row_dict["coverage"] = cell_coverage
+        rows.append(row_dict)
+
+    rows.sort(key=lambda r: (r["_space_order"], r["_work_order"]))
+    for row in rows:
+        row.pop("_space_order", None)
+        row.pop("_work_order", None)
+    return rows
+
+
+def _build_coverage(df, vendors):
+    """Per (space, vendor) status so the UI stops calling everything N/A.
+
+    A zero used to be rendered as "did not quote" in every case. After S4 it can
+    equally mean the amount sits inside a bundle, which is a completely different
+    conclusion for a buyer.
+    """
+    if df is None or len(df) == 0:
+        return []
+
+    space_rows = df[df['scope'] == 'space']
+    if len(space_rows) == 0:
+        return []
+
+    affected = bundled_space_ids(df)
+    ordered = (
+        space_rows.groupby(['space_id'])['__seq'].min().sort_values().index.tolist()
+    )
+
+    bundle_label_by_vendor = {}
+    for _, row in df[df['scope'] == 'bundle'].iterrows():
+        vendor = str(row.get('vendor_name') or '')
+        bundle_label_by_vendor.setdefault(vendor, []).append(
+            (str(row.get('bundle_id') or ''), str(row.get('bundle_label') or 'bundle'))
+        )
+
+    entries = []
+    for space_id in ordered:
+        slice_ = space_rows[space_rows['space_id'] == space_id]
+        space_label = str(slice_['space'].iloc[0]) if len(slice_) else str(space_id)
+        quoted_vendors = set(slice_['vendor_name'].tolist())
+        bundled_here = {
+            vendor for vendor, spaces in affected.items() if str(space_id) in spaces
+        }
+        comparable = len(bundled_here) == 0
+
+        for vendor in vendors:
+            if vendor in quoted_vendors:
+                status = "quoted"
+                bundle_id = ""
+            elif vendor in bundled_here:
+                status = "incl_in_bundle"
+                bundle_id = (bundle_label_by_vendor.get(vendor) or [("", "")])[0][0]
+            else:
+                status = "not_quoted"
+                bundle_id = ""
+            entry = {
+                "space_id": str(space_id),
+                "space": space_label,
+                "vendor": vendor,
+                "status": status,
+                "comparable": comparable,
+            }
+            if bundle_id:
+                entry["bundle_id"] = bundle_id
+                entry["bundle_label"] = (
+                    bundle_label_by_vendor.get(vendor) or [("", "")]
+                )[0][1]
+            entries.append(entry)
+    return entries
+
+
 def run_comparison(session_id, on_matrix_ready=None, df=None, fast_moving_avg=True):
-    """Build the comparison matrix, then generate the recommendation.
+    """Build the space-first comparison matrix, then generate the recommendation.
 
     If ``df`` is provided (MongoDB/Tatva payload lane), skip the Supabase fetch.
-    ``fast_moving_avg`` (default True) uses in-session / seed lookups only —
-    no market_moving_averages writes. MA updates only run from finalized quotes.
+    Compare does not look up or send market moving averages.
+    ``fast_moving_avg`` is kept for call-site compatibility and ignored.
     """
     try:
         if df is None:
@@ -271,11 +554,8 @@ def run_comparison(session_id, on_matrix_ready=None, df=None, fast_moving_avg=Tr
                 "quote_date": (str(r.get('quote_date', '') or '').strip() if has_quote_date else ''),
             }
 
-        # 2. Prepare Tabular Data & THE NOTEBOOK MEAN CALCULATION
-        # Three-level hierarchy:
-        #   service_category -> sub_service -> line items (item_name + room).
-        # Line items stay visible; the UI sums amounts on the sub_service header row.
-        for col in ('work_title', 'item_name', 'sub_service', 'service_category', 'pricing_method', 'service_type', 'rate'):
+        # 2. Space-first matrix: cluster rooms, roll up lighting lumpsum vs itemized.
+        for col in ('work_title', 'item_name', 'sub_service', 'service_category', 'pricing_method', 'service_type', 'rate', 'space_raw', 'description'):
             if col not in df.columns:
                 df[col] = '' if col != 'rate' else 0.0
             if col == 'rate':
@@ -286,12 +566,11 @@ def run_comparison(session_id, on_matrix_ready=None, df=None, fast_moving_avg=Tr
         if 'service_type' not in df.columns or df['service_type'].eq('').all():
             df['service_type'] = DEFAULT_SERVICE_TYPE
 
-        # Display-only rates for this compare matrix — never persist MA here.
-        # Market averages update only from isFinalizeQuote via apply_finalized_*.
-        bundle_rate_map = update_rates_from_dataframe(df, session_id, fast=True)
+        if "space_raw" not in df.columns or df["space_raw"].eq("").all():
+            df["space_raw"] = df["work_title"]
 
         def _is_blank(value):
-            return (not value) or value.lower() in ('', 'nan', 'none', 'null')
+            return (not value) or str(value).lower() in ('', 'nan', 'none', 'null')
 
         df['service_category'] = df['service_category'].apply(
             lambda v: v if not _is_blank(v) else 'Other'
@@ -300,120 +579,61 @@ def run_comparison(session_id, on_matrix_ready=None, df=None, fast_moving_avg=Tr
             lambda v: v if not _is_blank(v) else 'General'
         )
 
+        if "sub_service_id" not in df.columns:
+            df["sub_service_id"] = ""
+        df["sub_service_id"] = df["sub_service_id"].fillna("").astype(str).str.strip()
+
+        # Stage order is fixed and documented in backend/docs/plan/. Each stage
+        # only adds fields, so a failure in one is isolated from the others.
+        df = _bind_catalog_ids_from_cache(df)   # S2a — Tatva ObjectIds
+        df = apply_work_catalog(df)             # S2b — work_key
+        df = apply_space_clusters(df)           # S3  — space_id
+        df = apply_bundles(df)                  # S4  — scope
+
         def _item_label(r):
             if not _is_blank(r['item_name']):
                 return r['item_name']
-            if not _is_blank(r['work_title']):
-                return r['work_title']
-            return r['sub_service'] or 'Unspecified Item'
+            if not _is_blank(r['sub_service']):
+                return r['sub_service']
+            return r['work_title'] or 'Unspecified Item'
 
         df['item_label'] = df.apply(_item_label, axis=1)
-        df['room'] = df['work_title'].apply(lambda v: v if not _is_blank(v) else '')
+        df['room'] = df['space']
         df['work_item'] = df['item_label']
 
         df = df.reset_index(drop=True)
         df['__seq'] = range(len(df))
-        cat_order = df.groupby('service_category')['__seq'].min().to_dict()
-        sub_order = df.groupby(['service_category', 'sub_service'])['__seq'].min().to_dict()
-        item_order = (
-            df.groupby(
-                ['service_category', 'sub_service', 'item_label', 'room']
-            )['__seq'].min().to_dict()
+        vendors = sorted(df['vendor_name'].unique().tolist())
+
+        # Three tiers keyed by scope, so every rupee lands in exactly one of them.
+        # A bundle spans several rooms, so it cannot sit in the space tier without
+        # either distorting a room total or vanishing from all of them.
+        bundled_families = bundled_families_by_vendor(df)
+        space_tier = _build_space_rows(
+            df[df['scope'] == 'space'], vendors, bundled_families
         )
-
-        detailed_totals = (
-            df.groupby(
-                ['service_category', 'sub_service', 'item_label', 'room', 'vendor_name']
-            )['amount']
-            .sum()
-            .reset_index()
+        project_tier = _build_space_rows(
+            df[df['scope'] == 'project'], vendors, bundled_families
         )
-        pivot_df = detailed_totals.pivot(
-            index=['service_category', 'sub_service', 'item_label', 'room'],
-            columns='vendor_name',
-            values='amount',
-        ).fillna(0.0)
+        bundle_tier = bundle_comparison_rows(df, vendors)
+        coverage = _build_coverage(df, vendors)
 
-        vendors = pivot_df.columns.tolist()
-        table_data = []
+        table_data = space_tier + project_tier
 
-        for index, row in pivot_df.iterrows():
-            category, sub_service_name, item_label, room = index
-
-            line_mask = (
-                (df['service_category'] == category)
-                & (df['sub_service'] == sub_service_name)
-                & (df['item_label'] == item_label)
-                & (df['room'] == room)
-            )
-            line_slice = df.loc[line_mask]
-            service_type = normalize_service_type(
-                line_slice['service_type'].iloc[0] if len(line_slice) else DEFAULT_SERVICE_TYPE
-            )
-            pricing_method = normalize_pricing_method(
-                line_slice['pricing_method'].iloc[0] if len(line_slice) else 'Unit'
-            )
-            bundle = (service_type, str(category), str(sub_service_name), pricing_method)
-
-            if bundle in bundle_rate_map:
-                moving_avg, moving_weight = bundle_rate_map[bundle]
-            else:
-                lookup = lookup_market_rate(
-                    service_type, str(category), str(sub_service_name), pricing_method
-                )
-                moving_avg = lookup["market_rate"] if lookup else 0.0
-                moving_weight = lookup["weight"] if lookup else 0
-
-            # Compute average quantity across vendors for this specific line item so
-            # we can show market_estimate = rate_per_unit × avg_qty in the Moving Avg
-            # column — making it directly comparable to vendor total amounts.
-            avg_qty = 1.0
-            if moving_avg > 0 and 'quantity' in line_slice.columns:
-                valid_qtys = line_slice['quantity'].dropna()
-                valid_qtys = valid_qtys[valid_qtys > 0]
-                if len(valid_qtys) > 0:
-                    avg_qty = float(valid_qtys.mean())
-
-            market_estimate = round(moving_avg * avg_qty) if moving_avg > 0 else 0
-
-            row_dict = {
-                "category": str(category),
-                "sub_service": str(sub_service_name),
-                "item_name": str(item_label),
-                "room": str(room),
-                "work_item": str(item_label),
-                "taxonomy": str(sub_service_name),
-                "service_type": service_type,
-                "pricing_method": pricing_method,
-                # market_estimate = per-unit rate × avg qty → same unit as vendor amounts
-                "moving_average": market_estimate,
-                "moving_weight": moving_weight,
-                "market_average": market_estimate,
-                # raw per-unit rate kept for the UI to show as a sub-label (e.g. "₹1,166/sqft")
-                "market_rate_per_unit": round(moving_avg, 2),
-                "_cat_order": float(cat_order.get(category, 1e9)),
-                "_sub_order": float(sub_order.get((category, sub_service_name), 1e9)),
-                "_item_order": float(
-                    item_order.get((category, sub_service_name, item_label, room), 1e9)
-                ),
-            }
-            for v in vendors:
-                amt = float(row[v])
-                row_dict[v] = round(amt) if amt > 0 else 0
-            table_data.append(row_dict)
-
-        table_data.sort(key=lambda r: (r["_cat_order"], r["_sub_order"], r["_item_order"]))
-        for r in table_data:
-            r.pop("_cat_order", None)
-            r.pop("_sub_order", None)
-            r.pop("_item_order", None)
-
-        print(f"📊 Built comparison matrix with {len(table_data)} line items across {len(vendors)} quotes.")
+        print(
+            f"📊 Built matrix: {len(space_tier)} space rows, {len(bundle_tier)} bundle rows, "
+            f"{len(project_tier)} project rows across {len(vendors)} quotes."
+        )
 
         # Publish the fast matrix result before the slow recommendation call so the
         # frontend can render the chart + table right away.
         matrix_payload = sanitize_for_json({
+            "contract_version": "MatrixV1",
             "chartData": chart_data,
+            "spaceTier": space_tier,
+            "bundleTier": bundle_tier,
+            "projectTier": project_tier,
+            "coverage": coverage,
             "tableData": table_data,
             "vendors": vendors,
             "vendorMeta": vendor_meta,
@@ -428,51 +648,10 @@ def run_comparison(session_id, on_matrix_ready=None, df=None, fast_moving_avg=Tr
         # 3. Generate Expert Recommendation using Tatva Intelligence (Gemini 2.5 Flash)
         print("🧠 Generating Expert Recommendation with Tatva Intelligence...")
 
-        # Send a COMPACT view of the matrix to the LLM — only the fields it needs
-        # to reason about price (item, sub-service, category, market avg, and each
-        # vendor's amount). This drops duplicate/UI-only keys (room, work_item,
-        # taxonomy) and roughly halves the prompt size, making the call faster and
-        # far less likely to hang on large quotes.
-        compact_matrix = [
-            {
-                "item": r["item_name"],
-                "sub_service": r["sub_service"],
-                "category": r["category"],
-                "moving_avg": r["moving_average"],
-                "moving_weight": r["moving_weight"],
-                **{v: int(r.get(v, 0) or 0) for v in vendors},
-            }
-            for r in table_data
-        ]
-
-        summary_prompt = f"""
-        You are 'QuoteSense', an expert procurement analyst for TatvaOps.
-        Analyze these quotes based strictly on the provided data.
-        
-        Data Matrix (Includes the historical 'moving_avg' baseline and 'moving_weight'
-        — the number of past quotes used to build that baseline):
-        {compact_matrix}
-        Overall Totals: {chart_data}
-        
-        Write the analysis as SHORT, POINT-WISE bullets — NOT a paragraph.
-
-        FORMAT RULES (follow exactly):
-        - Output 4 to 6 bullet points, each on its own line starting with "- ".
-        - Begin every bullet with a short bold label using double asterisks, then a colon,
-          then one concise sentence. Example: "- **Best Overall Value:** Vendor X ...".
-        - Do NOT show arithmetic breakdowns (e.g. do not write amounts as "X + Y" or "(A + B)").
-        - Quote whole rupee totals only — no decimal paise.
-
-        COVER THESE POINTS (one bullet each):
-        - **Lowest Total:** which quote is cheapest overall and by roughly how much.
-        - **Price vs Baseline:** who tends to price above or below the moving average baseline on common work.
-        - **Scope Difference:** call out apples-to-oranges — a lower total may just mean fewer
-          services/items, so name what is missing or extra.
-        - **Strength:** which vendor is the better choice for a key service category and why.
-        - **Recommendation:** a clear, practical suggestion on which to pick or what to confirm.
-        """
-
-        ai_report = _generate_recommendation(summary_prompt, chart_data)
+        summary_prompt = _build_recommendation_prompt(
+            space_tier, bundle_tier, project_tier, coverage, vendors, chart_data
+        )
+        ai_report = _generate_recommendation(summary_prompt, chart_data, bundle_tier)
 
         # Reuse the already-sanitized matrix and just attach the report.
         final_output = {**matrix_payload, "report": ai_report}
@@ -496,8 +675,61 @@ def _unwrap_quote_payload(quote_entry: dict) -> dict:
     return quote_entry
 
 
+def _nested_oid(obj) -> str:
+    if not isinstance(obj, dict):
+        return ""
+    raw = obj.get("_id") or obj.get("id") or ""
+    if isinstance(raw, dict):
+        raw = raw.get("$oid") or raw.get("_id") or ""
+    return str(raw or "").strip()
+
+
+def _nested_name(obj, fallback: str = "") -> str:
+    if isinstance(obj, dict):
+        return str(obj.get("name") or fallback or "").strip()
+    return fallback
+
+
+def _bind_catalog_ids_from_cache(df):
+    """Resolve missing ObjectIds from cached JSON maps — no live Tatva HTTP."""
+    try:
+        from services.tatva_catalog import (
+            resolve_pricing_method_id,
+            resolve_sub_service_id,
+        )
+    except Exception:
+        return df
+
+    if "sub_service_id" not in df.columns:
+        df["sub_service_id"] = ""
+    if "pricing_method_id" not in df.columns:
+        df["pricing_method_id"] = ""
+
+    def _fill_sub(row):
+        existing = str(row.get("sub_service_id") or "").strip()
+        if existing:
+            return existing
+        return resolve_sub_service_id(row.get("sub_service")) or ""
+
+    def _fill_pm(row):
+        existing = str(row.get("pricing_method_id") or "").strip()
+        if existing:
+            return existing
+        return resolve_pricing_method_id(row.get("pricing_method")) or ""
+
+    df["sub_service_id"] = df.apply(_fill_sub, axis=1)
+    df["pricing_method_id"] = df.apply(_fill_pm, axis=1)
+    return df
+
+
 def mongodb_quotes_to_dataframe(quotes_list: list):
     """Build a comparison DataFrame directly from Tatva/MongoDB quote JSON."""
+    try:
+        from services.tatva_catalog import register_from_work_item
+    except Exception as exc:
+        print(f"ℹ️ Catalog harvest skipped: {exc}")
+        register_from_work_item = None
+
     rows = []
     for quote_entry in quotes_list:
         quote_data = _unwrap_quote_payload(quote_entry)
@@ -522,21 +754,27 @@ def mongodb_quotes_to_dataframe(quotes_list: list):
 
         for section in quote_data.get("workSummary") or []:
             for service_obj in section.get("services") or []:
-                category_name = (
-                    (service_obj.get("serviceId") or {}).get("name") or "General"
-                )
+                service_ref = service_obj.get("serviceId") or {}
+                category_name = _nested_name(service_ref, "General")
+                service_id = _nested_oid(service_ref)
                 for work_item in service_obj.get("workItems") or []:
+                    if register_from_work_item:
+                        try:
+                            register_from_work_item(work_item, persist=False)
+                        except Exception:
+                            pass
+                    sub_ref = work_item.get("subService") or {}
                     sub_service_name = (
-                        (work_item.get("subService") or {}).get("name")
+                        _nested_name(sub_ref)
                         or work_item.get("workTitle")
                         or "General Service"
                     )
+                    space_raw = str(work_item.get("workTitle") or "").strip()
                     pricing_list = work_item.get("pricingInput") or []
                     pricing = pricing_list[0] if pricing_list else {}
                     amount = float(pricing.get("grandTotal") or pricing.get("amount") or 0)
-                    pricing_method = (
-                        (work_item.get("pricingMethod") or {}).get("name") or "Unit"
-                    )
+                    pm_ref = work_item.get("pricingMethod") or {}
+                    pricing_method = _nested_name(pm_ref, "Unit")
                     rows.append({
                         "vendor_name": vendor_key,
                         "company": company,
@@ -547,19 +785,24 @@ def mongodb_quotes_to_dataframe(quotes_list: list):
                         "client_name": client_detail.get("clientName") or "",
                         "service_type": quote_service_type,
                         "service_category": category_name,
+                        "service_id": service_id,
                         "sub_service": sub_service_name,
-                        "work_title": work_item.get("workTitle") or "",
-                        "item_name": work_item.get("workTitle") or "",
+                        "sub_service_id": _nested_oid(sub_ref),
+                        "work_title": space_raw,
+                        "space_raw": space_raw,
+                        "item_name": sub_service_name,
                         "description": str(work_item.get("description") or "").replace("&nbsp;", " "),
                         "quantity": pricing.get("quantity") or 0,
                         "pricing_method": pricing_method,
+                        "pricing_method_id": _nested_oid(pm_ref),
                         "rate": pricing.get("rate") or 0,
                         "amount": amount,
                     })
 
     if not rows:
         raise ValueError("No line items found in quote payloads.")
-    return pd.DataFrame(rows)
+    df = pd.DataFrame(rows)
+    return _bind_catalog_ids_from_cache(df)
     
 def handle_chat_query(session_id, user_message):
     print(f"💬 Processing chat query for Session: {session_id}...")

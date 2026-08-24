@@ -39,7 +39,8 @@ export default function VendorInsights({
   const categories = useMemo(() => {
     const seen: string[] = [];
     for (const r of tableData) {
-      if (r.category && !seen.includes(r.category)) seen.push(r.category);
+      const space = String(r.space || r.room || "").trim();
+      if (space && !seen.includes(space)) seen.push(space);
     }
     return seen;
   }, [tableData]);
@@ -50,7 +51,7 @@ export default function VendorInsights({
     () =>
       selected === ALL
         ? tableData
-        : tableData.filter((r) => r.category === selected),
+        : tableData.filter((r) => String(r.space || r.room || "") === selected),
     [selected, tableData]
   );
 
@@ -79,7 +80,9 @@ export default function VendorInsights({
 
   const bestByCategory = useMemo(() => {
     return categories.map((cat) => {
-      const catRows = tableData.filter((r) => r.category === cat);
+      const catRows = tableData.filter(
+        (r) => String(r.space || r.room || "") === cat
+      );
       let best: { vendor: string; total: number } | null = null;
       for (const v of vendors) {
         let total = 0;
@@ -92,7 +95,7 @@ export default function VendorInsights({
     });
   }, [categories, tableData, vendors]);
 
-  const label = selected === ALL ? "all services" : selected;
+  const label = selected === ALL ? "all spaces" : selected;
 
   const savingsPct =
     cheapest && priciest && priciest.total > 0 && cheapest !== priciest
@@ -103,21 +106,21 @@ export default function VendorInsights({
     <section className="qs-card p-5 md:p-6">
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-5">
         <div>
-          <h2 className="qs-section-title">Category insights</h2>
+          <h2 className="qs-section-title">Space insights</h2>
           <p className="qs-section-sub">
-            Scan who is cheapest overall and by service category.
+            Scan who is cheapest overall and by room.
           </p>
         </div>
         <label className="text-sm sm:w-64">
           <span className="block text-stone-500 mb-1 text-xs font-medium">
-            Service filter
+            Space filter
           </span>
           <select
             value={selected}
             onChange={(e) => setSelected(e.target.value)}
             className="qs-select"
           >
-            <option value={ALL}>All services (total)</option>
+            <option value={ALL}>All spaces (total)</option>
             {categories.map((c) => (
               <option key={c} value={c}>
                 {c}
@@ -197,14 +200,14 @@ export default function VendorInsights({
       </div>
 
       <p className="text-[11px] text-stone-400 mt-3">
-        Lower bar = lower price. Item count shows how much of this service each
+        Lower bar = lower price. Item count shows how much of this space each
         vendor quoted — a low price with few items may mean smaller scope.
       </p>
 
       {bestByCategory.length > 0 && (
         <div className="mt-7 pt-5 border-t border-stone-100">
           <h3 className="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-3">
-            Lowest cost by service
+            Lowest cost by space
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {bestByCategory.map(({ category, best }) => (

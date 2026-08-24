@@ -13,6 +13,12 @@ import ComparisonMatrix from "../../components/compare/ComparisonMatrix";
 import CompareChat from "../../components/compare/CompareChat";
 import { buildVendorLabels } from "../../lib/format";
 import { downloadComparisonPdf } from "../../lib/download-comparison-pdf";
+import type {
+  BundleRow,
+  CoverageEntry,
+  MatrixV1,
+  SpaceRow,
+} from "../../lib/compare-types";
 import { getCompareLane, showPdfUpload } from "../../lib/compare-lane";
 import { STANDALONE_PDF_UPLOAD_ENABLED } from "../../lib/feature-flags";
 import { StandalonePdfCompareGuard } from "../../components/dashboard/PdfUploadGateButton";
@@ -45,6 +51,9 @@ const VendorChart = dynamic(() => import("../../components/VendorChart"), {
     </div>
   ),
 });
+
+/** Ask QuoteSense is kept in the tree but gated off for the space-first compare slice. */
+const SHOW_COMPARE_CHAT = false;
 
 /** True when report text is an error payload, not an AI recommendation. */
 function isErrorReport(report: string): boolean {
@@ -100,6 +109,11 @@ function QuoteSenseContent() {
   const [tableData, setTableData] = useState<any[]>([]);
   const [vendors, setVendors] = useState<string[]>([]);
   const [vendorMeta, setVendorMeta] = useState<Record<string, any>>({});
+  // MatrixV1 tiers. Empty for a legacy payload, which renders the flat table.
+  const [bundleTier, setBundleTier] = useState<BundleRow[]>([]);
+  const [projectTier, setProjectTier] = useState<SpaceRow[]>([]);
+  const [spaceTier, setSpaceTier] = useState<SpaceRow[]>([]);
+  const [coverage, setCoverage] = useState<CoverageEntry[]>([]);
 
   // Chat State Variables
   const [sessionId, setSessionId] = useState("");
@@ -191,6 +205,14 @@ function QuoteSenseContent() {
     router.replace("/compare");
   };
 
+  // Tiers travel with every payload shape, so both appliers use this.
+  const applyMatrixTiers = (data: MatrixV1) => {
+    setSpaceTier(data.spaceTier || []);
+    setBundleTier(data.bundleTier || []);
+    setProjectTier(data.projectTier || []);
+    setCoverage(data.coverage || []);
+  };
+
   const processComparisonData = (data: any) => {
     if (data.report) {
       setReport(data.report);
@@ -198,6 +220,7 @@ function QuoteSenseContent() {
       setTableData(data.tableData || []);
       setVendors(data.vendors || []);
       setVendorMeta(data.vendorMeta || {});
+      applyMatrixTiers(data);
       setSessionId(data.session_id);
       setChatHistory([
         { role: "ai", content: "Hi! I'm your QuoteSense Assistant. I've analyzed the synced quotes. Ask me anything..." }
@@ -215,6 +238,7 @@ function QuoteSenseContent() {
     setTableData(data.tableData || []);
     setVendors(data.vendors || []);
     setVendorMeta(data.vendorMeta || {});
+    applyMatrixTiers(data);
     if (data.session_id) setSessionId(data.session_id);
   };
 
@@ -295,6 +319,10 @@ function QuoteSenseContent() {
       setReport("");
       setChartData([]);
       setTableData([]);
+    setSpaceTier([]);
+    setBundleTier([]);
+    setProjectTier([]);
+    setCoverage([]);
       setVendors([]);
       setVendorMeta({});
       partialAppliedRef.current = false;
@@ -401,7 +429,11 @@ function QuoteSenseContent() {
     setFiles([]);
     setReport("");
     setChartData([]);
-    setTableData([]); 
+    setTableData([]);
+    setSpaceTier([]);
+    setBundleTier([]);
+    setProjectTier([]);
+    setCoverage([]);
     setVendors([]);   
     setVendorMeta({});
     setSessionId("");
@@ -414,7 +446,11 @@ function QuoteSenseContent() {
 
   const handleDownloadPdf = async () => {
     if (tableData.length === 0 || vendors.length === 0) return;
-    await downloadComparisonPdf(tableData, vendors, vendorLabels, vendorMeta);
+    await downloadComparisonPdf(tableData, vendors, vendorLabels, vendorMeta, {
+      bundleTier,
+      projectTier,
+      coverage,
+    });
   };
 
   const handleProgressTick = (data: {
@@ -495,6 +531,10 @@ function QuoteSenseContent() {
     setReport("");
     setChartData([]);
     setTableData([]);
+    setSpaceTier([]);
+    setBundleTier([]);
+    setProjectTier([]);
+    setCoverage([]);
     setVendors([]);
     setVendorMeta({});
     setChatHistory([]);
@@ -820,10 +860,6 @@ function QuoteSenseContent() {
           />
         )}
 
-        {report && tableData.length > 0 && !isErrorReport(report) && (
-          <RecommendationView text={report} />
-        )}
-
         {chartData.length > 0 && (
           <section className="qs-card p-5 md:p-6">
             <h2 className="qs-section-title">Cost comparison</h2>
@@ -840,6 +876,10 @@ function QuoteSenseContent() {
             vendors={vendors}
             vendorMeta={vendorMeta}
             onDownloadPdf={handleDownloadPdf}
+            spaceTier={spaceTier.length ? spaceTier : undefined}
+            bundleTier={bundleTier}
+            projectTier={projectTier}
+            coverage={coverage}
           />
         )}
 
@@ -851,18 +891,8 @@ function QuoteSenseContent() {
           />
         )}
 
-        {sessionId && tableData.length > 0 && (
-          <CompareChat
-            sessionId={sessionId}
-            chatHistory={chatHistory}
-            chatInput={chatInput}
-            isChatting={isChatting}
-            onInputChange={setChatInput}
-            onSubmit={handleChatSubmit}
-            onSuggestion={(text) => {
-              void sendChatMessage(text);
-            }}
-          />
+        {report && tableData.length > 0 && !isErrorReport(report) && (
+          <RecommendationView text={report} />
         )}
 
         {report && tableData.length > 0 && !isErrorReport(report) && (
@@ -882,6 +912,20 @@ function QuoteSenseContent() {
               New comparison
             </button>
           </div>
+        )}
+
+        {SHOW_COMPARE_CHAT && sessionId && tableData.length > 0 && (
+          <CompareChat
+            sessionId={sessionId}
+            chatHistory={chatHistory}
+            chatInput={chatInput}
+            isChatting={isChatting}
+            onInputChange={setChatInput}
+            onSubmit={handleChatSubmit}
+            onSuggestion={(text) => {
+              void sendChatMessage(text);
+            }}
+          />
         )}
       </div>
     </main>

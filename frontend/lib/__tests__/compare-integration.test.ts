@@ -15,6 +15,7 @@ import {
   coverageOf,
   parseCellStatus,
   projectRowsOf,
+  reconcileQuoteTotals,
   spaceRowsOf,
   type MatrixV1,
 } from "../compare-types";
@@ -117,6 +118,27 @@ describe("golden MatrixV1 payload", () => {
     // The lumpsum is additive to the rooms, never already inside them.
     const projectA = sumSubServiceRow(projectRowsOf(matrix), [A])[A];
     expect(spaceTotalA + projectA + bundleA).toBe(1139054);
+  });
+
+  it("reconciles tier sums to each vendor's quote total", () => {
+    const quoted = Object.fromEntries(
+      (matrix.chartData ?? []).map((point) => [point.vendor, point.total])
+    );
+    const totals = reconcileQuoteTotals(
+      matrix.vendors as string[],
+      spaceRowsOf(matrix),
+      bundleRowsOf(matrix),
+      projectRowsOf(matrix),
+      quoted
+    );
+    for (const point of matrix.chartData ?? []) {
+      expect(totals[point.vendor]?.total).toBe(Math.round(point.total));
+      expect(totals[point.vendor]?.matrix + totals[point.vendor]?.other).toBe(
+        Math.round(point.total)
+      );
+    }
+    // Infosys's hardware lumpsum must appear in the breakdown, not vanish.
+    expect(totals[A].bundles).toBe(100300);
   });
 
   it("still renders when the payload is stripped back to the legacy shape", () => {

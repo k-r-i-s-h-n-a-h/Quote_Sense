@@ -36,6 +36,39 @@ from services.tatva_services import resolve_service_by_id
 MIN_COMPARE_QUOTES = 2
 MAX_COMPARE_QUOTES = 3
 
+
+def _comparison_api_payload(
+    comparison_result: dict,
+    *,
+    session_id: str,
+    status: str = "success",
+    message: str | None = None,
+) -> dict:
+    """Ship the full MatrixV1 surface the frontend needs.
+
+    Earlier responses only forwarded chart/table/report. That left `incl. in …`
+    badges working (they live on each row) while the Bundled scopes block
+    vanished the moment the job finished — `bundleTier` never left the server.
+    """
+    payload = {
+        "status": status,
+        "session_id": session_id,
+        "contract_version": comparison_result.get("contract_version", "MatrixV1"),
+        "report": comparison_result.get("report", ""),
+        "chartData": comparison_result.get("chartData", []),
+        "tableData": comparison_result.get("tableData", []),
+        "spaceTier": comparison_result.get("spaceTier", []),
+        "bundleTier": comparison_result.get("bundleTier", []),
+        "projectTier": comparison_result.get("projectTier", []),
+        "coverage": comparison_result.get("coverage", []),
+        "vendors": comparison_result.get("vendors", []),
+        "vendorMeta": comparison_result.get("vendorMeta", {}),
+    }
+    if message is not None:
+        payload["message"] = message
+    return payload
+
+
 # Bulk: private = browser/PM app may cache 2h; CDN (Cloudflare) should not → cf-cache-status: DYNAMIC
 BULK_MARKET_RATE_CACHE = "private, max-age=7200, stale-while-revalidate=300"
 BULK_MARKET_RATE_CDN_CACHE = "no-store"
@@ -874,15 +907,7 @@ async def _run_compare_pipeline(session_id, saved_files):
             status="done",
             stage="done",
             message="Analysis complete.",
-            result={
-                "status": "success",
-                "session_id": session_id,
-                "report": comparison_result.get("report", "Error generating report."),
-                "chartData": comparison_result.get("chartData", []),
-                "tableData": comparison_result.get("tableData", []),
-                "vendors": comparison_result.get("vendors", []),
-                "vendorMeta": comparison_result.get("vendorMeta", {}),
-            },
+            result=_comparison_api_payload(comparison_result, session_id=session_id),
         )
     except Exception as e:
         print(f"❌ Pipeline crash for {session_id}: {e}")
@@ -1365,15 +1390,7 @@ async def _run_mongodb_sync_pipeline(session_id: str, quotes_list: list):
             stage="done",
             processed=total,
             message="Analysis complete.",
-            result={
-                "status": "success",
-                "session_id": session_id,
-                "report": comparison_result.get("report", ""),
-                "chartData": comparison_result.get("chartData", []),
-                "tableData": comparison_result.get("tableData", []),
-                "vendors": comparison_result.get("vendors", []),
-                "vendorMeta": comparison_result.get("vendorMeta", {}),
-            },
+            result=_comparison_api_payload(comparison_result, session_id=session_id),
         )
 
     except Exception as e:
@@ -1472,16 +1489,8 @@ async def get_existing_comparison(session_id: str):
     
     # This calls the SAME comparison engine your PDF upload uses!
     comparison_result = await run_in_threadpool(run_comparison, session_id)
-    
-    return {
-        "status": "success",
-        "session_id": session_id,
-        "report": comparison_result.get("report"),
-        "chartData": comparison_result.get("chartData"),
-        "tableData": comparison_result.get("tableData"),
-        "vendors": comparison_result.get("vendors"),
-        "vendorMeta": comparison_result.get("vendorMeta", {})
-    }
+
+    return _comparison_api_payload(comparison_result, session_id=session_id)
 
 
 @app.post("/api/chat")

@@ -117,6 +117,70 @@ export function coverageOf(matrix: MatrixV1): CoverageEntry[] {
 }
 
 /**
+ * Rebuild each vendor's quote total from the three tiers.
+ *
+ * Bundle-tier rows with `basis === "itemized"` are already counted in space or
+ * project tiers (scattered family lines). Only a true lumpsum (`basis ===
+ * "bundle"`) is extra money that was pulled out of the room totals.
+ *
+ * `quotedTotal`, when provided (the PDF/Mongo grand total from chartData), is
+ * the original quote amount the cards show. Any gap vs the tier sum is exposed
+ * as `other` — typically GST, round-off, or lines the extractor skipped.
+ */
+export function reconcileQuoteTotals(
+  vendors: Vendor[],
+  spaceTier: SpaceRow[],
+  bundleTier: BundleRow[],
+  projectTier: SpaceRow[],
+  quotedTotals?: Record<Vendor, number>
+): Record<
+  Vendor,
+  {
+    rooms: number;
+    bundles: number;
+    project: number;
+    matrix: number;
+    other: number;
+    total: number;
+  }
+> {
+  const out: Record<
+    Vendor,
+    {
+      rooms: number;
+      bundles: number;
+      project: number;
+      matrix: number;
+      other: number;
+      total: number;
+    }
+  > = {};
+  for (const vendor of vendors) {
+    const rooms = spaceTier.reduce((sum, row) => sum + amountOf(row, vendor), 0);
+    const bundles = bundleTier.reduce((sum, row) => {
+      if ((row.basis?.[vendor] ?? "none") !== "bundle") return sum;
+      return sum + amountOf(row, vendor);
+    }, 0);
+    const project = projectTier.reduce(
+      (sum, row) => sum + amountOf(row, vendor),
+      0
+    );
+    const matrix = rooms + bundles + project;
+    const quoted = Number(quotedTotals?.[vendor]);
+    const total = Number.isFinite(quoted) && quoted > 0 ? quoted : matrix;
+    out[vendor] = {
+      rooms,
+      bundles,
+      project,
+      matrix,
+      other: Math.max(0, Math.round(total) - Math.round(matrix)),
+      total: Math.round(total),
+    };
+  }
+  return out;
+}
+
+/**
  * Split a cell status into its parts. `"incl_in_bundle:Hardware"` carries the
  * bundle name after the colon so the UI can name it without a second lookup.
  */

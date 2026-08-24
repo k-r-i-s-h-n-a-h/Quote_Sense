@@ -15,6 +15,7 @@ import {
 import {
   amountOf,
   parseCellStatus,
+  reconcileQuoteTotals,
   type BundleRow,
   type CoverageEntry,
   type SpaceRow,
@@ -31,6 +32,8 @@ type Props = {
   bundleTier?: BundleRow[];
   projectTier?: SpaceRow[];
   coverage?: CoverageEntry[];
+  /** Vendor grand totals from chartData — the original quote amounts. */
+  quotedTotals?: Record<string, number>;
 };
 
 /**
@@ -104,6 +107,7 @@ export default function ComparisonMatrix({
   bundleTier = [],
   projectTier,
   coverage = [],
+  quotedTotals,
 }: Props) {
   const vendorLabels = useMemo(
     () => buildVendorLabels(vendors, vendorMeta),
@@ -120,6 +124,17 @@ export default function ComparisonMatrix({
   );
   const coverIdx = useMemo(() => coverageIndex(coverage), [coverage]);
   const colCount = vendors.length + 1;
+  const quoteTotals = useMemo(
+    () =>
+      reconcileQuoteTotals(
+        vendors,
+        spaceRows,
+        bundleTier,
+        projectTier?.length ? projectTier : [],
+        quotedTotals
+      ),
+    [vendors, spaceRows, bundleTier, projectTier, quotedTotals]
+  );
 
   const renderSpaces = (
     spaces: ReturnType<typeof groupTableData>[number]["spaces"]
@@ -444,6 +459,57 @@ export default function ComparisonMatrix({
                 ))}
               </>
             )}
+
+            <tr role="presentation">
+              <td
+                colSpan={colCount}
+                className="h-4 p-0 bg-[var(--background)] border-0"
+              />
+            </tr>
+            <tr className="bg-stone-900 text-white border-y-2 border-stone-900">
+              <td className="py-3.5 pl-5 pr-4">
+                <div className="text-xs font-extrabold uppercase tracking-wide">
+                  Quote total
+                </div>
+                <div className="text-[10px] text-stone-300 mt-0.5 font-normal normal-case tracking-normal">
+                  Original quote amount — rooms
+                  {bundleTier.some((b) =>
+                    vendors.some((v) => b.basis?.[v] === "bundle")
+                  )
+                    ? " + bundled lumpsums"
+                    : ""}
+                  {projectTier?.length ? " + project-level" : ""}
+                  {vendors.some((v) => (quoteTotals[v]?.other ?? 0) > 0)
+                    ? " + other (tax / round-off)"
+                    : ""}
+                </div>
+              </td>
+              {vendors.map((vendor, vIdx) => {
+                const parts = quoteTotals[vendor];
+                return (
+                  <td
+                    key={vIdx}
+                    className="px-3 py-3.5 text-right tabular-nums align-middle"
+                  >
+                    <div className="text-base font-extrabold">
+                      {formatInrFull(parts?.total ?? 0)}
+                    </div>
+                    <div className="text-[9px] text-stone-400 mt-0.5 normal-case leading-snug">
+                      {formatInrFull(parts?.rooms ?? 0)} rooms
+                      {(parts?.bundles ?? 0) > 0
+                        ? ` · ${formatInrFull(parts.bundles)} bundled`
+                        : ""}
+                      {(parts?.project ?? 0) > 0
+                        ? ` · ${formatInrFull(parts.project)} project`
+                        : ""}
+                      {(parts?.other ?? 0) > 0
+                        ? ` · ${formatInrFull(parts.other)} other`
+                        : ""}
+                    </div>
+                  </td>
+                );
+              })}
+            </tr>
           </tbody>
         </table>
       </div>
@@ -453,7 +519,9 @@ export default function ComparisonMatrix({
         did not quote this work;{" "}
         <span className="font-medium text-amber-700">incl. in …</span> means the
         price sits inside that vendor&apos;s bundle, so it is not missing.
-        Bundled amounts are excluded from room totals by design.
+        Bundled lumpsums are listed in{" "}
+        <span className="font-medium text-amber-800">Bundled scopes</span> and
+        added back in the Quote total so the figure matches the original quote.
       </p>
     </section>
   );

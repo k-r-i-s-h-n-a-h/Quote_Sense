@@ -207,10 +207,12 @@ function QuoteSenseContent() {
 
   // Tiers travel with every payload shape, so both appliers use this.
   const applyMatrixTiers = (data: MatrixV1) => {
-    setSpaceTier(data.spaceTier || []);
-    setBundleTier(data.bundleTier || []);
-    setProjectTier(data.projectTier || []);
-    setCoverage(data.coverage || []);
+    // Only overwrite when the key is present. A final job result that still
+    // omitted the tiers used to wipe the partial matrix's Bundled scopes block.
+    if (Array.isArray(data.spaceTier)) setSpaceTier(data.spaceTier);
+    if (Array.isArray(data.bundleTier)) setBundleTier(data.bundleTier);
+    if (Array.isArray(data.projectTier)) setProjectTier(data.projectTier);
+    if (Array.isArray(data.coverage)) setCoverage(data.coverage);
   };
 
   const processComparisonData = (data: any) => {
@@ -446,10 +448,15 @@ function QuoteSenseContent() {
 
   const handleDownloadPdf = async () => {
     if (tableData.length === 0 || vendors.length === 0) return;
+    const quoted: Record<string, number> = {};
+    for (const point of chartData) {
+      quoted[point.vendor] = Number(point.total) || 0;
+    }
     await downloadComparisonPdf(tableData, vendors, vendorLabels, vendorMeta, {
       bundleTier,
       projectTier,
       coverage,
+      quotedTotals: quoted,
     });
   };
 
@@ -880,6 +887,9 @@ function QuoteSenseContent() {
             bundleTier={bundleTier}
             projectTier={projectTier}
             coverage={coverage}
+            quotedTotals={Object.fromEntries(
+              chartData.map((point) => [point.vendor, Number(point.total) || 0])
+            )}
           />
         )}
 

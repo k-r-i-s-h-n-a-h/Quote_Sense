@@ -383,7 +383,7 @@ export default function ComparisonMatrix({
                     </div>
                     <div className="text-[10px] text-amber-800 mt-0.5 font-normal normal-case tracking-normal">
                       One vendor priced these as a single lump sum while another
-                      itemised them. Excluded from the room totals above.
+                      itemised them. Excluded from the space totals above.
                     </div>
                   </td>
                 </tr>
@@ -472,7 +472,7 @@ export default function ComparisonMatrix({
                   Quote total
                 </div>
                 <div className="text-[10px] text-stone-300 mt-0.5 font-normal normal-case tracking-normal">
-                  Original quote amount — rooms
+                  Original quote amount — spaces
                   {bundleTier.some((b) =>
                     vendors.some((v) => b.basis?.[v] === "bundle")
                   )
@@ -495,7 +495,7 @@ export default function ComparisonMatrix({
                       {formatInrFull(parts?.total ?? 0)}
                     </div>
                     <div className="text-[9px] text-stone-400 mt-0.5 normal-case leading-snug">
-                      {formatInrFull(parts?.rooms ?? 0)} rooms
+                      {formatInrFull(parts?.rooms ?? 0)} spaces
                       {(parts?.bundles ?? 0) > 0
                         ? ` · ${formatInrFull(parts.bundles)} bundled`
                         : ""}

@@ -342,7 +342,7 @@ export async function downloadComparisonPdf(
   if (bundleTier.length > 0) {
     body.push([
       {
-        content: "BUNDLED SCOPES (excluded from the room totals above)",
+        content: "BUNDLED SCOPES (excluded from the space totals above)",
         colSpan: vendors.length + 1,
         styles: {
           font: FONT,
@@ -441,7 +441,7 @@ export async function downloadComparisonPdf(
   body.push([
     {
       content:
-        "QUOTE TOTAL (original quote = rooms + bundled lumpsums + project-level + other)",
+        "QUOTE TOTAL (original quote = spaces + bundled lumpsums + project-level + other)",
       styles: {
         font: FONT,
         fillColor: [28, 25, 23],
@@ -454,7 +454,7 @@ export async function downloadComparisonPdf(
     ...vendors.map((v) => {
       const parts = quoteTotals[v];
       const detail = [
-        `${formatPdfAmount(parts?.rooms ?? 0)} rooms`,
+        `${formatPdfAmount(parts?.rooms ?? 0)} spaces`,
         (parts?.bundles ?? 0) > 0
           ? `${formatPdfAmount(parts.bundles)} bundled`
           : "",

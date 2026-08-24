@@ -9,6 +9,7 @@ import {
 import {
   amountOf,
   parseCellStatus,
+  reconcileQuoteTotals,
   type BundleRow,
   type CoverageEntry,
   type SpaceRow,
@@ -22,6 +23,7 @@ export type PdfTiers = {
   bundleTier?: BundleRow[];
   projectTier?: SpaceRow[];
   coverage?: CoverageEntry[];
+  quotedTotals?: Record<string, number>;
 };
 
 /** jsPDF built-in Helvetica — clean sans-serif for comparison exports. */
@@ -429,6 +431,57 @@ export async function downloadComparisonPdf(
     }
   }
 
+  const quoteTotals = reconcileQuoteTotals(
+    vendors,
+    spaceRows,
+    bundleTier,
+    projectTier,
+    tiers.quotedTotals
+  );
+  body.push([
+    {
+      content:
+        "QUOTE TOTAL (original quote = rooms + bundled lumpsums + project-level + other)",
+      styles: {
+        font: FONT,
+        fillColor: [28, 25, 23],
+        textColor: [255, 255, 255],
+        fontStyle: "bold",
+        fontSize: layout.category,
+        cellPadding: { top: 2.5, bottom: 2.5, left: 3, right: 3 },
+      },
+    },
+    ...vendors.map((v) => {
+      const parts = quoteTotals[v];
+      const detail = [
+        `${formatPdfAmount(parts?.rooms ?? 0)} rooms`,
+        (parts?.bundles ?? 0) > 0
+          ? `${formatPdfAmount(parts.bundles)} bundled`
+          : "",
+        (parts?.project ?? 0) > 0
+          ? `${formatPdfAmount(parts.project)} project`
+          : "",
+        (parts?.other ?? 0) > 0
+          ? `${formatPdfAmount(parts.other)} other`
+          : "",
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      return {
+        content: `${formatPdfAmount(parts?.total ?? 0)}\n${detail}`,
+        styles: {
+          font: FONT,
+          fillColor: [28, 25, 23],
+          textColor: [255, 255, 255],
+          fontStyle: "bold",
+          fontSize: layout.body,
+          halign: "right" as const,
+          cellPadding: { top: 2.5, bottom: 2.5, left: pad, right: pad },
+        },
+      };
+    }),
+  ]);
+
   const columnStyles = buildColumnStyles(vendors, tableWidth, layout);
 
   autoTable(doc, {
@@ -479,7 +532,7 @@ export async function downloadComparisonPdf(
     doc.text(
       [
         '"N/A" = that vendor did not quote this work.  "incl. in ..." = the price sits inside that vendor\'s bundle, so it is NOT missing.',
-        "Bundled amounts are excluded from room totals by design. Rooms marked \"scope differs\" are not like-for-like comparisons.",
+        "Bundled lumpsums sit under Bundled scopes and are added back in Quote total so the figure matches the original quote.",
       ],
       margin,
       finalY + 6

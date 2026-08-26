@@ -80,6 +80,15 @@ Detection is **per line**, with no cross-vendor precondition. The old
 two-vendor guard is gone. A bundle is a property of how one vendor priced one
 line, and it stays true whether or not anyone else itemised.
 
+Enumeration of the description is S2-backed: each comma-separated fragment is
+resolved with `work_slug_for` (aliases + taxonomy), then a small substring
+fallback for phrases like `5 tandem` that never match as a whole label. Adding
+a sub-service to the taxonomy teaches the detector the new word; a second
+hardcoded vocabulary is not required. Fragments the catalog has never seen
+still count via a slug of the normalised text, so a residential package
+listing sofa / chimney / electrical work is a bundle even before those words
+are aliased.
+
 ### Families
 
 `FAMILY` maps work keys to a coarse family so a bundle can find its counterpart
@@ -161,8 +170,10 @@ long sentence.
 **Symptom: a real bundle was missed.**
 Check `pricing_method` first; vendors invent new wording for lump pricing
 constantly, and the regex is the usual culprit. Then check whether the
-description's items are recognised — an unrecognised item token is really an S2
-alias gap.
+description's items are recognised — enumeration goes through S2
+(`work_slug_for`), so an unrecognised fragment is really an alias or taxonomy
+gap. A comma-separated residential list (false ceiling, TV units, sofa) must
+still count as a bundle even when some fragments only slugify.
 
 **Symptom: the wrong counterpart lines were summed.**
 The `FAMILY` map is too coarse. Split the family rather than special-casing the

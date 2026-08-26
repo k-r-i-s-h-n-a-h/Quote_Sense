@@ -56,6 +56,34 @@ def test_enumerating_lumpsum_is_a_bundle():
     )
 
 
+def test_residential_package_description_is_a_bundle():
+    """A room package listing furniture and finishes is a bundle.
+
+    The old token table only knew kitchen hardware, so
+    'False ceiling, Tv units, wall panels, sofa, electrical work' scored zero
+    items and the Rs 1,77,000 living-room lumpsum was compared as a single
+    work item against whoever itemised the same room.
+    """
+    living = "False ceiling, Tv units, wall panels, sofa, electrical work"
+    kitchen = "Includes Modular kitchen, chimney, sink, electrical work"
+    design = (
+        "Includes 2D flooring, 3D visualization, Concept design, "
+        "Boq preparation, Material assistence."
+    )
+    assert len(enumerated_items(living)) >= 2
+    assert len(enumerated_items(kitchen)) >= 2
+    assert len(enumerated_items(design)) >= 2
+    assert is_bundle(
+        {"pricing_method": "Fixed Amount / Lump Sum", "description": living}
+    )
+    assert is_bundle(
+        {"pricing_method": "Fixed Amount / Lump Sum", "description": kitchen}
+    )
+    assert is_bundle(
+        {"pricing_method": "Fixed Amount / Lump Sum", "description": design}
+    )
+
+
 def test_single_item_lump_price_is_not_a_bundle():
     """Vendor B's Rs 8,850 wall decor is lump-priced but covers one item."""
     assert not is_bundle(
@@ -184,3 +212,38 @@ def test_single_vendor_quote_produces_no_comparison_rows():
     # The line is still marked a bundle so its amount stays out of room totals.
     assert out.iloc[0]["scope"] == "bundle"
     assert all(r["basis"]["Solo (Q1)"] == "bundle" for r in rows)
+
+
+def test_room_package_is_a_bundle_tied_to_its_room():
+    """A living-room lumpsum must not sit in the space total as one work item."""
+    df = pd.DataFrame(
+        [
+            {
+                "vendor_name": "Lump (Q1)",
+                "sub_service": "Complete package",
+                "item_name": "Complete package",
+                "space_raw": "Living Room",
+                "pricing_method": "Fixed Amount / Lump Sum",
+                "description": "False ceiling, Tv units, wall panels, sofa, electrical work",
+                "amount": 177000,
+            },
+            {
+                "vendor_name": "Itemised (Q2)",
+                "sub_service": "False Ceiling",
+                "item_name": "False Ceiling",
+                "space_raw": "Ground Floor Living room",
+                "pricing_method": "Area – Direct Entry (sq ft)",
+                "description": "False ceiling for ground floor living room",
+                "amount": 23600,
+            },
+        ]
+    )
+    out = apply_bundles(apply_space_clusters(apply_work_catalog(df)))
+    package = out[out["sub_service"] == "Complete package"].iloc[0]
+    ceiling = out[out["sub_service"] == "False Ceiling"].iloc[0]
+    assert package["scope"] == "bundle"
+    assert "living" in [str(s) for s in package["covered_space_ids"]]
+    assert ceiling["scope"] == "space"
+    assert ceiling["space_id"] == package["space_id"]
+    rows = bundle_comparison_rows(out, ["Lump (Q1)", "Itemised (Q2)"])
+    assert any(r["basis"]["Lump (Q1)"] == "bundle" for r in rows)

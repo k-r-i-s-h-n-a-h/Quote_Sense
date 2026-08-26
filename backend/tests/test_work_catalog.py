@@ -19,6 +19,7 @@ from services.work_catalog import (
     is_known_work_label,
     normalize_work_label,
     resolve_work,
+    work_slug_for,
 )
 
 
@@ -149,6 +150,13 @@ def test_is_known_work_label_backs_the_space_predicate():
     assert is_known_work_label("Master bedroom") is False
     assert is_known_work_label("Kitchen area") is False
     assert is_known_work_label("Foyer") is False
+
+
+def test_work_slug_for_uses_the_same_vocabulary_as_resolve():
+    assert work_slug_for("False ceiling") == "false_ceiling"
+    assert work_slug_for("TV Units") == "tv_units"
+    assert work_slug_for("Modular Kitchen") == "modular_kitchen"
+    assert work_slug_for("not a real sub-service") is None
 
 
 def test_apply_work_catalog_adds_all_columns():

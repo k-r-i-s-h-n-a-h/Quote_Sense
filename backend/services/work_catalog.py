@@ -505,3 +505,17 @@ def is_known_work_label(raw: str) -> bool:
     sub-service automatically stops it becoming a phantom space.
     """
     return _resolve_label(raw) is not None
+
+
+def work_slug_for(raw: str) -> str | None:
+    """Canonical slug for a work-item phrase, or None when the catalog misses.
+
+    S4 uses this so a lumpsum description is enumerated against the same
+    vocabulary as S2: adding a sub-service to the taxonomy teaches the bundle
+    detector the new word automatically, instead of extending a second token
+    list.
+    """
+    hit = _resolve_label(raw)
+    if hit is None:
+        return None
+    return hit[0].split(":", 1)[1]

@@ -14,6 +14,7 @@ import StandalonePdfSection from "./StandalonePdfSection";
 import { PdfUploadGateButton } from "./PdfUploadGateButton";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState, ErrorState } from "@/components/ui/EmptyState";
+import SessionExpiredModal from "@/components/SessionExpiredModal";
 
 type DashboardError = {
   message: string;
@@ -60,6 +61,7 @@ export default function ProjectDashboard() {
   const [error, setError] = useState<DashboardError | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [serviceFilter, setServiceFilter] = useState("");
+  const [dismissedSessionModal, setDismissedSessionModal] = useState(false);
 
   useEffect(() => {
     if (!userId) {
@@ -196,22 +198,20 @@ export default function ProjectDashboard() {
 
         {loading && <ProjectGridSkeleton />}
 
+        {sessionError && !dismissedSessionModal && (
+          <SessionExpiredModal
+            onSignIn={() => {
+              logout();
+              window.location.href = "/login";
+            }}
+            onContinue={() => setDismissedSessionModal(true)}
+          />
+        )}
+
         {!loading && error && sessionError && (
-          <ErrorState
-            title="Your session has expired"
-            description="Sign in again to securely load your TatvaOps projects. PDF comparison remains available below when enabled."
-            action={
-              <button
-                type="button"
-                onClick={() => {
-                  logout();
-                  window.location.href = "/login";
-                }}
-                className="qs-btn qs-btn-primary"
-              >
-                Sign in again
-              </button>
-            }
+          <EmptyState
+            title="Projects unavailable"
+            description="Sign in to load your TatvaOps projects. You can still compare vendor quote PDFs using the standalone tool below."
           />
         )}
 

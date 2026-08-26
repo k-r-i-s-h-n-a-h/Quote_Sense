@@ -6,6 +6,11 @@ something breaks so that you change **only the stage that broke**.
 
 Read this first, then open the stage file you actually need.
 
+**Do not reverse** the customer-facing invariants in [ACTION.md](ACTION.md):
+one physical room is one matrix section (Living / L R / LVR / L ROOM are the
+same space), and an expired session is a login popup rather than an inline
+button.
+
 | Where | File | Covers |
 | --- | --- | --- |
 | Root | `PLAN.md` (this file) | Stage map, contract chain, change protocol |

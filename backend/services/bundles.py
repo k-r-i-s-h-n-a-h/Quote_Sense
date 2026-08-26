@@ -70,8 +70,9 @@ FAMILY_LABELS = {
 # Separators a vendor uses when listing what a lumpsum covers.
 _LIST_SPLIT_RE = re.compile(r",|;|\band\b|&|\+|/")
 
-# Tokens that name a work item inside a bundle description. Used only to count
-# how many distinct items a description enumerates, and to spot overlaps.
+# Substring fallback for fragments the catalog does not resolve as a whole
+# phrase — "5 tandem" never matches an alias, but "tandem" still names the item.
+# Prefer `work_slug_for` (S2) for everything else.
 _ITEM_TOKENS = {
     "tandem": "tandem_drawers",
     "bottle": "bottle_pullouts",
@@ -95,6 +96,8 @@ _ITEM_TOKENS = {
     "wardrobe": "wardrobe",
     "painting": "painting",
 }
+
+_INCLUDES_RE = re.compile(r"^(includes?|including)\s+", re.I)
 
 
 def family_of(row: dict[str, Any]) -> str:
@@ -121,24 +124,58 @@ def is_lump_pricing(row: dict[str, Any]) -> bool:
     return bool(_LUMP_RE.search(str(row.get("pricing_method") or "")))
 
 
+def _slug_for_fragment(fragment: str) -> str | None:
+    """Resolve one comma-separated piece of a bundle description to a work slug.
+
+    Order: S2 catalog (aliases + taxonomy), then the substring token table for
+    phrases like "5 tandem" that never match as a whole label, then a slug of
+    the normalised fragment so a residential word the catalog has not seen yet
+    still counts as a distinct item.
+    """
+    cleaned = _INCLUDES_RE.sub("", (fragment or "").strip())
+    if not cleaned:
+        return None
+
+    try:
+        from services.work_catalog import normalize_work_label, work_slug_for
+    except Exception:
+        work_slug_for = None  # type: ignore[assignment]
+        normalize_work_label = None  # type: ignore[assignment]
+
+    if work_slug_for:
+        slug = work_slug_for(cleaned)
+        if slug:
+            return slug
+
+    folded = cleaned.casefold()
+    for token, slug in _ITEM_TOKENS.items():
+        if token in folded:
+            return slug
+
+    if not normalize_work_label:
+        return None
+    norm = normalize_work_label(cleaned)
+    words = [w for w in (norm or "").split() if w and not w.isdigit()]
+    if not words:
+        return None
+    return re.sub(r"[^a-z0-9]+", "_", " ".join(words)).strip("_") or None
+
+
 def enumerated_items(description: str) -> list[str]:
     """Work keys a bundle description enumerates.
 
-    Requires real separators and recognised item tokens, so a long prose
-    description of a single item does not read as a list.
+    Requires real separators and recognised items, so a long prose description
+    of a single item does not read as a list. Recognition goes through S2 so
+    the token table is not a second vocabulary that has to be kept in sync.
     """
-    text = (description or "").casefold()
+    text = (description or "").strip()
     if not text:
         return []
     found: list[str] = []
     for fragment in _LIST_SPLIT_RE.split(text):
-        fragment = fragment.strip()
-        if not fragment:
-            continue
-        for token, slug in _ITEM_TOKENS.items():
-            if token in fragment and slug not in found:
-                found.append(slug)
-                break
+        slug = _slug_for_fragment(fragment)
+        if slug and slug not in found:
+            found.append(slug)
     return found
 
 
@@ -185,10 +222,15 @@ def apply_bundles(df):
             bundle_labels.append(label)
             bundle_families.append(family or "mixed")
             covered_work.append(items)
-            # A bundle description rarely names rooms; leaving this empty means
-            # "unknown, possibly all", which the coverage step treats as
-            # affecting every room where the family appears.
-            covered_spaces.append([])
+            # A room-level package (Living Room complete package) names its room
+            # on the line itself. Recording that space keeps coverage honest for
+            # mixed-family bundles, which have no single FAMILY to fan out.
+            # Empty still means "unknown, possibly all" for project-wide lumpsums.
+            space_id = str(row.get("space_id") or "")
+            if space_id and space_id != "project_level":
+                covered_spaces.append([space_id])
+            else:
+                covered_spaces.append([])
         elif str(row.get("space_id") or "") == "project_level":
             scopes.append("project")
             bundle_ids.append("")

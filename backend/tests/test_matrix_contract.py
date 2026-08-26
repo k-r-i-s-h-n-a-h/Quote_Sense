@@ -148,6 +148,41 @@ def test_used_cloth_storage_compares_across_vendors(matrix):
     assert rows[0][VENDOR_B] == 13629
 
 
+def test_dressing_mirror_is_not_rolled_into_used_cloth(matrix):
+    used = rows_named(matrix, "Used cloth storage", "mbr")
+    assert used[0][VENDOR_B] == 13629
+    mirrors = rows_named(matrix, "Mirror", "mbr")
+    assert mirrors and mirrors[0][VENDOR_B] >= 2832
+    assert "mirror" in mirrors[0]["work_key"]
+
+
+def test_seater_does_not_merge_with_bench_or_crockery(matrix):
+    crockery = rows_named(matrix, "Crockery units", "dining")
+    assert len(crockery) == 1
+    assert crockery[0][VENDOR_B] == 38940
+    bench = rows_named(matrix, "Bench seating", "dining")
+    assert len(bench) == 1
+    assert bench[0][VENDOR_A] == 40120
+    assert bench[0][VENDOR_B] in (0, None)
+    seater = [
+        row
+        for row in matrix["spaceTier"]
+        if row["space_id"] == "dining" and str(row["work_key"]).endswith("seating_unit")
+    ]
+    assert len(seater) == 1
+    assert seater[0][VENDOR_B] == 31152
+
+
+def test_tcs_wall_decor_stays_in_its_rooms(matrix):
+    """Single-item lumpsums are not a Mixed (Wall decor) package of ₹50,150."""
+    foyer = rows_named(matrix, "Wall decor", "foyer")
+    living = rows_named(matrix, "Wall decor", "living")
+    assert foyer and foyer[0][VENDOR_B] == 8850
+    assert living and living[0][VENDOR_B] == 8850
+    mixed = [r for r in matrix["bundleTier"] if r["bundle_family"] == "mixed"]
+    assert all(r.get(VENDOR_B, 0) != 50150 for r in mixed)
+
+
 @pytest.mark.parametrize(
     "label,space_id,amount_a,amount_b",
     [
@@ -155,7 +190,7 @@ def test_used_cloth_storage_compares_across_vendors(matrix):
         ("Rolling shutter", "kitchen", 27258, 17700),
         ("False ceiling", "living", 61950, 49560),
         ("Loft", "kitchen", 60534, 47082),
-        ("Crockery units", "dining", 38940, 70092),
+        ("Crockery units", "dining", 38940, 38940),
         ("Study table", "kids_bedroom", 14160, 23364),
     ],
 )

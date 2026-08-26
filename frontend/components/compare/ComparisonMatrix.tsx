@@ -486,7 +486,7 @@ export default function ComparisonMatrix({
               <>
                 {renderSectionHeader(
                   "Same work, different spaces",
-                  "Vendors placed this work under different spaces. Totals below are for easy comparison — the line items already appear in the spaces above.",
+                  "Already counted in the space totals above. Shown here only because the vendors filed this work under different rooms — not extra spend.",
                   "sky"
                 )}
                 {renderBundleRows(scattered, "sky")}

@@ -95,6 +95,16 @@ def test_single_item_lump_price_is_not_a_bundle():
     assert not is_bundle(
         {"pricing_method": "Fixed Amount / Lump Sum", "description": "Window blinds (approx.)"}
     )
+    assert not is_bundle(
+        {"pricing_method": "Fixed Amount / Lump Sum", "description": "Tissue paper holder"}
+    )
+    # Brand names joined with & must not look like a two-item list.
+    assert not is_bundle(
+        {
+            "pricing_method": "Fixed Amount / Lump Sum",
+            "description": "Wall Decor with PVC wall Beeding, Greenply brand & Century ply",
+        }
+    )
 
 
 def test_itemized_pricing_is_never_a_bundle():
@@ -247,3 +257,84 @@ def test_room_package_is_a_bundle_tied_to_its_room():
     assert ceiling["space_id"] == package["space_id"]
     rows = bundle_comparison_rows(out, ["Lump (Q1)", "Itemised (Q2)"])
     assert any(r["basis"]["Lump (Q1)"] == "bundle" for r in rows)
+
+
+def test_unrelated_lumpsums_are_not_one_mixed_package():
+    """TCS wall décor + blinds + tissue must not become Mixed (Wall decor) ₹50,150."""
+    df = pd.DataFrame(
+        [
+            {
+                "vendor_name": "TCS (Q1)",
+                "sub_service": "Wall Decor",
+                "item_name": "Wall Decor",
+                "space_raw": "Foyer area",
+                "pricing_method": "Fixed Amount / Lump Sum",
+                "description": "Wall Decor with PVC wall Beeding",
+                "amount": 8850,
+            },
+            {
+                "vendor_name": "TCS (Q1)",
+                "sub_service": "Wall Decor",
+                "item_name": "Wall Decor",
+                "space_raw": "Living area",
+                "pricing_method": "Fixed Amount / Lump Sum",
+                "description": "Wall Decor - Pvc wall beeding",
+                "amount": 8850,
+            },
+            {
+                "vendor_name": "TCS (Q1)",
+                "sub_service": "Window blinds",
+                "item_name": "Window blinds",
+                "space_raw": "Window blinds",
+                "pricing_method": "Fixed Amount / Lump Sum",
+                "description": "Window blinds (approx.)",
+                "amount": 29500,
+            },
+            {
+                "vendor_name": "TCS (Q1)",
+                "sub_service": "Tissue paper holder",
+                "item_name": "Tissue paper holder",
+                "space_raw": "Tissue Paper holder",
+                "pricing_method": "Fixed Amount / Lump Sum",
+                "description": "Tissue paper holder",
+                "amount": 2950,
+            },
+        ]
+    )
+    out = apply_bundles(apply_space_clusters(apply_work_catalog(df)))
+    assert (out["scope"] != "bundle").all()
+    rows = bundle_comparison_rows(out, ["TCS (Q1)"])
+    mixed = [r for r in rows if r["bundle_family"] == "mixed"]
+    assert all(r.get("TCS (Q1)", 0) != 50150 for r in mixed)
+    assert not any("wall decor" in str(r.get("bundle_label") or "").casefold() for r in mixed)
+
+
+def test_two_mixed_packages_stay_separate_rows():
+    """One vendor line = one package row. Do not sum leftover mixed packages."""
+    df = pd.DataFrame(
+        [
+            {
+                "vendor_name": "Lump (Q1)",
+                "sub_service": "Complete package",
+                "item_name": "Complete package",
+                "space_raw": "Living Room",
+                "pricing_method": "Fixed Amount / Lump Sum",
+                "description": "False ceiling, Tv units, wall panels, sofa, electrical work",
+                "amount": 177000,
+            },
+            {
+                "vendor_name": "Lump (Q1)",
+                "sub_service": "Kitchen package",
+                "item_name": "Kitchen package",
+                "space_raw": "Kitchen",
+                "pricing_method": "Fixed Amount / Lump Sum",
+                "description": "Includes Modular kitchen, chimney, sink, electrical work",
+                "amount": 250000,
+            },
+        ]
+    )
+    out = apply_bundles(apply_space_clusters(apply_work_catalog(df)))
+    assert list(out["scope"]) == ["bundle", "bundle"]
+    rows = bundle_comparison_rows(out, ["Lump (Q1)"])
+    mixed = [r for r in rows if r["bundle_family"] == "mixed"]
+    assert {r["Lump (Q1)"] for r in mixed} == {177000, 250000}

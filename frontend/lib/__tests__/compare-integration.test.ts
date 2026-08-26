@@ -60,7 +60,7 @@ describe("golden MatrixV1 payload", () => {
       ["Master-Bedroom", "Side table", 14160, 9440],
       ["Kitchen", "Rolling shutter", 27258, 17700],
       ["Living", "False ceiling", 61950, 49560],
-      ["Dining", "Crockery units", 38940, 70092],
+      ["Dining", "Crockery units", 38940, 38940],
     ] as [string, string, number, number][]) {
       const subs = find(space, label);
       expect(subs, `${label} in ${space}`).toHaveLength(1);

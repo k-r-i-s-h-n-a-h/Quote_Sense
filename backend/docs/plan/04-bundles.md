@@ -83,11 +83,15 @@ line, and it stays true whether or not anyone else itemised.
 Enumeration of the description is S2-backed: each comma-separated fragment is
 resolved with `work_slug_for` (aliases + taxonomy), then a small substring
 fallback for phrases like `5 tandem` that never match as a whole label. Adding
-a sub-service to the taxonomy teaches the detector the new word; a second
-hardcoded vocabulary is not required. Fragments the catalog has never seen
-still count via a slug of the normalised text, so a residential package
-listing sofa / chimney / electrical work is a bundle even before those words
-are aliased.
+a sub-service to the taxonomy (or an alias) teaches the detector the new word.
+Unknown fragments do **not** count: slugifying leftover prose is what turned
+TCS wall décor + blinds + tissue into a fake `Mixed (Wall decor)` package.
+
+`&` is not a list separator. `Greenply & Century` is a brand pair.
+
+Mixed leftover packages are emitted **one vendor line per row**. Summing every
+`bundle_family == mixed` line invents a figure no vendor quoted. Hardware and
+lighting families still pair as one family row.
 
 ### Families
 
@@ -149,7 +153,11 @@ None. S4 is fully deterministic: regex on `pricing_method`, token matching on
 `tests/test_bundles.py`:
 
 - `Hardwares` with a six-item description is detected as a bundle,
-- a lump-priced single item (`Wall Decor`, Rs 8,850) is **not**,
+- a lump-priced single item (`Wall Decor`, Rs 8,850) is **not**, even when the
+  description mentions a brand pair with `&`,
+- unrelated leftover lumpsums (wall décor + blinds + tissue) are never one
+  Mixed package,
+- two mixed packages from the same vendor stay two rows,
 - the hardware bundle pairs against Rs 37,198 with the right `basis` values,
 - the lighting family emits a row with both vendors non-zero, proving the
   two-vendor guard is gone,
@@ -164,8 +172,8 @@ None. S4 is fully deterministic: regex on `pricing_method`, token matching on
 
 **Symptom: an ordinary fixed-price line was treated as a bundle.**
 Condition 2 over-fired. Tighten the enumeration parser — it should need genuine
-separators (commas, `&`, `+`) and two or more recognised work tokens, not just a
-long sentence.
+separators (commas, `and`, `+`, `/`) and two or more recognised work tokens, not
+just a long sentence or a brand name joined with `&`.
 
 **Symptom: a real bundle was missed.**
 Check `pricing_method` first; vendors invent new wording for lump pricing
@@ -173,7 +181,12 @@ constantly, and the regex is the usual culprit. Then check whether the
 description's items are recognised — enumeration goes through S2
 (`work_slug_for`), so an unrecognised fragment is really an alias or taxonomy
 gap. A comma-separated residential list (false ceiling, TV units, sofa) must
-still count as a bundle even when some fragments only slugify.
+still count as a bundle once those words are in the catalog; do not bring back
+slugify-unknown.
+
+**Symptom: unrelated lumpsums appeared as one Mixed package.**
+`bundle_comparison_rows` summed leftover `mixed` bundles. Emit one row per
+mixed `bundle_id` instead.
 
 **Symptom: the wrong counterpart lines were summed.**
 The `FAMILY` map is too coarse. Split the family rather than special-casing the

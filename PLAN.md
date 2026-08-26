@@ -8,8 +8,8 @@ Read this first, then open the stage file you actually need.
 
 **Do not reverse** the customer-facing invariants in [ACTION.md](ACTION.md):
 one physical room is one matrix section (Living / L R / LVR / L ROOM are the
-same space), and an expired session is a login popup rather than an inline
-button.
+same space), a single-item lumpsum is never a mixed package, and an expired
+session is a login popup rather than an inline button.
 
 | Where | File | Covers |
 | --- | --- | --- |

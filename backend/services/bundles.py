@@ -68,7 +68,8 @@ FAMILY_LABELS = {
 }
 
 # Separators a vendor uses when listing what a lumpsum covers.
-_LIST_SPLIT_RE = re.compile(r",|;|\band\b|&|\+|/")
+# `&` is not one of them: "Greenply & Century" is a brand pair, not two works.
+_LIST_SPLIT_RE = re.compile(r",|;|\band\b|\+|/")
 
 # Substring fallback for fragments the catalog does not resolve as a whole
 # phrase — "5 tandem" never matches an alias, but "tandem" still names the item.
@@ -128,19 +129,18 @@ def _slug_for_fragment(fragment: str) -> str | None:
     """Resolve one comma-separated piece of a bundle description to a work slug.
 
     Order: S2 catalog (aliases + taxonomy), then the substring token table for
-    phrases like "5 tandem" that never match as a whole label, then a slug of
-    the normalised fragment so a residential word the catalog has not seen yet
-    still counts as a distinct item.
+    phrases like "5 tandem" that never match as a whole label. Unknown
+    fragments do not count — slugifying leftover prose ("Greenply", "Century")
+    is what turned a single-item lumpsum into a fake package.
     """
     cleaned = _INCLUDES_RE.sub("", (fragment or "").strip())
     if not cleaned:
         return None
 
     try:
-        from services.work_catalog import normalize_work_label, work_slug_for
+        from services.work_catalog import work_slug_for
     except Exception:
         work_slug_for = None  # type: ignore[assignment]
-        normalize_work_label = None  # type: ignore[assignment]
 
     if work_slug_for:
         slug = work_slug_for(cleaned)
@@ -151,14 +151,7 @@ def _slug_for_fragment(fragment: str) -> str | None:
     for token, slug in _ITEM_TOKENS.items():
         if token in folded:
             return slug
-
-    if not normalize_work_label:
-        return None
-    norm = normalize_work_label(cleaned)
-    words = [w for w in (norm or "").split() if w and not w.isdigit()]
-    if not words:
-        return None
-    return re.sub(r"[^a-z0-9]+", "_", " ".join(words)).strip("_") or None
+    return None
 
 
 def enumerated_items(description: str) -> list[str]:
@@ -218,7 +211,11 @@ def apply_bundles(df):
             label = str(row.get("work_label") or row.get("sub_service") or "Bundle")
             items = enumerated_items(str(row.get("description") or ""))
             scopes.append("bundle")
-            bundle_ids.append(_bundle_id(vendor, family or "mixed", label))
+            # Mixed leftovers have no family to pair on. Include the space so
+            # two unrelated packages with the same label stay distinct rows.
+            fam = family or "mixed"
+            id_label = f"{label}_{row.get('space_id') or ''}" if fam == "mixed" else label
+            bundle_ids.append(_bundle_id(vendor, fam, id_label))
             bundle_labels.append(label)
             bundle_families.append(family or "mixed")
             covered_work.append(items)
@@ -279,6 +276,80 @@ def apply_bundles(df):
     return df
 
 
+def _comparison_row_for_subset(subset, vendors: list[str], family: str, has_bundle: bool) -> dict[str, Any] | None:
+    """Build one bundle-tier row from a family (or single mixed package) subset."""
+    amounts: dict[str, float] = {}
+    basis: dict[str, str] = {}
+    line_counts: dict[str, int] = {}
+    for vendor in vendors:
+        vrows = subset[subset["vendor_name"] == vendor]
+        if len(vrows) == 0:
+            amounts[vendor] = 0.0
+            basis[vendor] = "none"
+            line_counts[vendor] = 0
+            continue
+        bundled = vrows[vrows["scope"] == "bundle"]
+        if len(bundled) > 0:
+            # The bundle price is the vendor's figure for this family. Adding
+            # its other family lines on top would double count whatever the
+            # lumpsum already covers.
+            amounts[vendor] = float(bundled["amount"].sum())
+            basis[vendor] = "bundle"
+            line_counts[vendor] = len(bundled)
+        else:
+            amounts[vendor] = float(vrows["amount"].sum())
+            basis[vendor] = "itemized"
+            line_counts[vendor] = len(vrows)
+
+    if not any(v > 0 for v in amounts.values()):
+        return None
+
+    bundle_rows = subset[subset["scope"] == "bundle"]
+    label = FAMILY_LABELS.get(family, family.replace("_", " ").capitalize())
+    if len(bundle_rows) > 0:
+        vendor_label = str(bundle_rows.iloc[0].get("bundle_label") or "").strip()
+        if vendor_label and vendor_label.casefold() != label.casefold():
+            label = f"{label} ({vendor_label})"
+
+    covered_items: list[str] = []
+    overlap_flags: list[str] = []
+    for _, row in bundle_rows.iterrows():
+        for slug in row.get("covered_work_keys") or []:
+            if slug not in covered_items:
+                covered_items.append(slug)
+        for slug in row.get("overlap_flags") or []:
+            if slug not in overlap_flags:
+                overlap_flags.append(slug)
+
+    covered_space_labels = sorted(
+        {
+            str(s)
+            for s in subset["space"].tolist()
+            if str(s) and str(s) != "Project-level"
+        }
+    )
+
+    row_dict: dict[str, Any] = {
+        "bundle_id": (
+            str(bundle_rows.iloc[0]["bundle_id"])
+            if len(bundle_rows) > 0
+            else f"family:{family}"
+        ),
+        "bundle_label": label,
+        "bundle_family": family,
+        "covered_spaces": covered_space_labels,
+        "covered_items": [s.replace("_", " ") for s in covered_items],
+        "overlap_flags": [s.replace("_", " ") for s in overlap_flags],
+        "basis": basis,
+        "line_counts": line_counts,
+        "has_bundle": has_bundle,
+    }
+    for vendor in vendors:
+        amount = amounts.get(vendor, 0.0)
+        row_dict[vendor] = round(amount) if amount > 0 else 0
+    return row_dict
+
+
 def bundle_comparison_rows(df, vendors: list[str]) -> list[dict[str, Any]]:
     """One comparison row per family that cannot be compared space by space.
 
@@ -290,6 +361,10 @@ def bundle_comparison_rows(df, vendors: list[str]) -> list[dict[str, Any]]:
     Condition (b) is what surfaces the electrical gap the old two-vendor guard
     hid: one vendor priced it inside the kitchen, the other left it
     project-level, and neither used a lumpsum.
+
+    `mixed` is a leftover bucket, not a real family. Unrelated mixed packages
+    (wall décor, blinds, a living-room complete package) must each stay their
+    own row — summing them invents a figure no vendor quoted.
     """
     if df is None or len(df) == 0 or not vendors:
         return []
@@ -309,79 +384,23 @@ def bundle_comparison_rows(df, vendors: list[str]) -> list[dict[str, Any]]:
         space_ids = {str(s) for s in subset["space_id"].tolist()}
         scattered = len(space_ids) > 1 and len(family_vendors) > 1
 
+        if family == "mixed":
+            # Never recap leftover unmatched lines as one Mixed total.
+            if not has_bundle:
+                continue
+            bundled = subset[subset["scope"] == "bundle"]
+            for _, group in bundled.groupby("bundle_id", sort=False):
+                row = _comparison_row_for_subset(group, vendors, family, True)
+                if row:
+                    rows.append(row)
+            continue
+
         if not has_bundle and not scattered:
             continue
 
-        amounts: dict[str, float] = {}
-        basis: dict[str, str] = {}
-        line_counts: dict[str, int] = {}
-        for vendor in vendors:
-            vrows = subset[subset["vendor_name"] == vendor]
-            if len(vrows) == 0:
-                amounts[vendor] = 0.0
-                basis[vendor] = "none"
-                line_counts[vendor] = 0
-                continue
-            bundled = vrows[vrows["scope"] == "bundle"]
-            if len(bundled) > 0:
-                # The bundle price is the vendor's figure for this family. Adding
-                # its other family lines on top would double count whatever the
-                # lumpsum already covers.
-                amounts[vendor] = float(bundled["amount"].sum())
-                basis[vendor] = "bundle"
-                line_counts[vendor] = len(bundled)
-            else:
-                amounts[vendor] = float(vrows["amount"].sum())
-                basis[vendor] = "itemized"
-                line_counts[vendor] = len(vrows)
-
-        if not any(v > 0 for v in amounts.values()):
-            continue
-
-        bundle_rows = subset[subset["scope"] == "bundle"]
-        label = FAMILY_LABELS.get(family, family.replace("_", " ").capitalize())
-        if len(bundle_rows) > 0:
-            vendor_label = str(bundle_rows.iloc[0].get("bundle_label") or "").strip()
-            if vendor_label and vendor_label.casefold() != label.casefold():
-                label = f"{label} ({vendor_label})"
-
-        covered_items: list[str] = []
-        overlap_flags: list[str] = []
-        for _, row in bundle_rows.iterrows():
-            for slug in row.get("covered_work_keys") or []:
-                if slug not in covered_items:
-                    covered_items.append(slug)
-            for slug in row.get("overlap_flags") or []:
-                if slug not in overlap_flags:
-                    overlap_flags.append(slug)
-
-        covered_space_labels = sorted(
-            {
-                str(s)
-                for s in subset["space"].tolist()
-                if str(s) and str(s) != "Project-level"
-            }
-        )
-
-        row_dict: dict[str, Any] = {
-            "bundle_id": (
-                str(bundle_rows.iloc[0]["bundle_id"])
-                if len(bundle_rows) > 0
-                else f"family:{family}"
-            ),
-            "bundle_label": label,
-            "bundle_family": family,
-            "covered_spaces": covered_space_labels,
-            "covered_items": [s.replace("_", " ") for s in covered_items],
-            "overlap_flags": [s.replace("_", " ") for s in overlap_flags],
-            "basis": basis,
-            "line_counts": line_counts,
-            "has_bundle": has_bundle,
-        }
-        for vendor in vendors:
-            amount = amounts.get(vendor, 0.0)
-            row_dict[vendor] = round(amount) if amount > 0 else 0
-        rows.append(row_dict)
+        row = _comparison_row_for_subset(subset, vendors, family, has_bundle)
+        if row:
+            rows.append(row)
 
     return rows
 

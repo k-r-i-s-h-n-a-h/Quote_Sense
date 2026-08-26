@@ -60,10 +60,10 @@
       "amounts": { "a": 60534, "b": 47082 }
     },
     {
-      "why": "one-to-many - vendor b split crockery into base and wall units",
+      "why": "one-to-many - vendor b split crockery into base and wall units. The seater line is not crockery.",
       "space": "Dining",
       "labels": ["Crockery Units", "Crockery Base unit", "Crockery Wall unit"],
-      "amounts": { "a": 38940, "b": 70092 }
+      "amounts": { "a": 38940, "b": 38940 }
     },
     {
       "why": "vendor b put the item name in the Space/Zone column with no room prefix",
@@ -134,6 +134,15 @@
       "amount": 2832,
       "expect_work_source": "description",
       "expect_not_grouped_with": "Used cloth storage unit"
+    },
+    {
+      "why": "vendor labelled a seater as crockery wall; it is not crockery and not bench seating",
+      "space_raw": "Dining area",
+      "sub_service": "Crockery Wall unit",
+      "description": "Seater unit - Matt / Hi Glossy Laminates Finish",
+      "amount": 31152,
+      "expect_work_source": "description",
+      "expect_not_grouped_with": "Crockery Units"
     }
   ],
 

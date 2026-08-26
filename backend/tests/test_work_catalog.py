@@ -84,6 +84,36 @@ def test_description_wins_only_on_contradiction():
     assert wardrobe["work_source"] == "alias"
 
 
+def test_seater_unit_does_not_fold_into_crockery_or_bench():
+    """TCS labelled a seater as Crockery Wall unit; it is neither crockery nor bench."""
+    seater = resolve_work(
+        {
+            "sub_service": "Crockery Wall unit",
+            "item_name": "Crockery Wall unit",
+            "description": (
+                "Seater unit - Matt / Hi Glossy Laminates Finish for shutters "
+                "using HDHMR Greenply brand & Carcass made by using Greenply"
+            ),
+        }
+    )
+    assert seater["work_source"] == "description"
+    assert seater["work_key"] != key("Crockery Units")
+    assert seater["work_key"] != key("Bench Seating")
+
+    # A genuine crockery wall whose spec starts with its own name stays crockery.
+    wall = resolve_work(
+        {
+            "sub_service": "Crockery Wall unit",
+            "item_name": "Crockery Wall unit",
+            "description": (
+                "Crockery Wall unit - Matt / Hi Glossy Laminates Finish for "
+                "shutters using HDHMR Greenply brand"
+            ),
+        }
+    )
+    assert wall["work_key"] == key("Crockery Units")
+
+
 def test_boilerplate_description_never_overrides():
     """Long spec prose is not a work name and must not hijack the key."""
     row = resolve_work(

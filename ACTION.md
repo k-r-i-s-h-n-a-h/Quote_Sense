@@ -47,7 +47,21 @@ was the bug.
 
 ---
 
-## 2. Expired session → login popup, not an inline button
+## 2. Packages vs single-item lumpsums (S4)
+
+A package is lump-priced **and** enumerates two or more **known** work items.
+A lump ₹8,850 for one room's wall décor is **not** a package. Hardware listing
+six accessories **is**.
+
+Never treat brand prose (`Greenply & Century`) as a work list. Never slugify
+unknown fragments to force a package. Never sum unrelated leftover (`mixed`)
+packages into one comparison row — one vendor line is one package row.
+
+Window blinds and a tissue holder are whole-home lines, not wall décor.
+
+---
+
+## 3. Expired session → login popup, not an inline button
 
 When the user's Tatva session has expired, tell them with a **modal**.
 
@@ -61,7 +75,7 @@ Module: `frontend/components/SessionExpiredModal.tsx`, shown from
 
 ---
 
-## 3. Change protocol
+## 4. Change protocol
 
 If a matrix looks wrongly grouped, fix **S3** (or S2 for work items, S4 for
 lumpsums). Do not invent a new grouping layer on the frontend. Do not drop

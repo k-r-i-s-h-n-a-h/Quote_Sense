@@ -406,7 +406,7 @@ export async function downloadComparisonPdf(
       [146, 64, 14]
     );
     pushBundleSection(
-      "SAME WORK, DIFFERENT SPACES (line items already listed above)",
+      "SAME WORK, DIFFERENT SPACES (already in the space totals above — not extra spend)",
       scattered,
       [224, 242, 254],
       [7, 89, 133]
@@ -536,7 +536,7 @@ export async function downloadComparisonPdf(
     doc.text(
       [
         '"N/A" = that vendor did not quote this work.  "incl. in ..." = price is already inside that vendor\'s package.',
-        "Lump sum packages are separate from space totals. \"Same work, different spaces\" summarises work already listed above.",
+        "Lump sum packages are separate from space totals. \"Same work, different spaces\" recaps lines already in those totals — it is not extra spend.",
       ],
       margin,
       finalY + 6

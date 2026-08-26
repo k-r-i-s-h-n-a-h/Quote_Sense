@@ -128,6 +128,7 @@ Allocating a lumpsum across rooms would invent numbers the vendor never quoted.
 | `sub_service` | str | Display label for the work. |
 | `pricing_method` | str | |
 | `breakdown` | list | `{vendor, item, amount}` per contributing line. |
+| `bundle_family` | str | S4 family, or `""`. Lets the UI hide Whole-home rows a scattered recap already compares. |
 | `<vendor name>` | int | One key per vendor; rupees, `0` when absent. |
 
 ### BundleRow
@@ -141,6 +142,7 @@ Allocating a lumpsum across rooms would invent numbers the vendor never quoted.
 | `covered_items` | list[str] | Work labels named in the bundle description. |
 | `overlap_flags` | list[str] | |
 | `basis` | dict | `{ "<vendor>": "bundle" \| "itemized" \| "none" }` — how each vendor's figure was arrived at. |
+| `takeaway` | dict or omitted | `{ kind, text }` when one vendor is a package and another is itemised with a large gap. Never on scattered recaps. |
 | `<vendor name>` | int | Bundler's lumpsum, or the counterpart's summed itemised lines. |
 
 `basis` is what stops the row from lying. A figure produced by summing five

@@ -19,6 +19,7 @@ import pytest
 from services.bundles import (
     apply_bundles,
     bundle_comparison_rows,
+    bundle_takeaway,
     bundled_families_by_vendor,
     enumerated_items,
     family_of,
@@ -338,3 +339,46 @@ def test_two_mixed_packages_stay_separate_rows():
     rows = bundle_comparison_rows(out, ["Lump (Q1)"])
     mixed = [r for r in rows if r["bundle_family"] == "mixed"]
     assert {r["Lump (Q1)"] for r in mixed} == {177000, 250000}
+
+
+def test_hardware_package_gets_a_higher_takeaway(bundle_rows):
+    row = row_for(bundle_rows, "hardware")
+    assert row["takeaway"]["kind"] == "package_higher"
+    text = row["takeaway"]["text"]
+    assert "1,00,300" in text
+    assert "37,198" in text
+    assert "Ask" in text
+
+
+def test_lighting_recap_has_no_takeaway(bundle_rows):
+    row = row_for(bundle_rows, "lighting")
+    assert not row.get("takeaway")
+
+
+def test_package_lower_takeaway():
+    row = {
+        "bundle_label": "Hardware & accessories",
+        "basis": {"A": "bundle", "B": "itemized"},
+        "line_counts": {"A": 1, "B": 5},
+        "overlap_flags": [],
+        "A": 20000,
+        "B": 80000,
+    }
+    out = bundle_takeaway(row, ["A", "B"])
+    assert out is not None
+    assert out["kind"] == "package_lower"
+    assert "20,000" in out["text"]
+    assert "80,000" in out["text"]
+    assert "cheaper" in out["text"].casefold()
+
+
+def test_small_gap_has_no_takeaway():
+    row = {
+        "bundle_label": "Hardware",
+        "basis": {"A": "bundle", "B": "itemized"},
+        "line_counts": {"B": 2},
+        "overlap_flags": [],
+        "A": 20000,
+        "B": 21000,
+    }
+    assert bundle_takeaway(row, ["A", "B"]) is None

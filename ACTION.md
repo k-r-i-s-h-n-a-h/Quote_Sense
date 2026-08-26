@@ -81,3 +81,17 @@ If a matrix looks wrongly grouped, fix **S3** (or S2 for work items, S4 for
 lumpsums). Do not invent a new grouping layer on the frontend. Do not drop
 abbreviation rules because a new model "will understand it" — keep the
 deterministic merge; the LLM is a backup, not a replacement.
+
+---
+
+## 5. Recap vs Whole home, and package takeaways
+
+A "Same work, different spaces" row is a **comparison view**. It must not be
+shown again as a Whole home line for that family. Accounting stays in
+`projectTier`; only the display is filtered. Quote total still counts those
+rupees **once**.
+
+When one vendor priced a family as a package and another listed it line by
+line, the customer must see a short plain-English note: who is higher, by how
+much, and what to ask. Do not call either side wrong. Do not write that note
+for itemised-vs-itemised recaps. Do not change room totals or subtract overlaps.

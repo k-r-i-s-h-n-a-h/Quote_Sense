@@ -37,6 +37,8 @@ export interface SpaceRow {
   breakdown?: Breakdown[];
   /** Per-vendor cell status, e.g. "quoted" or "incl_in_bundle:Hardware". */
   coverage?: Record<Vendor, string>;
+  /** S4 family, e.g. "lighting" — used to hide Whole-home recap duplicates. */
+  bundle_family?: string;
   work_confidence?: number;
   space_confidence?: number;
   /** Vendor names are dynamic column keys, hence the index signature. */
@@ -53,6 +55,8 @@ export interface BundleRow {
   basis?: Record<Vendor, PriceBasis>;
   line_counts?: Record<Vendor, number>;
   has_bundle?: boolean;
+  /** Plain-English package vs itemised note. Absent on scattered recaps. */
+  takeaway?: { kind?: "package_higher" | "package_lower"; text?: string };
   [key: string]: unknown;
 }
 
@@ -134,6 +138,60 @@ export function partitionBundleRows(rows: BundleRow[]): {
     else scattered.push(row);
   }
   return { lumpSums, scattered };
+}
+
+/**
+ * Whole-home rows to paint. Accounting still uses the full project tier.
+ *
+ * A scattered recap ("Same work, different spaces") already compares a family
+ * that one vendor parked in Whole home. Showing those rupees again there looks
+ * like a second add. Rows with no family, or a family the recap does not
+ * cover (blinds, tissue), stay visible.
+ *
+ * `bundle_family` is the primary signal. When an older payload omits it, infer
+ * lighting/hardware from the work key and labels so Electrical Work / Per Point
+ * does not repeat under Whole home after the recap already compared it.
+ */
+export function familyOfProjectRow(row: SpaceRow): string {
+  const explicit = String(row.bundle_family || "").trim();
+  if (explicit) return explicit;
+  const key = String(row.work_key || "");
+  const slug = (key.includes(":") ? key.split(":")[1] : key).replace(/_/g, " ");
+  const blob = [slug, row.sub_service, row.item_name, row.work_item]
+    .map((v) => String(v || ""))
+    .join(" ");
+  if (
+    /\blight|electrical|adaptor|adapter|spot light|profile light|strip light|point creation/i.test(
+      blob
+    )
+  ) {
+    return "lighting";
+  }
+  if (
+    /\bhardware|tandem|soft clos|pullout|pull out|cutlery|gola|skid mat|accessor/i.test(
+      blob
+    )
+  ) {
+    return "hardware";
+  }
+  return "";
+}
+
+export function projectRowsForDisplay(
+  projectRows: SpaceRow[],
+  bundleRows: BundleRow[]
+): SpaceRow[] {
+  const { scattered } = partitionBundleRows(bundleRows);
+  const recapped = new Set(
+    scattered
+      .map((row) => String(row.bundle_family || "").trim())
+      .filter(Boolean)
+  );
+  if (recapped.size === 0) return projectRows;
+  return projectRows.filter((row) => {
+    const family = familyOfProjectRow(row);
+    return !family || !recapped.has(family);
+  });
 }
 
 /** Short customer-facing note under a bundle amount — no internal jargon. */

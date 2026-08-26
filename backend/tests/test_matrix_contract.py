@@ -212,11 +212,28 @@ def test_base_and_wall_units_stay_separate(matrix):
 # --- bundles and coverage ---------------------------------------------------
 
 
+def test_space_and_project_rows_carry_bundle_family(matrix):
+    lighting_project = [
+        row
+        for row in matrix["projectTier"]
+        if any(
+            token in str(row["work_key"])
+            for token in ("lighting", "adaptor", "electrical")
+        )
+    ]
+    assert lighting_project
+    assert all(row.get("bundle_family") == "lighting" for row in lighting_project)
+    blinds = [row for row in matrix["projectTier"] if "blind" in str(row["work_key"])]
+    assert blinds and not blinds[0].get("bundle_family")
+
+
 def test_hardware_bundle_is_paired_in_the_bundle_tier(matrix):
     row = next(r for r in matrix["bundleTier"] if r["bundle_family"] == "hardware")
     assert row[VENDOR_A] == 100300
     assert row[VENDOR_B] == 37198
     assert row["overlap_flags"]
+    assert row["takeaway"]["kind"] == "package_higher"
+    assert "1,00,300" in row["takeaway"]["text"]
 
 
 def test_electrical_is_visible_for_both_vendors(matrix):
@@ -279,6 +296,8 @@ def test_prompt_does_not_claim_zero_means_not_quoted():
     assert "incl_in_bundle" in prompt
     assert "possible_double_count" in prompt
     assert "NOT DIRECTLY COMPARABLE" in prompt
+    assert "Package vs itemised" in prompt
+    assert "takeaway" in prompt
 
 
 def test_fallback_report_mentions_bundles_only_when_present(matrix):
@@ -286,5 +305,6 @@ def test_fallback_report_mentions_bundles_only_when_present(matrix):
 
     with_bundles = _build_fallback_report(matrix["chartData"], matrix["bundleTier"])
     without = _build_fallback_report(matrix["chartData"], [])
-    assert "Bundled Scope" in with_bundles
-    assert "Bundled Scope" not in without
+    assert "Package vs itemised" in with_bundles
+    assert "1,00,300" in with_bundles
+    assert "Package vs itemised" not in without

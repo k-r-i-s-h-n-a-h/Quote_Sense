@@ -11,6 +11,7 @@ import {
   bundlePriceNote,
   parseCellStatus,
   partitionBundleRows,
+  projectRowsForDisplay,
   reconcileQuoteTotals,
   type BundleRow,
   type CoverageEntry,
@@ -236,6 +237,7 @@ export async function downloadComparisonPdf(
 
   const bundleTier = tiers.bundleTier ?? [];
   const projectTier = tiers.projectTier ?? [];
+  const projectForDisplay = projectRowsForDisplay(projectTier, bundleTier);
   const coverIdx = coverageIndex(tiers.coverage ?? []);
 
   // Project-level rows are exported after the bundle section, so the space tier
@@ -373,6 +375,7 @@ export async function downloadComparisonPdf(
           bundle.overlap_flags?.length
             ? `May overlap with a separate line for ${bundle.overlap_flags.join(", ")} — confirm with the vendor`
             : "",
+          bundle.takeaway?.text ? bundle.takeaway.text : "",
         ]
           .filter(Boolean)
           .join("\n");
@@ -405,15 +408,48 @@ export async function downloadComparisonPdf(
       [254, 243, 199],
       [146, 64, 14]
     );
+    const takeaways = lumpSums
+      .map((row) => row.takeaway?.text?.trim())
+      .filter((text): text is string => Boolean(text));
+    if (takeaways.length > 0) {
+      body.push([
+        {
+          content: "KEY TAKEAWAYS",
+          colSpan: vendors.length + 1,
+          styles: {
+            font: FONT,
+            fillColor: [255, 251, 235],
+            textColor: [146, 64, 14],
+            fontStyle: "bold",
+            fontSize: layout.category,
+            cellPadding: { top: 2, bottom: 2, left: 3, right: 3 },
+          },
+        },
+      ]);
+      for (const text of takeaways) {
+        body.push([
+          {
+            content: text,
+            colSpan: vendors.length + 1,
+            styles: {
+              font: FONT,
+              fontSize: layout.body,
+              textColor: [69, 26, 3],
+              cellPadding: { top: pad, bottom: pad, left: 8, right: pad },
+            },
+          },
+        ]);
+      }
+    }
     pushBundleSection(
-      "SAME WORK, DIFFERENT SPACES (already in the space totals above — not extra spend)",
+      "SAME WORK, DIFFERENT SPACES (comparison only — counted once in Quote total, not extra spend)",
       scattered,
       [224, 242, 254],
       [7, 89, 133]
     );
   }
 
-  if (projectTier.length > 0) {
+  if (projectForDisplay.length > 0) {
     body.push([
       {
         content: "WHOLE HOME (not tied to one space)",
@@ -428,7 +464,7 @@ export async function downloadComparisonPdf(
         },
       },
     ]);
-    for (const cat of groupTableData(projectTier)) {
+    for (const cat of groupTableData(projectForDisplay)) {
       for (const spaceGroup of cat.spaces) {
         for (const sub of spaceGroup.subs) {
           const subTotals = sumSubServiceRow(sub.rows, vendors);
@@ -536,7 +572,7 @@ export async function downloadComparisonPdf(
     doc.text(
       [
         '"N/A" = that vendor did not quote this work.  "incl. in ..." = price is already inside that vendor\'s package.',
-        "Lump sum packages are separate from space totals. \"Same work, different spaces\" recaps lines already in those totals — it is not extra spend.",
+        "Lump sum packages are separate from space totals. \"Same work, different spaces\" is a comparison only — counted once in Quote total, not extra spend.",
       ],
       margin,
       finalY + 6

@@ -55,7 +55,8 @@ Each bundle row shows:
 - the bundle label and the family,
 - covered spaces, and the items named in the vendor's description,
 - each vendor's figure with a `basis` chip: `lumpsum` or `sum of N items`,
-- an overlap warning when `overlap_flags` is non-empty.
+- an overlap warning when `overlap_flags` is non-empty,
+- a plain-English takeaway when `takeaway.text` is set (package vs itemised only).
 
 The `basis` chip carries most of the value here. `Rs 1,00,300 (lumpsum)` against
 `Rs 37,198 (sum of 5 items)` tells the user both the price gap and that the two
@@ -66,10 +67,15 @@ Overlap warnings are phrased as a question to put to the vendor, not as a
 detected error — we cannot know whether the lumpsum double-counts the separate
 line.
 
+The takeaway names who is higher by how much and what to ask. It does not
+accuse, and it does not fire on itemised-vs-itemised recaps.
+
 ## Project section
 
-Unchanged in style from a space group, labelled `Project-level`, holding work with
-no room.
+Work with no room, labelled Whole home. Rows whose `bundle_family` is already
+compared in a scattered recap are **not painted** here — the recap is the
+comparison; painting them again looks like a second add. `reconcileQuoteTotals`
+still sums the full `projectTier`.
 
 ## Footnote
 

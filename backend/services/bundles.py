@@ -347,7 +347,100 @@ def _comparison_row_for_subset(subset, vendors: list[str], family: str, has_bund
     for vendor in vendors:
         amount = amounts.get(vendor, 0.0)
         row_dict[vendor] = round(amount) if amount > 0 else 0
+    takeaway = bundle_takeaway(row_dict, vendors)
+    if takeaway:
+        row_dict["takeaway"] = takeaway
     return row_dict
+
+
+TAKEAWAY_MIN_GAP_ABS = 15_000
+TAKEAWAY_MIN_GAP_PCT = 0.25
+
+
+def _inr_indian(n: float) -> str:
+    n = int(round(n))
+    sign = "-" if n < 0 else ""
+    n = abs(n)
+    digits = str(n)
+    if len(digits) <= 3:
+        return f"{sign}₹{digits}"
+    last3, rest = digits[-3:], digits[:-3]
+    groups: list[str] = []
+    while rest:
+        groups.append(rest[-2:])
+        rest = rest[:-2]
+    return f"{sign}₹{','.join(reversed(groups))},{last3}"
+
+
+def _vendor_short(name: str) -> str:
+    text = (name or "").strip()
+    if "(" in text:
+        text = text.split("(", 1)[0].strip()
+    return text or name
+
+
+def bundle_takeaway(row: dict[str, Any], vendors: list[str]) -> dict[str, str] | None:
+    """Plain-English package vs itemised note, or None when the gap is small.
+
+    Only fires when one vendor priced a family as a lumpsum and another listed
+    it line by line. Scattered recaps (both itemised) never get a takeaway.
+    """
+    basis = row.get("basis") or {}
+    bundlers = [v for v in vendors if basis.get(v) == "bundle"]
+    itemizers = [v for v in vendors if basis.get(v) == "itemized"]
+    if not bundlers or not itemizers:
+        return None
+
+    best: tuple[float, str, str, float, float] | None = None
+    for bundler in bundlers:
+        for itemizer in itemizers:
+            package = float(row.get(bundler) or 0)
+            listed = float(row.get(itemizer) or 0)
+            if package <= 0 or listed <= 0:
+                continue
+            gap = abs(package - listed)
+            floor = min(package, listed)
+            if gap < TAKEAWAY_MIN_GAP_ABS or gap < TAKEAWAY_MIN_GAP_PCT * floor:
+                continue
+            if best is None or gap > best[0]:
+                best = (gap, bundler, itemizer, package, listed)
+    if best is None:
+        return None
+
+    gap, bundler, itemizer, package, listed = best
+    pkg_name = _vendor_short(bundler)
+    listed_name = _vendor_short(itemizer)
+    label = str(row.get("bundle_label") or "this work")
+    counts = row.get("line_counts") or {}
+    n_lines = int(counts.get(itemizer) or 0)
+    lines_phrase = (
+        f"{n_lines} line{'s' if n_lines != 1 else ''}" if n_lines > 0 else "listed lines"
+    )
+    flags = [str(f) for f in (row.get("overlap_flags") or []) if str(f).strip()]
+    overlap_ask = ""
+    if flags:
+        overlap_ask = f", and whether {', '.join(flags)} is also billed separately"
+
+    if package > listed:
+        text = (
+            f"{pkg_name} priced {label} as one package of {_inr_indian(package)}. "
+            f"{listed_name} listed the same kind of work in {lines_phrase} totalling "
+            f"{_inr_indian(listed)}. {pkg_name} is about {_inr_indian(gap)} higher. "
+            f"That can mean a fuller kit — or a dear package. Ask {pkg_name} what "
+            f"the package includes{overlap_ask}. Ask {listed_name} whether those "
+            f"{lines_phrase} cover the same set."
+        )
+        return {"kind": "package_higher", "text": text}
+
+    text = (
+        f"{pkg_name} priced {label} as one package of {_inr_indian(package)}. "
+        f"{listed_name}'s listed lines add up to {_inr_indian(listed)}, which is "
+        f"about {_inr_indian(gap)} more. The package looks cheaper — it may also "
+        f"cover less. Ask {pkg_name} for a written list of what is inside the "
+        f"package, and match it to {listed_name}'s line items before treating this "
+        f"as a saving."
+    )
+    return {"kind": "package_lower", "text": text}
 
 
 def bundle_comparison_rows(df, vendors: list[str]) -> list[dict[str, Any]]:

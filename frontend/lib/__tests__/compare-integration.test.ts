@@ -17,6 +17,7 @@ import {
   parseCellStatus,
   partitionBundleRows,
   projectRowsOf,
+  projectRowsForDisplay,
   reconcileQuoteTotals,
   spaceRowsOf,
   type MatrixV1,
@@ -149,6 +150,52 @@ describe("golden MatrixV1 payload", () => {
     }
     // Infosys's hardware lumpsum must appear in the breakdown, not vanish.
     expect(totals[A].bundles).toBe(100300);
+  });
+
+  it("hides Whole-home lighting when the recap already compares that family", () => {
+    const visible = projectRowsForDisplay(
+      projectRowsOf(matrix),
+      bundleRowsOf(matrix)
+    );
+    expect(visible.map((row) => row.sub_service)).toEqual(
+      expect.arrayContaining(["Window blinds", "Tissue paper holder"])
+    );
+    expect(
+      visible.some((row) =>
+        /lighting|adaptor|electrical/i.test(String(row.work_key))
+      )
+    ).toBe(false);
+
+    const unlabeled = {
+      space_id: "project_level",
+      sub_service: "Electrical Work",
+      item_name: "Electrical Work",
+      work_key: "norm:electrical_work",
+      [B]: 17700,
+    } as SpaceRow;
+    expect(
+      projectRowsForDisplay([unlabeled], bundleRowsOf(matrix))
+    ).toEqual([]);
+
+    const quoted = Object.fromEntries(
+      (matrix.chartData ?? []).map((point) => [point.vendor, point.total])
+    );
+    const full = reconcileQuoteTotals(
+      matrix.vendors as string[],
+      spaceRowsOf(matrix),
+      bundleRowsOf(matrix),
+      projectRowsOf(matrix),
+      quoted
+    );
+    const ifDisplayWereUsed = reconcileQuoteTotals(
+      matrix.vendors as string[],
+      spaceRowsOf(matrix),
+      bundleRowsOf(matrix),
+      visible,
+      quoted
+    );
+    expect(full[B].project).toBeGreaterThan(ifDisplayWereUsed[B].project);
+    expect(full[B].total).toBe(Math.round(quoted[B] as number));
   });
 
   it("still renders when the payload is stripped back to the legacy shape", () => {

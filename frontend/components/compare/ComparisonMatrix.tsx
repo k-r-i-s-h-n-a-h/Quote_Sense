@@ -17,6 +17,7 @@ import {
   bundlePriceNote,
   parseCellStatus,
   partitionBundleRows,
+  projectRowsForDisplay,
   reconcileQuoteTotals,
   type BundleRow,
   type CoverageEntry,
@@ -120,9 +121,17 @@ export default function ComparisonMatrix({
   // backend renders exactly as before.
   const spaceRows = spaceTier ?? tableData;
   const grouped = useMemo(() => groupTableData(spaceRows), [spaceRows]);
+  const { lumpSums, scattered } = useMemo(
+    () => partitionBundleRows(bundleTier),
+    [bundleTier]
+  );
+  const projectForDisplay = useMemo(
+    () => projectRowsForDisplay(projectTier ?? [], bundleTier),
+    [projectTier, bundleTier]
+  );
   const projectGrouped = useMemo(
-    () => (projectTier?.length ? groupTableData(projectTier) : []),
-    [projectTier]
+    () => (projectForDisplay.length ? groupTableData(projectForDisplay) : []),
+    [projectForDisplay]
   );
   const coverIdx = useMemo(() => coverageIndex(coverage), [coverage]);
   const colCount = vendors.length + 1;
@@ -136,10 +145,6 @@ export default function ComparisonMatrix({
         quotedTotals
       ),
     [vendors, spaceRows, bundleTier, projectTier, quotedTotals]
-  );
-  const { lumpSums, scattered } = useMemo(
-    () => partitionBundleRows(bundleTier),
-    [bundleTier]
   );
 
   const renderBundleRows = (
@@ -165,6 +170,11 @@ export default function ComparisonMatrix({
             <div className="text-[10px] text-rose-700 bg-rose-50 border border-rose-200 rounded px-1.5 py-0.5 mt-1 inline-block leading-snug">
               May overlap with a separate line for{" "}
               {bundle.overlap_flags.join(", ")} — confirm with the vendor
+            </div>
+          ) : null}
+          {bundle.takeaway?.text ? (
+            <div className="text-[10px] text-amber-950 bg-amber-50 border border-amber-200 rounded px-1.5 py-1 mt-1.5 leading-snug">
+              {bundle.takeaway.text}
             </div>
           ) : null}
         </td>
@@ -486,7 +496,7 @@ export default function ComparisonMatrix({
               <>
                 {renderSectionHeader(
                   "Same work, different spaces",
-                  "Already counted in the space totals above. Shown here only because the vendors filed this work under different rooms — not extra spend.",
+                  "Comparison only — not extra spend. Each vendor's amount still sits in the rooms or in Whole home, and is counted once in Quote total.",
                   "sky"
                 )}
                 {renderBundleRows(scattered, "sky")}

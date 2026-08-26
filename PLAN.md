@@ -7,11 +7,12 @@ something breaks so that you change **only the stage that broke**.
 Read this first, then open the stage file you actually need.
 
 **Do not reverse** the customer-facing invariants in [ACTION.md](ACTION.md):
-one physical room is one matrix section (Living / L R / LVR / L ROOM are the
+one physical space is one matrix section (Living / L R / LVR / L ROOM are the
 same space), a single-item lumpsum is never a mixed package, a scattered recap
 must not be painted again as Whole home, package vs itemised gets a plain-English
-ask-the-vendor note, and an expired session is a login popup rather than an
-inline button.
+ask-the-vendor note, GST-inclusive billed amounts are compared even when quotes
+were entered excl. vs incl. GST, the matrix does not paint a Quote total row,
+and an expired session is a login popup rather than an inline button.
 
 | Where | File | Covers |
 | --- | --- | --- |
@@ -82,8 +83,8 @@ S1 emits  LineItemV1
 S2 adds   work_key, work_label, work_confidence, work_source
 S3 adds   space_id, space, space_confidence, space_source
 S4 adds   scope, bundle_id, bundle_label, covered_space_ids,
-          covered_work_keys, overlap_flags
-S5 emits  MatrixV1
+          covered_work_keys, overlap_flags, placement (on bundle-tier rows)
+S5 emits  MatrixV1 (including vendorMeta.gst_mode)
 ```
 
 Field-by-field definitions live in
@@ -96,10 +97,10 @@ Every field has exactly one owning stage. Only the owner writes it.
 
 | Field prefix | Owner |
 | --- | --- |
-| `vendor_*`, `amount`, `rate`, `quantity`, `pricing_method`, `sub_service`, `item_name`, `description`, `space_raw` | S1 |
+| `vendor_*`, `amount`, `rate`, `quantity`, `pricing_method`, `sub_service`, `item_name`, `description`, `space_raw`, `gst_mode` | S1 |
 | `work_*`, `sub_service_id`, `pricing_method_id` | S2 |
 | `space*` (except `space_raw`) | S3 |
-| `scope`, `bundle_*`, `covered_*`, `overlap_flags` | S4 |
+| `scope`, `bundle_*`, `covered_*`, `overlap_flags`, `placement` | S4 |
 
 If you find yourself wanting to write another stage's field, you have found a
 design problem, not a shortcut.
@@ -172,10 +173,20 @@ in the second case you update the fixture in the same commit, never separately.
 
 ---
 
-## 7. Keeping the graph current
+## 7. Keeping the plan current
 
-After changing any backend or frontend source file:
+This file and the stage docs **are** the architecture map. There is no
+knowledge-graph step.
 
-```bash
-graphify update .
-```
+After changing comparison code, update the matching plan file in the **same**
+change — never in a follow-up:
+
+1. New or renamed field → [backend/docs/plan/00-contracts.md](backend/docs/plan/00-contracts.md)
+   (and the frontend mirror if the UI reads it).
+2. Behaviour change → that stage's `backend/docs/plan/0N-*.md` or
+   `frontend/docs/plan/0N-*.md`.
+3. Customer-visible rule → [ACTION.md](ACTION.md) (append only; do not rewrite
+   §1–4).
+
+If a later agent cannot find the behaviour in these files, the last change
+skipped this step. Fix the doc before adding more code.

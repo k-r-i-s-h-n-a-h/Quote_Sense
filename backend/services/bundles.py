@@ -304,6 +304,25 @@ def _comparison_row_for_subset(subset, vendors: list[str], family: str, has_bund
     if not any(v > 0 for v in amounts.values()):
         return None
 
+    placement: dict[str, str] = {}
+    for vendor in vendors:
+        vrows = subset[subset["vendor_name"] == vendor]
+        if len(vrows) == 0 or basis.get(vendor) == "none":
+            placement[vendor] = "none"
+            continue
+        if basis.get(vendor) == "bundle":
+            placement[vendor] = "bundle"
+            continue
+        space_ids = {str(s) for s in vrows["space_id"].tolist()}
+        in_project = "project_level" in space_ids
+        in_rooms = any(s and s != "project_level" for s in space_ids)
+        if in_project and in_rooms:
+            placement[vendor] = "mixed"
+        elif in_project:
+            placement[vendor] = "project"
+        else:
+            placement[vendor] = "space"
+
     bundle_rows = subset[subset["scope"] == "bundle"]
     label = FAMILY_LABELS.get(family, family.replace("_", " ").capitalize())
     if len(bundle_rows) > 0:
@@ -343,6 +362,7 @@ def _comparison_row_for_subset(subset, vendors: list[str], family: str, has_bund
         "basis": basis,
         "line_counts": line_counts,
         "has_bundle": has_bundle,
+        "placement": placement,
     }
     for vendor in vendors:
         amount = amounts.get(vendor, 0.0)

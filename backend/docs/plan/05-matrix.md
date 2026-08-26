@@ -24,8 +24,9 @@ So the matrix separates by scope, which is exactly what S4 computed:
 | `bundleTier` | one row per bundle family | `bundle_family` |
 | `projectTier` | `scope == "project"` | `work_key` |
 
-Every rupee appears in exactly one tier. Tier totals sum to the quote total,
-which is the invariant that makes the table trustworthy.
+Every rupee appears in exactly one tier. Chart `chartData` is the quote's
+billed grand total. The matrix UI and PDF export do **not** paint a Quote
+total row.
 
 ## Grouping key change
 

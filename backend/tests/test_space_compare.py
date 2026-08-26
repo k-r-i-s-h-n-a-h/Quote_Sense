@@ -408,6 +408,121 @@ def test_mongodb_keeps_nested_object_ids(monkeypatch):
     assert df.iloc[0]["space_raw"] == "Bedroom 1"
 
 
+def test_gst_mode_from_work_summary_flags():
+    from services.comparator import gst_mode_from_quote
+
+    assert gst_mode_from_quote(
+        {"workSummary": [{"exclusiveGst": True, "inclusiveGst": False}]}
+    ) == "exclusive"
+    assert gst_mode_from_quote(
+        {"workSummary": [{"exclusiveGst": False, "inclusiveGst": True}]}
+    ) == "inclusive"
+    assert gst_mode_from_quote({"workSummary": []}) == ""
+    assert gst_mode_from_quote(
+        {
+            "workSummary": [
+                {"exclusiveGst": True, "inclusiveGst": False},
+                {"exclusiveGst": False, "inclusiveGst": True},
+            ]
+        }
+    ) == "mixed"
+
+
+def test_exclusive_quote_compares_grand_total_not_pre_gst_amount(monkeypatch):
+    monkeypatch.setattr(
+        "services.tatva_catalog.harvest_ids_from_quotes",
+        lambda quotes: {},
+    )
+    from services.comparator import mongodb_quotes_to_dataframe
+
+    quotes = [
+        {
+            "quoteNumber": "QEXC",
+            "quoteType": "essential",
+            "vendorDetail": {"companyName": "INFOSYS LIMITED"},
+            "pricingSummary": [{"label": "Grand total", "value": 1180}],
+            "workSummary": [
+                {
+                    "exclusiveGst": True,
+                    "inclusiveGst": False,
+                    "services": [
+                        {
+                            "serviceId": {"_id": "aaaaaaaaaaaaaaaaaaaaaaaa", "name": "Interiors"},
+                            "workItems": [
+                                {
+                                    "workTitle": "Bedroom",
+                                    "subService": {
+                                        "_id": "bbbbbbbbbbbbbbbbbbbbbbbb",
+                                        "name": "Wardrobe",
+                                    },
+                                    "pricingMethod": {
+                                        "_id": "cccccccccccccccccccccccc",
+                                        "name": "Per Sqft",
+                                    },
+                                    "pricingInput": [
+                                        {
+                                            "amount": 1000,
+                                            "gstPercentage": 18,
+                                            "grandTotal": 1180,
+                                            "quantity": 1,
+                                            "rate": 1000,
+                                        }
+                                    ],
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ],
+        },
+        {
+            "quoteNumber": "QINC",
+            "quoteType": "essential",
+            "vendorDetail": {"companyName": "INFOSYS LIMITED"},
+            "pricingSummary": [{"label": "Grand total", "value": 1180}],
+            "workSummary": [
+                {
+                    "exclusiveGst": False,
+                    "inclusiveGst": True,
+                    "services": [
+                        {
+                            "serviceId": {"_id": "aaaaaaaaaaaaaaaaaaaaaaaa", "name": "Interiors"},
+                            "workItems": [
+                                {
+                                    "workTitle": "Bedroom",
+                                    "subService": {
+                                        "_id": "bbbbbbbbbbbbbbbbbbbbbbbb",
+                                        "name": "Wardrobe",
+                                    },
+                                    "pricingMethod": {
+                                        "_id": "cccccccccccccccccccccccc",
+                                        "name": "Per Sqft",
+                                    },
+                                    "pricingInput": [
+                                        {
+                                            "amount": 1180,
+                                            "gstPercentage": 18,
+                                            "grandTotal": 1180,
+                                            "quantity": 1,
+                                            "rate": 1180,
+                                        }
+                                    ],
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ],
+        },
+    ]
+    df = mongodb_quotes_to_dataframe(quotes)
+    by_quote = {row["quote_number"]: row for _, row in df.iterrows()}
+    assert by_quote["QEXC"]["gst_mode"] == "exclusive"
+    assert by_quote["QINC"]["gst_mode"] == "inclusive"
+    assert by_quote["QEXC"]["amount"] == 1180
+    assert by_quote["QINC"]["amount"] == 1180
+
+
 def test_wardrobe_does_not_roll_into_lighting():
     """A non-family line must survive S4 untouched, in its own room."""
     from services.bundles import apply_bundles, family_of

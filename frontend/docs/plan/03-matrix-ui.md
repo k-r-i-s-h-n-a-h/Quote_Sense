@@ -70,6 +70,17 @@ line.
 The takeaway names who is higher by how much and what to ask. It does not
 accuse, and it does not fire on itemised-vs-itemised recaps.
 
+When one quote itemises the family in rooms and another parks a whole-home
+figure, each cell names the quote (company if they differ, quote number if
+they are the same company) and says where the rupees already sit. Space
+figures are comparison only. A whole-home figure is included in this quote,
+not in the space sums. The matrix does not paint a Quote total row; the
+chart already shows each quote's full amount.
+
+Column chips `Entered excl. GST` / `Entered incl. GST` come from
+`vendorMeta.gst_mode`. A banner above the table fires only when those modes
+differ. Cell amounts stay billed totals (GST included).
+
 ## Project section
 
 Work with no room, labelled Whole home. Rows whose `bundle_family` is already
@@ -96,6 +107,7 @@ as colour so they survive greyscale printing and colour-blind viewing.
 - a legacy payload with no coverage renders zero as `N/A`,
 - a non-comparable space shows the badge,
 - a bundle row shows both basis chips,
+- a mixed recap names each quote and where the rupees already sit,
 - an overlap flag renders a warning.
 
 ---

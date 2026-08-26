@@ -18,10 +18,19 @@ import {
   partitionBundleRows,
   projectRowsOf,
   projectRowsForDisplay,
+  recapPlacementNote,
+  recapPlacementNotes,
   reconcileQuoteTotals,
   spaceRowsOf,
+  vendorsShareCompany,
+  withInferredPlacement,
+  gstCompareBanner,
+  gstEntryChip,
+  gstModesDiffer,
+  type BundleRow,
   type MatrixV1,
 } from "../compare-types";
+import { buildVendorLabels, type VendorLabel } from "../format";
 import payload from "./fixtures/golden-matrix.json";
 
 const matrix = payload as unknown as MatrixV1;
@@ -206,5 +215,153 @@ describe("golden MatrixV1 payload", () => {
     // With no coverage the old reading applies: a zero is simply not quoted.
     const index = coverageIndex(coverageOf(legacy));
     expect(isSpaceComparable(index, "kitchen", [A, B])).toBe(true);
+  });
+});
+
+describe("recap placement copy", () => {
+  const sameCompanyLabels: Record<string, VendorLabel> = {
+    A: {
+      company: "INFOSYS LIMITED",
+      variant: "",
+      quoteNumber: "Q3BS200",
+      quoteDate: "",
+      label: "INFOSYS LIMITED",
+      full: "INFOSYS LIMITED #Q3BS200",
+    },
+    B: {
+      company: "INFOSYS LIMITED",
+      variant: "",
+      quoteNumber: "Q3ZWIFS",
+      quoteDate: "",
+      label: "INFOSYS LIMITED",
+      full: "INFOSYS LIMITED #Q3ZWIFS",
+    },
+  };
+
+  const mixedRow: BundleRow = {
+    placement: { A: "space", B: "project" },
+    A: 17299,
+    B: 17700,
+  };
+
+  it("names the quote number when both quotes are the same company", () => {
+    expect(vendorsShareCompany(["A", "B"], sameCompanyLabels)).toBe(true);
+    expect(
+      recapPlacementNote(mixedRow, "A", sameCompanyLabels, true)
+    ).toBe("#Q3BS200: already in the spaces above — comparison only");
+    expect(
+      recapPlacementNote(mixedRow, "B", sameCompanyLabels, true)
+    ).toBe(
+      "#Q3ZWIFS: one whole-home figure — included in this quote, not in the space sums"
+    );
+  });
+
+  it("names the company when the vendors differ", () => {
+    const labels = buildVendorLabels(matrix.vendors as string[], matrix.vendorMeta);
+    const lighting = bundleRowsOf(matrix).find(
+      (row) => row.bundle_family === "lighting"
+    )!;
+    expect(lighting.placement?.[A]).toBe("space");
+    expect(lighting.placement?.[B]).toBe("mixed");
+    expect(vendorsShareCompany(matrix.vendors as string[], labels)).toBe(false);
+    const notes = recapPlacementNotes(
+      lighting,
+      matrix.vendors as string[],
+      labels
+    );
+    expect(notes[0]).toContain("INFOSYS LIMITED");
+    expect(notes[0]).toContain("already in the spaces above");
+    expect(notes[1]).toContain("TATA CONSULTANCY SERVICES LIMITED");
+    expect(notes[1]).toContain("split across spaces and Whole home");
+  });
+
+  it("does not summarise when both quotes sit in the same place", () => {
+    const bothRooms: BundleRow = {
+      placement: { A: "space", B: "space" },
+      A: 100,
+      B: 200,
+    };
+    expect(recapPlacementNotes(bothRooms, ["A", "B"], sameCompanyLabels)).toEqual(
+      []
+    );
+  });
+
+  it("infers rooms vs whole-home when the payload has no placement field", () => {
+    const row: BundleRow = {
+      bundle_family: "lighting",
+      basis: { A: "itemized", B: "itemized" },
+      A: 17299,
+      B: 17700,
+    };
+    const spaces = [
+      {
+        space_id: "bedroom",
+        bundle_family: "lighting",
+        work_key: "alias:electrical_points",
+        A: 5617,
+        B: 0,
+      },
+    ];
+    const project = [
+      {
+        space_id: "project_level",
+        bundle_family: "lighting",
+        work_key: "alias:electrical_work",
+        A: 0,
+        B: 17700,
+      },
+    ];
+    const hydrated = withInferredPlacement(row, ["A", "B"], spaces, project);
+    expect(hydrated.placement?.A).toBe("space");
+    expect(hydrated.placement?.B).toBe("project");
+    expect(
+      recapPlacementNote(hydrated, "A", sameCompanyLabels, true)
+    ).toContain("#Q3BS200");
+    expect(
+      recapPlacementNote(hydrated, "B", sameCompanyLabels, true)
+    ).toContain("#Q3ZWIFS");
+  });
+});
+
+describe("GST entry flags", () => {
+  const labels: Record<string, VendorLabel> = {
+    A: {
+      company: "INFOSYS LIMITED",
+      variant: "",
+      quoteNumber: "Q3BS200",
+      quoteDate: "",
+      label: "INFOSYS LIMITED",
+      full: "INFOSYS LIMITED #Q3BS200",
+    },
+    B: {
+      company: "INFOSYS LIMITED",
+      variant: "",
+      quoteNumber: "QLIX48D",
+      quoteDate: "",
+      label: "INFOSYS LIMITED",
+      full: "INFOSYS LIMITED #QLIX48D",
+    },
+  };
+
+  it("does not banner when every quote used the same GST entry", () => {
+    const meta = {
+      A: { gst_mode: "exclusive" as const },
+      B: { gst_mode: "exclusive" as const },
+    };
+    expect(gstModesDiffer(["A", "B"], meta)).toBe(false);
+    expect(gstCompareBanner(["A", "B"], meta, labels)).toBe("");
+    expect(gstEntryChip("exclusive")).toBe("Entered excl. GST");
+  });
+
+  it("names quote numbers when one quote is excl GST and the other incl GST", () => {
+    const meta = {
+      A: { gst_mode: "exclusive" as const },
+      B: { gst_mode: "inclusive" as const },
+    };
+    expect(gstModesDiffer(["A", "B"], meta)).toBe(true);
+    const banner = gstCompareBanner(["A", "B"], meta, labels);
+    expect(banner).toContain("#Q3BS200 was entered excluding GST");
+    expect(banner).toContain("#QLIX48D was entered including GST");
+    expect(banner).toContain("Amounts below include GST");
   });
 });

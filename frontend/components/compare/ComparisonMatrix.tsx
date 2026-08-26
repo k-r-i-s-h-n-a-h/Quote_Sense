@@ -18,7 +18,13 @@ import {
   parseCellStatus,
   partitionBundleRows,
   projectRowsForDisplay,
-  reconcileQuoteTotals,
+  recapPlacementNote,
+  recapPlacementNotes,
+  vendorsShareCompany,
+  withInferredPlacement,
+  gstCompareBanner,
+  gstEntryChip,
+  gstModeOf,
   type BundleRow,
   type CoverageEntry,
   type SpaceRow,
@@ -35,8 +41,6 @@ type Props = {
   bundleTier?: BundleRow[];
   projectTier?: SpaceRow[];
   coverage?: CoverageEntry[];
-  /** Vendor grand totals from chartData — the original quote amounts. */
-  quotedTotals?: Record<string, number>;
 };
 
 /**
@@ -110,11 +114,18 @@ export default function ComparisonMatrix({
   bundleTier = [],
   projectTier,
   coverage = [],
-  quotedTotals,
 }: Props) {
   const vendorLabels = useMemo(
     () => buildVendorLabels(vendors, vendorMeta),
     [vendors, vendorMeta]
+  );
+  const sameCompany = useMemo(
+    () => vendorsShareCompany(vendors, vendorLabels),
+    [vendors, vendorLabels]
+  );
+  const gstBanner = useMemo(
+    () => gstCompareBanner(vendors, vendorMeta, vendorLabels),
+    [vendors, vendorMeta, vendorLabels]
   );
 
   // Prefer the tiers when present; fall back to the flat payload so an older
@@ -124,6 +135,13 @@ export default function ComparisonMatrix({
   const { lumpSums, scattered } = useMemo(
     () => partitionBundleRows(bundleTier),
     [bundleTier]
+  );
+  const scatteredForDisplay = useMemo(
+    () =>
+      scattered.map((row) =>
+        withInferredPlacement(row, vendors, spaceRows, projectTier ?? [])
+      ),
+    [scattered, vendors, spaceRows, projectTier]
   );
   const projectForDisplay = useMemo(
     () => projectRowsForDisplay(projectTier ?? [], bundleTier),
@@ -135,17 +153,6 @@ export default function ComparisonMatrix({
   );
   const coverIdx = useMemo(() => coverageIndex(coverage), [coverage]);
   const colCount = vendors.length + 1;
-  const quoteTotals = useMemo(
-    () =>
-      reconcileQuoteTotals(
-        vendors,
-        spaceRows,
-        bundleTier,
-        projectTier?.length ? projectTier : [],
-        quotedTotals
-      ),
-    [vendors, spaceRows, bundleTier, projectTier, quotedTotals]
-  );
 
   const renderBundleRows = (
     rows: BundleRow[],
@@ -177,10 +184,24 @@ export default function ComparisonMatrix({
               {bundle.takeaway.text}
             </div>
           ) : null}
+          {accent === "sky"
+            ? recapPlacementNotes(bundle, vendors, vendorLabels).map((note) => (
+                <div
+                  key={note}
+                  className="text-[10px] text-sky-900 bg-sky-50 border border-sky-200 rounded px-1.5 py-1 mt-1.5 leading-snug"
+                >
+                  {note}
+                </div>
+              ))
+            : null}
         </td>
         {vendors.map((vendor, vIdx) => {
           const value = amountOf(bundle, vendor);
           const note = bundlePriceNote(bundle, vendor);
+          const placeNote =
+            accent === "sky"
+              ? recapPlacementNote(bundle, vendor, vendorLabels, sameCompany)
+              : "";
           return (
             <td
               key={vIdx}
@@ -194,6 +215,11 @@ export default function ComparisonMatrix({
                   {note ? (
                     <div className="text-[9px] text-stone-500 mt-0.5 normal-case">
                       {note}
+                    </div>
+                  ) : null}
+                  {placeNote ? (
+                    <div className="text-[9px] text-sky-800 mt-0.5 normal-case leading-snug max-w-[14rem] ml-auto">
+                      {placeNote}
                     </div>
                   ) : null}
                 </>
@@ -385,6 +411,11 @@ export default function ComparisonMatrix({
           <p className="qs-section-sub">
             Cost by space, with work items listed under each.
           </p>
+          {gstBanner ? (
+            <p className="mt-2 text-[11px] leading-snug text-sky-900 bg-sky-50 border border-sky-200 rounded-md px-2.5 py-1.5 max-w-3xl">
+              {gstBanner}
+            </p>
+          ) : null}
         </div>
         {onDownloadPdf ? (
           <button
@@ -457,6 +488,11 @@ export default function ComparisonMatrix({
                           {info?.quoteDate || meta.quote_date || ""}
                         </div>
                       )}
+                      {gstEntryChip(gstModeOf(meta)) ? (
+                        <div className="text-[9px] font-semibold text-stone-500 normal-case tracking-normal mt-0.5">
+                          {gstEntryChip(gstModeOf(meta))}
+                        </div>
+                      ) : null}
                     </div>
                   </th>
                 );
@@ -492,14 +528,14 @@ export default function ComparisonMatrix({
               </>
             )}
 
-            {scattered.length > 0 && (
+            {scatteredForDisplay.length > 0 && (
               <>
                 {renderSectionHeader(
                   "Same work, different spaces",
-                  "Comparison only — not extra spend. Each vendor's amount still sits in the rooms or in Whole home, and is counted once in Quote total.",
+                  "Comparison only — not extra spend. Read each quote's note: a space figure is already in the spaces above; a whole-home figure is not in those space sums and is included in this quote.",
                   "sky"
                 )}
-                {renderBundleRows(scattered, "sky")}
+                {renderBundleRows(scatteredForDisplay, "sky")}
               </>
             )}
 
@@ -528,36 +564,6 @@ export default function ComparisonMatrix({
                 ))}
               </>
             )}
-
-            <tr role="presentation">
-              <td
-                colSpan={colCount}
-                className="h-4 p-0 bg-[var(--background)] border-0"
-              />
-            </tr>
-            <tr className="bg-stone-900 text-white border-y-2 border-stone-900">
-              <td className="py-3.5 pl-5 pr-4">
-                <div className="text-xs font-extrabold uppercase tracking-wide">
-                  Quote total
-                </div>
-                <div className="text-[10px] text-stone-300 mt-0.5 font-normal normal-case tracking-normal">
-                  Each vendor&apos;s full quoted amount
-                </div>
-              </td>
-              {vendors.map((vendor, vIdx) => {
-                const parts = quoteTotals[vendor];
-                return (
-                  <td
-                    key={vIdx}
-                    className="px-3 py-3.5 text-right tabular-nums align-middle"
-                  >
-                    <div className="text-base font-extrabold">
-                      {formatInrFull(parts?.total ?? 0)}
-                    </div>
-                  </td>
-                );
-              })}
-            </tr>
           </tbody>
         </table>
       </div>
@@ -567,6 +573,11 @@ export default function ComparisonMatrix({
         did not quote this work.{" "}
         <span className="font-medium text-amber-700">incl. in …</span> means the
         price is already inside that vendor&apos;s package, so it is not missing.
+        Same work, different spaces is comparison only — a space figure is already
+        in the spaces above; a whole-home figure is included in this quote, not
+        in those space sums. Column labels &quot;Entered excl. GST&quot; and
+        &quot;Entered incl. GST&quot; are how the vendor typed the quote; figures
+        shown include GST.
       </p>
     </section>
   );

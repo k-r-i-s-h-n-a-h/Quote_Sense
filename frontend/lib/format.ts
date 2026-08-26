@@ -75,6 +75,8 @@ export type VendorMeta = {
   filename?: string;
   quote_number?: string;
   quote_date?: string;
+  /** How the vendor entered prices: excluding GST, including GST, or mixed. */
+  gst_mode?: "exclusive" | "inclusive" | "mixed" | "";
 };
 
 export type VendorLabel = {

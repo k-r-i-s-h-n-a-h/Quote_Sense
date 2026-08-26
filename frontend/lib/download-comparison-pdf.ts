@@ -12,7 +12,13 @@ import {
   parseCellStatus,
   partitionBundleRows,
   projectRowsForDisplay,
-  reconcileQuoteTotals,
+  recapPlacementNote,
+  recapPlacementNotes,
+  vendorsShareCompany,
+  withInferredPlacement,
+  gstCompareBanner,
+  gstEntryChip,
+  gstModeOf,
   type BundleRow,
   type CoverageEntry,
   type SpaceRow,
@@ -26,7 +32,6 @@ export type PdfTiers = {
   bundleTier?: BundleRow[];
   projectTier?: SpaceRow[];
   coverage?: CoverageEntry[];
-  quotedTotals?: Record<string, number>;
 };
 
 /** jsPDF built-in Helvetica — clean sans-serif for comparison exports. */
@@ -123,6 +128,8 @@ function vendorHeaderCell(
   const qno = info?.quoteNumber ? `#${info.quoteNumber}` : "";
   const qdate = info?.quoteDate || meta.quote_date || "";
   if (qno || qdate) lines.push([qno, qdate].filter(Boolean).join(" · "));
+  const gstChip = gstEntryChip(gstModeOf(meta));
+  if (gstChip) lines.push(gstChip);
   return lines.join("\n");
 }
 
@@ -246,6 +253,23 @@ export async function downloadComparisonPdf(
     ? tableData.filter((r) => String(r.space_id ?? "") !== "project_level")
     : tableData;
 
+  const gstBanner = gstCompareBanner(vendors, vendorMeta, vendorLabels);
+  if (gstBanner) {
+    body.push([
+      {
+        content: gstBanner,
+        colSpan: vendors.length + 1,
+        styles: {
+          font: FONT,
+          fillColor: [224, 242, 254],
+          textColor: [7, 89, 133],
+          fontSize: layout.body,
+          cellPadding: { top: 2, bottom: 2, left: 3, right: 3 },
+        },
+      },
+    ]);
+  }
+
   const grouped = groupTableData(spaceRows);
   for (const cat of grouped) {
     if (grouped.length > 1) {
@@ -346,11 +370,16 @@ export async function downloadComparisonPdf(
   if (bundleTier.length > 0) {
     const { lumpSums, scattered } = partitionBundleRows(bundleTier);
 
+    const sameCompany = vendorsShareCompany(vendors, vendorLabels);
+    const scatteredForDisplay = scattered.map((row) =>
+      withInferredPlacement(row, vendors, spaceRows, projectTier)
+    );
     const pushBundleSection = (
       title: string,
       rows: BundleRow[],
       fill: [number, number, number],
-      text: [number, number, number]
+      text: [number, number, number],
+      withPlacement = false
     ) => {
       if (rows.length === 0) return;
       body.push([
@@ -368,6 +397,9 @@ export async function downloadComparisonPdf(
         },
       ]);
       for (const bundle of rows) {
+        const placeNotes = withPlacement
+          ? recapPlacementNotes(bundle, vendors, vendorLabels)
+          : [];
         const detail = [
           bundle.covered_spaces?.length
             ? `Across: ${bundle.covered_spaces.join(", ")}`
@@ -376,6 +408,7 @@ export async function downloadComparisonPdf(
             ? `May overlap with a separate line for ${bundle.overlap_flags.join(", ")} — confirm with the vendor`
             : "",
           bundle.takeaway?.text ? bundle.takeaway.text : "",
+          ...placeNotes,
         ]
           .filter(Boolean)
           .join("\n");
@@ -394,9 +427,12 @@ export async function downloadComparisonPdf(
             const value = amountOf(bundle, v);
             if (value <= 0) return "N/A";
             const note = bundlePriceNote(bundle, v);
-            return note
-              ? `${formatPdfAmount(value)}\n(${note})`
-              : formatPdfAmount(value);
+            const placeNote = withPlacement
+              ? recapPlacementNote(bundle, v, vendorLabels, sameCompany)
+              : "";
+            return [formatPdfAmount(value), note && `(${note})`, placeNote]
+              .filter(Boolean)
+              .join("\n");
           }),
         ]);
       }
@@ -442,10 +478,11 @@ export async function downloadComparisonPdf(
       }
     }
     pushBundleSection(
-      "SAME WORK, DIFFERENT SPACES (comparison only — counted once in Quote total, not extra spend)",
-      scattered,
+      "SAME WORK, DIFFERENT SPACES (comparison only — read each quote's note)",
+      scatteredForDisplay,
       [224, 242, 254],
-      [7, 89, 133]
+      [7, 89, 133],
+      true
     );
   }
 
@@ -485,42 +522,6 @@ export async function downloadComparisonPdf(
       }
     }
   }
-
-  const quoteTotals = reconcileQuoteTotals(
-    vendors,
-    spaceRows,
-    bundleTier,
-    projectTier,
-    tiers.quotedTotals
-  );
-  body.push([
-    {
-      content: "QUOTE TOTAL",
-      styles: {
-        font: FONT,
-        fillColor: [28, 25, 23],
-        textColor: [255, 255, 255],
-        fontStyle: "bold",
-        fontSize: layout.category,
-        cellPadding: { top: 2.5, bottom: 2.5, left: 3, right: 3 },
-      },
-    },
-    ...vendors.map((v) => {
-      const parts = quoteTotals[v];
-      return {
-        content: formatPdfAmount(parts?.total ?? 0),
-        styles: {
-          font: FONT,
-          fillColor: [28, 25, 23],
-          textColor: [255, 255, 255],
-          fontStyle: "bold",
-          fontSize: layout.body,
-          halign: "right" as const,
-          cellPadding: { top: 2.5, bottom: 2.5, left: pad, right: pad },
-        },
-      };
-    }),
-  ]);
 
   const columnStyles = buildColumnStyles(vendors, tableWidth, layout);
 
@@ -572,7 +573,8 @@ export async function downloadComparisonPdf(
     doc.text(
       [
         '"N/A" = that vendor did not quote this work.  "incl. in ..." = price is already inside that vendor\'s package.',
-        "Lump sum packages are separate from space totals. \"Same work, different spaces\" is a comparison only — counted once in Quote total, not extra spend.",
+        "Lump sum packages are separate from space totals. \"Same work, different spaces\" is comparison only — a space figure is already in the spaces above; a whole-home figure is included in this quote, not in those space sums.",
+        '"Entered excl. GST" / "Entered incl. GST" is how the vendor typed the quote. Figures shown include GST so columns can be compared.',
       ],
       margin,
       finalY + 6

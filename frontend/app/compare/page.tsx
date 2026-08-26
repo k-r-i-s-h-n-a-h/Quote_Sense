@@ -448,15 +448,10 @@ function QuoteSenseContent() {
 
   const handleDownloadPdf = async () => {
     if (tableData.length === 0 || vendors.length === 0) return;
-    const quoted: Record<string, number> = {};
-    for (const point of chartData) {
-      quoted[point.vendor] = Number(point.total) || 0;
-    }
     await downloadComparisonPdf(tableData, vendors, vendorLabels, vendorMeta, {
       bundleTier,
       projectTier,
       coverage,
-      quotedTotals: quoted,
     });
   };
 
@@ -887,9 +882,6 @@ function QuoteSenseContent() {
             bundleTier={bundleTier}
             projectTier={projectTier}
             coverage={coverage}
-            quotedTotals={Object.fromEntries(
-              chartData.map((point) => [point.vendor, Number(point.total) || 0])
-            )}
           />
         )}
 

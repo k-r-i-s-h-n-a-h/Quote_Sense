@@ -19,6 +19,7 @@ payload) must produce these fields before S2 runs.
 | `source_filename` | str | yes | PDF filename or quote number. |
 | `quote_number` | str | no | `""` when unknown. |
 | `quote_date` | str | no | `YYYY-MM-DD` or `""`. |
+| `gst_mode` | str | no | Tatva lane: `exclusive` / `inclusive` / `mixed` / `""`. From `workSummary.exclusiveGst` / `inclusiveGst`. PDF lane: `""`. |
 | `grand_total` | float | yes | Quote-level total; repeated on every row of that quote. |
 | `service_category` | str | yes | Blank becomes `"Other"`. |
 | `sub_service` | str | yes | Vendor's own label. Blank becomes `"General"`. **Never trusted as a join key.** |
@@ -29,7 +30,7 @@ payload) must produce these fields before S2 runs.
 | `pricing_method` | str | yes | e.g. `"Area – Direct Entry (sq ft)"`, `"Fixed Amount / Lump Sum"`. |
 | `quantity` | float | no | |
 | `rate` | float | no | |
-| `amount` | float | yes | Line total in rupees. The only figure the matrix sums. |
+| `amount` | float | yes | Line total in rupees. The only figure the matrix sums. Tatva lane uses billed `pricingInput.grandTotal` (GST included), not the pre-GST `amount`. |
 | `service_type` | str | no | `essential` / `midlevel` / `luxury`. |
 | `sub_service_id` | str | no | Tatva ObjectId when the payload lane supplies one. |
 | `pricing_method_id` | str | no | Tatva ObjectId. |
@@ -104,7 +105,7 @@ Allocating a lumpsum across rooms would invent numbers the vendor never quoted.
 ```jsonc
 {
   "vendors": ["Infosys (Q2OE1CX)", "TCS (QGT3A1I)"],
-  "vendorMeta": { "<vendor>": { "company": "", "filename": "", "quote_number": "", "quote_date": "" } },
+  "vendorMeta": { "<vendor>": { "company": "", "filename": "", "quote_number": "", "quote_date": "", "gst_mode": "" } },
   "chartData": [{ "vendor": "...", "total": 0 }],
   "spaceTier": [ /* SpaceRow */ ],
   "bundleTier": [ /* BundleRow */ ],
@@ -142,6 +143,7 @@ Allocating a lumpsum across rooms would invent numbers the vendor never quoted.
 | `covered_items` | list[str] | Work labels named in the bundle description. |
 | `overlap_flags` | list[str] | |
 | `basis` | dict | `{ "<vendor>": "bundle" \| "itemized" \| "none" }` — how each vendor's figure was arrived at. |
+| `placement` | dict | `{ "<vendor>": "space" \| "project" \| "bundle" \| "mixed" \| "none" }` — where those rupees already sit. |
 | `takeaway` | dict or omitted | `{ kind, text }` when one vendor is a package and another is itemised with a large gap. Never on scattered recaps. |
 | `<vendor name>` | int | Bundler's lumpsum, or the counterpart's summed itemised lines. |
 

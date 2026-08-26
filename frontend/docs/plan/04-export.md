@@ -34,12 +34,14 @@ Everything load-bearing for a decision:
 | Non-comparable space marker | otherwise two unlike totals look comparable |
 | Bundle section with `basis` | the lumpsum-vs-itemised gap is often the biggest number in the comparison |
 | Package takeaway / Key takeaways | the customer-facing ask-the-vendor sentence for that gap |
+| Recap placement notes | which quote's figure is already in the spaces vs a whole-home amount in this quote |
+| GST entry chips / mixed banner | how each quote was typed (excl vs incl GST); amounts stay billed totals |
 | Overlap warnings | a possible double-count the reader should raise with the vendor |
 | Footnote explaining the three cell states | the PDF has no tooltips |
 
 Whole-home export uses `projectRowsForDisplay`, the same filter as the screen, so
-electrical compared in "Same work, different spaces" is not listed again. Quote
-total still uses the full `projectTier`.
+electrical compared in "Same work, different spaces" is not listed again. The
+export does not paint a Quote total row; grand totals stay on the chart.
 
 Since colour and hover are unavailable, every state is expressed in text.
 

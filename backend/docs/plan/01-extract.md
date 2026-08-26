@@ -45,6 +45,10 @@ interpretation out of S1 means a model swap cannot corrupt grouping.
 4. One quote's `grand_total` is repeated on every row of that quote.
 5. `vendor_name` is `"{company} ({source_filename})"` so two quotes from the
    same company remain distinct matrix columns.
+6. Tatva `workSummary` GST flags become `gst_mode` (`exclusive` / `inclusive`).
+   Line `amount` is the billed `grandTotal` so excl. and incl. quotes compare
+   on the same GST-inclusive basis. Do not mix a pre-GST `amount` with a
+   GST-inclusive total, and do not apply a homemade GST rate.
 
 ## Validation
 

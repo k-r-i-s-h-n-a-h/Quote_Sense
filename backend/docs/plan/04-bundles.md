@@ -122,6 +122,10 @@ visible scope difference rather than a silent hole.
 `basis` matters. A number reached by summing five lines is not the same kind of
 number as a single lumpsum, and the UI is required to say which is which.
 
+Each vendor also gets `placement`: `space` (figure already in room rows),
+`project` (one whole-home figure), `bundle` (package), or `mixed`. The UI names
+the quote and says where the rupees already sit. It does not change the addition.
+
 ### Overlap detection
 
 When a bundle's description names a work item the same vendor also bills on its
@@ -161,6 +165,8 @@ None. S4 is fully deterministic: regex on `pricing_method`, token matching on
 - the hardware bundle pairs against Rs 37,198 with the right `basis` values,
 - the lighting family emits a row with both vendors non-zero, proving the
   two-vendor guard is gone,
+- lighting `placement` is `space` for the kitchen line and `mixed` when the
+  counterpart spans rooms and Whole home,
 - `overlap_flags` contains the rolling-shutter key,
 - a bundle's amount never appears in any space total,
 - `tests/test_space_compare.py::test_wardrobe_does_not_roll_into_lighting` — a

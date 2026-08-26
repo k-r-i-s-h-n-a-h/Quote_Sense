@@ -355,6 +355,19 @@ def test_lighting_recap_has_no_takeaway(bundle_rows):
     assert not row.get("takeaway")
 
 
+def test_lighting_placement_is_rooms_vs_whole_home(bundle_rows):
+    """Vendor A billed electrical in the kitchen; vendor B left it project-level."""
+    row = row_for(bundle_rows, "lighting")
+    assert row["placement"][VENDOR_A] == "space"
+    assert row["placement"][VENDOR_B] == "mixed"
+
+
+def test_hardware_placement_is_package_vs_rooms(bundle_rows):
+    row = row_for(bundle_rows, "hardware")
+    assert row["placement"][VENDOR_A] == "bundle"
+    assert row["placement"][VENDOR_B] == "space"
+
+
 def test_package_lower_takeaway():
     row = {
         "bundle_label": "Hardware & accessories",

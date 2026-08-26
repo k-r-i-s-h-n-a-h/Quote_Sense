@@ -46,6 +46,8 @@ export interface BundleRow {
   covered_items: string[];
   overlap_flags: string[];
   basis: Record<Vendor, PriceBasis>;
+  placement?: Record<Vendor, "space" | "project" | "bundle" | "mixed" | "none">;
+  takeaway?: { kind?: string; text?: string };
   [vendor: string]: unknown;
 }
 

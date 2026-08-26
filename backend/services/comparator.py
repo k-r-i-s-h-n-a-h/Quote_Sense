@@ -559,6 +559,7 @@ def run_comparison(session_id, on_matrix_ready=None, df=None, fast_moving_avg=Tr
         #     (company name + quote number + quote date) for the chart and table.
         has_quote_number = 'quote_number' in df.columns
         has_quote_date = 'quote_date' in df.columns
+        has_gst_mode = 'gst_mode' in df.columns
         vendor_meta = {}
         for _, r in df.drop_duplicates('vendor_name').iterrows():
             key = r['vendor_name']
@@ -567,6 +568,7 @@ def run_comparison(session_id, on_matrix_ready=None, df=None, fast_moving_avg=Tr
                 "filename": str(r.get('source_filename', '') or '').strip(),
                 "quote_number": (str(r.get('quote_number', '') or '').strip() if has_quote_number else ''),
                 "quote_date": (str(r.get('quote_date', '') or '').strip() if has_quote_date else ''),
+                "gst_mode": (str(r.get('gst_mode', '') or '').strip() if has_gst_mode else ''),
             }
 
         # 2. Space-first matrix: cluster rooms, roll up lighting lumpsum vs itemized.
@@ -737,6 +739,33 @@ def _bind_catalog_ids_from_cache(df):
     return df
 
 
+def gst_mode_from_quote(quote_data: dict) -> str:
+    """Read Tatva workSummary GST flags.
+
+    Vendors choose exclusive (prices before GST) or inclusive (prices already
+    include GST). Returns ``exclusive``, ``inclusive``, ``mixed``, or ``""``.
+    """
+    modes: set[str] = set()
+    for section in quote_data.get("workSummary") or []:
+        if not isinstance(section, dict):
+            continue
+        exclusive = bool(section.get("exclusiveGst"))
+        inclusive = bool(section.get("inclusiveGst"))
+        if exclusive and not inclusive:
+            modes.add("exclusive")
+        elif inclusive and not exclusive:
+            modes.add("inclusive")
+        elif exclusive and inclusive:
+            modes.add("mixed")
+    if not modes:
+        return ""
+    if modes == {"exclusive"}:
+        return "exclusive"
+    if modes == {"inclusive"}:
+        return "inclusive"
+    return "mixed"
+
+
 def mongodb_quotes_to_dataframe(quotes_list: list):
     """Build a comparison DataFrame directly from Tatva/MongoDB quote JSON."""
     try:
@@ -754,6 +783,7 @@ def mongodb_quotes_to_dataframe(quotes_list: list):
         source_filename = quote_number or "DIRECT_SYNC"
         client_detail = quote_data.get("clientDetail") or {}
         quote_date = str(quote_data.get("quoteDate") or quote_data.get("createdAt") or "")
+        gst_mode = gst_mode_from_quote(quote_data)
 
         grand_total = 0.0
         for item in quote_data.get("pricingSummary") or []:
@@ -796,6 +826,7 @@ def mongodb_quotes_to_dataframe(quotes_list: list):
                         "source_filename": source_filename,
                         "quote_number": quote_number,
                         "quote_date": quote_date[:10] if len(quote_date) >= 10 else quote_date,
+                        "gst_mode": gst_mode,
                         "grand_total": grand_total,
                         "client_name": client_detail.get("clientName") or "",
                         "service_type": quote_service_type,

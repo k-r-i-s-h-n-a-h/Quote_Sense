@@ -153,6 +153,7 @@
       "bundle_vendor": "a",
       "amounts": { "a": 100300, "b": 37198 },
       "basis": { "a": "bundle", "b": "itemized" },
+      "placement": { "a": "bundle", "b": "space" },
       "b_itemized_lines": [
         "Bottle Pullouts",
         "Tandem Drawers",
@@ -169,6 +170,7 @@
       "bundle_vendor": null,
       "amounts": { "a": 17700, "b": 72629 },
       "basis": { "a": "itemized", "b": "itemized" },
+      "placement": { "a": "space", "b": "mixed" },
       "a_lines": ["CO light provision"],
       "b_lines": [
         "Decorative Lights",

@@ -241,6 +241,8 @@ def test_electrical_is_visible_for_both_vendors(matrix):
     row = next(r for r in matrix["bundleTier"] if r["bundle_family"] == "lighting")
     assert row[VENDOR_A] > 0
     assert row[VENDOR_B] > 0
+    assert row["placement"][VENDOR_A] == "space"
+    assert row["placement"][VENDOR_B] == "mixed"
 
 
 def test_bundled_cells_are_not_reported_as_not_quoted(matrix):

@@ -95,3 +95,20 @@ When one vendor priced a family as a package and another listed it line by
 line, the customer must see a short plain-English note: who is higher, by how
 much, and what to ask. Do not call either side wrong. Do not write that note
 for itemised-vs-itemised recaps. Do not change room totals or subtract overlaps.
+
+When one quote itemises that family in rooms and another parks a single
+whole-home figure, the recap must name each quote and say where the rupees
+already sit. Use the company name when the companies differ; use the quote
+number when they are the same company. Space figures are already in the
+spaces above (comparison only). A whole-home figure is included in this
+quote, not in the space sums. Do not change the addition. Do not paint a
+Quote total row on the matrix.
+
+## 6. GST inclusive vs exclusive
+
+Tatva quotes carry `exclusiveGst` / `inclusiveGst` on `workSummary`. Matrix
+amounts are always the billed `grandTotal` (GST included). Do not mix a
+pre-GST `amount` from one quote with a GST-inclusive `grandTotal` from
+another. Name how each quote was entered (company if they differ, quote
+number if they are the same company). Do not convert one quote onto the
+other's GST basis by applying a homemade rate.

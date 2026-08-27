@@ -95,7 +95,7 @@ export function sumSubServiceRow(
 export function groupTableData(rows: CompareTableRow[]): CatGroup[] {
   const cats: CatGroup[] = [];
   const catIdx = new Map<string, number>();
-  const spaceIdx = new Map<string, number>();
+  const spacesById = new Map<string, SpaceGroup>();
   const subIdx = new Map<string, number>();
 
   for (const item of rows) {
@@ -112,24 +112,26 @@ export function groupTableData(rows: CompareTableRow[]): CatGroup[] {
     }
     const cat = cats[catIdx.get(category)!];
 
-    const spaceKey = `${category}||${spaceId}`;
-    if (!spaceIdx.has(spaceKey)) {
-      spaceIdx.set(spaceKey, cat.spaces.length);
-      cat.spaces.push({ space, spaceId, spaceRaw, subs: [] });
+    // Key on space_id only — not category — so Living / L R / LVR cannot split
+    // across service categories. Customers need one spend total per room.
+    let spaceGroup = spacesById.get(spaceId);
+    if (!spaceGroup) {
+      spaceGroup = { space, spaceId, spaceRaw, subs: [] };
+      cat.spaces.push(spaceGroup);
+      spacesById.set(spaceId, spaceGroup);
     }
-    const spaceGroup = cat.spaces[spaceIdx.get(spaceKey)!];
     if (spaceRaw && !spaceGroup.spaceRaw.includes(spaceRaw)) {
       spaceGroup.spaceRaw = [spaceGroup.spaceRaw, spaceRaw].filter(Boolean).join(" · ");
     }
 
-    const subKey = `${spaceKey}||${workKey}`;
+    const subKey = `${spaceId}||${workKey}`;
     if (!subIdx.has(subKey)) {
       subIdx.set(subKey, spaceGroup.subs.length);
       spaceGroup.subs.push({ sub, workKey, rows: [] });
     }
     spaceGroup.subs[subIdx.get(subKey)!].rows.push(item);
   }
-  return cats;
+  return cats.filter((c) => c.spaces.length > 0);
 }
 
 /**

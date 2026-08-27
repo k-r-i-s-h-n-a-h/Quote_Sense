@@ -1,0 +1,114 @@
+# ACTION.md — invariants agents must not reverse
+
+This file is the lock on comparison behaviour that customers already agreed.
+If a later change looks like an improvement but violates one of these rules,
+**do not ship it**. Update a stage implementation to honour the rule; do not
+weaken the rule to make a model or a heuristic easier.
+
+The pipeline plan stays in [PLAN.md](PLAN.md). This file is the "why we must
+not undo that work" list.
+
+---
+
+## 1. One physical space, one customer total (S3)
+
+Vendors name the same room in different words. The matrix must **combine**
+those spellings into one space so the customer sees spend per room, not per
+vendor nickname.
+
+These are the **same living space** and must be one section:
+
+`Living` · `LIVING` · `Living Room` · `Living area` · `L R` · `LR` · `LVR` ·
+`L ROOM` · `Lroom` · `Liv`
+
+The same rule applies to every room type: `DNR` / `Dining` / `Dining area`;
+`KIT` / `Kitchen`; `MBR` / `Master Bedroom`; lounge spellings on one floor.
+
+**What the customer must see:** every sub-service the vendors quoted in that
+space, under one heading, with one space total.
+
+**What they must not see:** a separate block for each spelling (`LIVING`, then
+`L R`, then `LVR`, then `L ROOM`). That is a decomposition by words, not by
+rooms, and it hides the living-area total.
+
+How S3 is allowed to do this:
+
+1. Deterministic room tokens and compact abbreviations first
+   (`backend/services/space_clusters.py`).
+2. LLM overlay only for leftovers the tokens missed — and the prompt must
+   treat the living/dining abbreviations above as **mandatory merges**.
+3. Display heading comes from the vendors' own wording (prefer the spelled-out
+   name). Never invent a floor (`GF-`) nobody wrote.
+
+The frontend **must not** re-split by the heading. It groups on `space_id`.
+
+Do **not** "fix" this by showing every vendor string as its own space. That
+was the bug.
+
+---
+
+## 2. Packages vs single-item lumpsums (S4)
+
+A package is lump-priced **and** enumerates two or more **known** work items.
+A lump ₹8,850 for one room's wall décor is **not** a package. Hardware listing
+six accessories **is**.
+
+Never treat brand prose (`Greenply & Century`) as a work list. Never slugify
+unknown fragments to force a package. Never sum unrelated leftover (`mixed`)
+packages into one comparison row — one vendor line is one package row.
+
+Window blinds and a tissue holder are whole-home lines, not wall décor.
+
+---
+
+## 3. Expired session → login popup, not an inline button
+
+When the user's Tatva session has expired, tell them with a **modal**.
+
+- Do not put a small "Sign in again" button inside the My projects card.
+- The popup states that the session expired and the primary action is
+  **Sign in again**.
+- Standalone PDF compare may remain available after they dismiss the popup.
+
+Module: `frontend/components/SessionExpiredModal.tsx`, shown from
+`ProjectDashboard` on a 401/403 while a stale user is still in memory.
+
+---
+
+## 4. Change protocol
+
+If a matrix looks wrongly grouped, fix **S3** (or S2 for work items, S4 for
+lumpsums). Do not invent a new grouping layer on the frontend. Do not drop
+abbreviation rules because a new model "will understand it" — keep the
+deterministic merge; the LLM is a backup, not a replacement.
+
+---
+
+## 5. Recap vs Whole home, and package takeaways
+
+A "Same work, different spaces" row is a **comparison view**. It must not be
+shown again as a Whole home line for that family. Accounting stays in
+`projectTier`; only the display is filtered. Quote total still counts those
+rupees **once**.
+
+When one vendor priced a family as a package and another listed it line by
+line, the customer must see a short plain-English note: who is higher, by how
+much, and what to ask. Do not call either side wrong. Do not write that note
+for itemised-vs-itemised recaps. Do not change room totals or subtract overlaps.
+
+When one quote itemises that family in rooms and another parks a single
+whole-home figure, the recap must name each quote and say where the rupees
+already sit. Use the company name when the companies differ; use the quote
+number when they are the same company. Space figures are already in the
+spaces above (comparison only). A whole-home figure is included in this
+quote, not in the space sums. Do not change the addition. Do not paint a
+Quote total row on the matrix.
+
+## 6. GST inclusive vs exclusive
+
+Tatva quotes carry `exclusiveGst` / `inclusiveGst` on `workSummary`. Matrix
+amounts are always the billed `grandTotal` (GST included). Do not mix a
+pre-GST `amount` from one quote with a GST-inclusive `grandTotal` from
+another. Name how each quote was entered (company if they differ, quote
+number if they are the same company). Do not convert one quote onto the
+other's GST basis by applying a homemade rate.

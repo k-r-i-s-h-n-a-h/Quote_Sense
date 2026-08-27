@@ -17,6 +17,7 @@ export default defineConfig({
         // new-code coverage reflects unit-tested helpers.
         "lib/auth.tsx",
         "lib/download-comparison-pdf.ts",
+        "lib/pdf-unicode-font.ts",
         "lib/compare-lane.ts",
         "lib/compare-payload-cache.ts",
         "lib/compare-progress.ts",

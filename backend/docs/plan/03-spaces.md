@@ -78,15 +78,38 @@ could not give.
 A small token table maps room words to `space_id`, checked against `space_raw`
 first and then the description:
 
-`kitchen`, `living`, `dining`, `foyer`, `utility`, `pooja`, `mbr`/`master`,
-`kids`/`children`, `walkin`, `washroom`/`bathroom`, `bedroom` (+ floor and number
-qualifiers).
+`kitchen`, `living`, `dining`, `foyer`, `utility`, `pooja`, `lounge`,
+`mbr`/`master`, `kids`/`children`, `walkin`, `washroom`/`bathroom`/`batroom`,
+`bedroom` (+ floor and number qualifiers). A floor plus a bare `room`
+(`G F room`, `Third floor room`) is a space too; merge folds it into the unique
+bedroom on that floor.
+
+Bathroom is matched **before** master/kid, so "First floor Bathroom (Master
+attached)" is a bathroom, not the bedroom it adjoins. An unqualified bathroom
+is `bathroom`, never silently `common_washroom` — inventing the ground-floor
+common wet room was how a third-floor attached bathroom landed in the
+ground-floor row.
+
+A label that names only a floor (`Ground floor`) is not a room. The resolution
+ladder falls through to the description, which is how "Tv units for living
+room" with Space/Zone `Ground floor` joins Living rather than minting a
+phantom floor cluster.
+
+`Whole Home` / `Full House design` are project-wide, not rooms: they resolve
+to `project_level` so a lumpsum design package compares against the itemised
+2D/3D/BOQ lines instead of sitting in two N/A rows.
 
 Vendors abbreviate heavily on the Space/Zone column, so the table also carries an
-abbreviation layer: `L R`, `LVR`, `LIV`, `L Room` → `living`; `DNR`, `DR`, `DIN` →
-`dining`; `KIT`, `KTN` → `kitchen`; `BR n` → bedroom *n*. Without it each vendor
-spelling became its own `unique:` cluster and one living room was listed three
-times, once per vendor.
+abbreviation layer **and a compact form** (spaces stripped): `L R`, `LR`, `LVR`,
+`LIV`, `L Room`, `L ROOM`, `Lroom`, `LIVING`, `Living Room`, `Living area` →
+`living`; `DNR`, `DR`, `DIN` → `dining`; `KIT`, `KTN` → `kitchen`; `BR n` →
+bedroom *n*. Without this each vendor spelling became its own `unique:` cluster
+and one living room was listed four times (`LIVING`, `L R`, `LVR`, `L ROOM`),
+which hides the space total from the customer.
+
+**Invariant (see [ACTION.md](../../../ACTION.md)):** do not show one matrix
+section per spelling. Combine them. The LLM overlay is a backup for leftovers;
+it must not be used as an excuse to drop the deterministic merge.
 
 ### Floors are never assumed
 
@@ -168,7 +191,11 @@ merging.
 - kitchen and bedroom stay apart,
 - `MBR` and `Walk-in closet` do not merge,
 - spot lights / adaptors / electrical → `Project-level`,
-- dining and foyer variants fold.
+- dining and foyer variants fold,
+- lounge spellings on the same floor merge,
+- a floor-only label is not a room; the description hint wins,
+- a third-floor bathroom is never filed as the ground-floor common washroom,
+- `Whole Home` / `Full House design` are `project_level`.
 
 New:
 

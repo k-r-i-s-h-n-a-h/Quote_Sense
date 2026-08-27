@@ -123,7 +123,7 @@ tatvaops-quotesense/
 ├── docs/                     # Product/API deep-dives
 ├── scripts/                  # QA / deploy verification helpers
 ├── .github/workflows/        # Deploy, cleanup, keep-alive
-└── graphify-out/             # Generated knowledge graph (local tooling)
+└── PLAN.md                   # Comparison pipeline map (read this first)
 ```
 
 ---
@@ -748,8 +748,8 @@ Idempotent demo session `seed_demo_0001` (two vendors + line items). Load compar
 | Path | Purpose |
 |------|---------|
 | `.vercelignore` | Excludes `backend`, `docs`, `supabase`, `.github`, venvs, etc. from Vercel upload |
-| `.cursor/rules/graphify.mdc` | Agent rule: use graphify before codebase exploration |
-| `graphify-out/` | Generated knowledge graph artifacts (local) |
+| `PLAN.md` | Comparison pipeline map: stages, contract, change protocol |
+| `ACTION.md` | Customer-facing invariants (do not reverse §1–4) |
 
 ---
 
@@ -758,6 +758,8 @@ Idempotent demo session `seed_demo_0001` (two vendors + line items). Load compar
 | Path | Audience | Summary |
 |------|----------|---------|
 | `README.md` (this file) | Everyone | Setup, architecture, **full file reference** |
+| `PLAN.md` | Dev / agents | Comparison pipeline map — stages, contract, change protocol |
+| `ACTION.md` | Dev / agents | Customer-facing invariants (do not reverse §1–4) |
 | `docs/QA_TESTING_KT.md` | **QA / testing** | Full KT: env pairings, OTP↔admin, compare/progress, market-rate, checklists, known pitfalls |
 | `scripts/qa_env_smoke.sh` | QA / ops | Curl smoke for health + by-category (`./scripts/qa_env_smoke.sh test`) |
 | `docs/COMPARISON_DATA_LIFECYCLE.md` | Ops / backend | Staging vs permanent tables, finalize-only MA, cleanup Action, gate flag |

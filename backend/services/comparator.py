@@ -190,6 +190,11 @@ def _build_fallback_report(chart_data, bundle_tier=None):
     # With bundles detected we can say something specific instead of repeating
     # the generic scope caveat above.
     for bundle in bundle_tier or []:
+        takeaway = bundle.get("takeaway") or {}
+        text = takeaway.get("text") if isinstance(takeaway, dict) else None
+        if text:
+            lines.append(f"- **Package vs itemised:** {text}")
+            break
         basis = bundle.get("basis") or {}
         bundlers = [v for v, b in basis.items() if b == "bundle"]
         if not bundlers:
@@ -239,6 +244,9 @@ def _build_recommendation_prompt(
             "covers_items": row.get("covered_items"),
             "basis": row.get("basis"),
             "possible_double_count": row.get("overlap_flags"),
+            "takeaway": (row.get("takeaway") or {}).get("text")
+            if isinstance(row.get("takeaway"), dict)
+            else None,
             **_amounts(row),
         }
         for row in bundle_tier
@@ -302,8 +310,12 @@ def _build_recommendation_prompt(
         - **Lowest Total:** which quote is cheapest overall and by roughly how much.
         - **By Space:** name 1-2 rooms where one vendor is clearly cheaper. Only use
           rooms that are NOT in the not-comparable list.
-        - **Scope Difference:** the biggest bundled-scope gap, naming the basis on
-          each side, plus any work only one vendor quoted.
+        - **Package vs itemised:** if a bundled-scope row has a "takeaway" string,
+          copy that text verbatim. Do not rephrase the amounts. Omit this bullet
+          if no takeaway is present. Never write this for a recap where both
+          sides are itemised.
+        - **Scope Difference:** other bundled-scope or not_quoted gaps, kept distinct
+          from the package-vs-itemised takeaway.
         - **Watch Out:** any possible_double_count, or omit this bullet if there is none.
         - **Recommendation:** a clear, practical suggestion on which to pick or what to confirm with vendors.
         """
@@ -429,6 +441,9 @@ def _build_space_rows(subset, vendors, bundled_families=None):
         # Cell-level coverage. A zero is only "not quoted" when the vendor has
         # not bundled this work's family somewhere else in the quote.
         family = str(_modal('bundle_family'))
+        if family.casefold() in ("nan", "none", "null"):
+            family = ""
+        row_dict["bundle_family"] = family
         cell_coverage = {}
         for vendor in vendors:
             amount = float(amounts[vendor]) if vendor in amounts.index else 0.0
@@ -544,6 +559,7 @@ def run_comparison(session_id, on_matrix_ready=None, df=None, fast_moving_avg=Tr
         #     (company name + quote number + quote date) for the chart and table.
         has_quote_number = 'quote_number' in df.columns
         has_quote_date = 'quote_date' in df.columns
+        has_gst_mode = 'gst_mode' in df.columns
         vendor_meta = {}
         for _, r in df.drop_duplicates('vendor_name').iterrows():
             key = r['vendor_name']
@@ -552,6 +568,7 @@ def run_comparison(session_id, on_matrix_ready=None, df=None, fast_moving_avg=Tr
                 "filename": str(r.get('source_filename', '') or '').strip(),
                 "quote_number": (str(r.get('quote_number', '') or '').strip() if has_quote_number else ''),
                 "quote_date": (str(r.get('quote_date', '') or '').strip() if has_quote_date else ''),
+                "gst_mode": (str(r.get('gst_mode', '') or '').strip() if has_gst_mode else ''),
             }
 
         # 2. Space-first matrix: cluster rooms, roll up lighting lumpsum vs itemized.
@@ -722,6 +739,33 @@ def _bind_catalog_ids_from_cache(df):
     return df
 
 
+def gst_mode_from_quote(quote_data: dict) -> str:
+    """Read Tatva workSummary GST flags.
+
+    Vendors choose exclusive (prices before GST) or inclusive (prices already
+    include GST). Returns ``exclusive``, ``inclusive``, ``mixed``, or ``""``.
+    """
+    modes: set[str] = set()
+    for section in quote_data.get("workSummary") or []:
+        if not isinstance(section, dict):
+            continue
+        exclusive = bool(section.get("exclusiveGst"))
+        inclusive = bool(section.get("inclusiveGst"))
+        if exclusive and not inclusive:
+            modes.add("exclusive")
+        elif inclusive and not exclusive:
+            modes.add("inclusive")
+        elif exclusive and inclusive:
+            modes.add("mixed")
+    if not modes:
+        return ""
+    if modes == {"exclusive"}:
+        return "exclusive"
+    if modes == {"inclusive"}:
+        return "inclusive"
+    return "mixed"
+
+
 def mongodb_quotes_to_dataframe(quotes_list: list):
     """Build a comparison DataFrame directly from Tatva/MongoDB quote JSON."""
     try:
@@ -739,6 +783,7 @@ def mongodb_quotes_to_dataframe(quotes_list: list):
         source_filename = quote_number or "DIRECT_SYNC"
         client_detail = quote_data.get("clientDetail") or {}
         quote_date = str(quote_data.get("quoteDate") or quote_data.get("createdAt") or "")
+        gst_mode = gst_mode_from_quote(quote_data)
 
         grand_total = 0.0
         for item in quote_data.get("pricingSummary") or []:
@@ -781,6 +826,7 @@ def mongodb_quotes_to_dataframe(quotes_list: list):
                         "source_filename": source_filename,
                         "quote_number": quote_number,
                         "quote_date": quote_date[:10] if len(quote_date) >= 10 else quote_date,
+                        "gst_mode": gst_mode,
                         "grand_total": grand_total,
                         "client_name": client_detail.get("clientName") or "",
                         "service_type": quote_service_type,

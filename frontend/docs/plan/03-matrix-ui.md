@@ -50,26 +50,51 @@ A distinct block after the space tiers, not another space group, because a bundl
 is a different kind of thing and nesting it under a room would repeat the original
 mistake.
 
-Each bundle row shows:
+Each bundle is two rows, like a construction BOQ remark:
 
-- the bundle label and the family,
-- covered spaces, and the items named in the vendor's description,
-- each vendor's figure with a `basis` chip: `lumpsum` or `sum of N items`,
-- an overlap warning when `overlap_flags` is non-empty.
+1. **Amount row** — label and covered spaces on the left; each vendor's figure
+   with a basis chip (`Package price` / `Itemised - N lines`) on the right.
+2. **Full-width note band** under that row — overlap warning, package takeaway,
+   and recap placement. Notes never sit only in the left cell, because on a wide
+   screen that leaves a blank gap before the amounts and the customer misses the
+   sentence.
 
-The `basis` chip carries most of the value here. `Rs 1,00,300 (lumpsum)` against
-`Rs 37,198 (sum of 5 items)` tells the user both the price gap and that the two
-numbers are not the same kind of measurement. Without the chip the row would
-imply a clean Rs 63,000 saving, which is not a claim the data supports.
+The `basis` chip carries most of the value here. `₹1,00,300 (Package price)`
+against `₹37,198 (Itemised - 5 lines)` tells the user both the price gap and that
+the two numbers are not the same kind of measurement. Without the chip the row
+would imply a clean ₹63,000 saving, which is not a claim the data supports.
 
 Overlap warnings are phrased as a question to put to the vendor, not as a
 detected error — we cannot know whether the lumpsum double-counts the separate
 line.
 
+The takeaway names who is higher by how much and what to ask. It does not
+accuse, and it does not fire on itemised-vs-itemised recaps. It is shown once, in
+the note band — not duplicated as a separate "Key takeaways" block.
+
+When one quote itemises the family in spaces and another parks a whole-home
+figure, the note band names the quote (company if they differ, quote number if
+they are the same company) and says where the rupees already sit. Space
+figures are comparison only. A whole-home figure is included in this quote,
+not in the space sums. The matrix does not paint a Quote total row; the
+chart already shows each quote's full amount.
+
+Column chips `Entered excl. GST` / `Entered incl. GST` come from
+`vendorMeta.gst_mode`. A banner above the table fires only when those modes
+differ. Cell amounts stay billed totals (GST included).
+
+## Letterhead
+
+The matrix card repeats the document identity the PDF uses: Tatva Ops logo,
+project title and code, and each quote number. Vendor column headers wrap the
+full company name (no ellipsis) and show `Quote {number}` in the column.
+
 ## Project section
 
-Unchanged in style from a space group, labelled `Project-level`, holding work with
-no room.
+Work with no room, labelled Whole home. Rows whose `bundle_family` is already
+compared in a scattered recap are **not painted** here — the recap is the
+comparison; painting them again looks like a second add. `reconcileQuoteTotals`
+still sums the full `projectTier`.
 
 ## Footnote
 
@@ -78,9 +103,11 @@ excluded from room totals by design.
 
 ## Accessibility and layout
 
-Existing conventions kept: sticky header, `min-w-[720px]` with horizontal scroll,
-`tabular-nums` on figures, vendor colour dots. Badges and chips use text as well
-as colour so they survive greyscale printing and colour-blind viewing.
+Document look rather than a spreadsheet: charcoal sticky header with an orange
+rule, hairline row dividers (no vertical grid), `min-w-[800px]` with horizontal
+scroll, `tabular-nums` on figures, vendor colour dots. Amounts use `₹` via
+`formatInrFull`. Badges and chips use text as well as colour so they survive
+greyscale printing and colour-blind viewing.
 
 ## Tests
 
@@ -90,6 +117,7 @@ as colour so they survive greyscale printing and colour-blind viewing.
 - a legacy payload with no coverage renders zero as `N/A`,
 - a non-comparable space shows the badge,
 - a bundle row shows both basis chips,
+- a mixed recap names each quote and where the rupees already sit,
 - an overlap flag renders a warning.
 
 ---

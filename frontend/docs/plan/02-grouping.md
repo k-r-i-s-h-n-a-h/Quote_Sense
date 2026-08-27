@@ -37,6 +37,11 @@ category
 Order is preserved from the payload — the backend already sorted rows into
 quote-reading order, so grouping must be insertion-ordered and must not sort.
 
+Spaces are keyed on `space_id` **only**, not `category||space_id`. A living-room
+TV unit and living-room wallpaper must land in one section even if their
+service category strings differ. Splitting by category was how one room became
+four blocks.
+
 ## Keying
 
 ```ts

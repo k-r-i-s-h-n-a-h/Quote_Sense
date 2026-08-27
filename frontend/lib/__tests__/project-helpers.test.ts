@@ -379,6 +379,18 @@ describe("compare-matrix", () => {
     expect(groups[0].spaces.map((s) => s.space)).toEqual(["Kitchen", "Foyer"]);
   });
 
+  it("keeps Living / L R / LVR under one space_id so the customer sees one total", () => {
+    const groups = groupTableData([
+      { space_id: "living", space: "Living", space_raw: "Living Room", sub_service: "Wallpaper" },
+      { space_id: "living", space: "Living", space_raw: "L R", sub_service: "Material Selection Assistance" },
+      { space_id: "living", space: "Living", space_raw: "LVR", sub_service: "TV units" },
+      { space_id: "living", space: "Living", space_raw: "L ROOM", sub_service: "Lighting" },
+    ]);
+    expect(groups[0].spaces).toHaveLength(1);
+    expect(groups[0].spaces[0].subs).toHaveLength(4);
+    expect(groups[0].spaces[0].spaceRaw).toContain("LVR");
+  });
+
   it("sumSubServiceRow coerces malformed amounts to zero, not NaN", () => {
     const totals = sumSubServiceRow(
       [{ VendorA: "abc" }, { VendorA: 50 }],

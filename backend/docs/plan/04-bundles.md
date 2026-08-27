@@ -80,6 +80,19 @@ Detection is **per line**, with no cross-vendor precondition. The old
 two-vendor guard is gone. A bundle is a property of how one vendor priced one
 line, and it stays true whether or not anyone else itemised.
 
+Enumeration of the description is S2-backed: each comma-separated fragment is
+resolved with `work_slug_for` (aliases + taxonomy), then a small substring
+fallback for phrases like `5 tandem` that never match as a whole label. Adding
+a sub-service to the taxonomy (or an alias) teaches the detector the new word.
+Unknown fragments do **not** count: slugifying leftover prose is what turned
+TCS wall décor + blinds + tissue into a fake `Mixed (Wall decor)` package.
+
+`&` is not a list separator. `Greenply & Century` is a brand pair.
+
+Mixed leftover packages are emitted **one vendor line per row**. Summing every
+`bundle_family == mixed` line invents a figure no vendor quoted. Hardware and
+lighting families still pair as one family row.
+
 ### Families
 
 `FAMILY` maps work keys to a coarse family so a bundle can find its counterpart
@@ -108,6 +121,10 @@ visible scope difference rather than a silent hole.
 
 `basis` matters. A number reached by summing five lines is not the same kind of
 number as a single lumpsum, and the UI is required to say which is which.
+
+Each vendor also gets `placement`: `space` (figure already in room rows),
+`project` (one whole-home figure), `bundle` (package), or `mixed`. The UI names
+the quote and says where the rupees already sit. It does not change the addition.
 
 ### Overlap detection
 
@@ -140,10 +157,16 @@ None. S4 is fully deterministic: regex on `pricing_method`, token matching on
 `tests/test_bundles.py`:
 
 - `Hardwares` with a six-item description is detected as a bundle,
-- a lump-priced single item (`Wall Decor`, Rs 8,850) is **not**,
+- a lump-priced single item (`Wall Decor`, Rs 8,850) is **not**, even when the
+  description mentions a brand pair with `&`,
+- unrelated leftover lumpsums (wall décor + blinds + tissue) are never one
+  Mixed package,
+- two mixed packages from the same vendor stay two rows,
 - the hardware bundle pairs against Rs 37,198 with the right `basis` values,
 - the lighting family emits a row with both vendors non-zero, proving the
   two-vendor guard is gone,
+- lighting `placement` is `space` for the kitchen line and `mixed` when the
+  counterpart spans rooms and Whole home,
 - `overlap_flags` contains the rolling-shutter key,
 - a bundle's amount never appears in any space total,
 - `tests/test_space_compare.py::test_wardrobe_does_not_roll_into_lighting` — a
@@ -155,14 +178,21 @@ None. S4 is fully deterministic: regex on `pricing_method`, token matching on
 
 **Symptom: an ordinary fixed-price line was treated as a bundle.**
 Condition 2 over-fired. Tighten the enumeration parser — it should need genuine
-separators (commas, `&`, `+`) and two or more recognised work tokens, not just a
-long sentence.
+separators (commas, `and`, `+`, `/`) and two or more recognised work tokens, not
+just a long sentence or a brand name joined with `&`.
 
 **Symptom: a real bundle was missed.**
 Check `pricing_method` first; vendors invent new wording for lump pricing
 constantly, and the regex is the usual culprit. Then check whether the
-description's items are recognised — an unrecognised item token is really an S2
-alias gap.
+description's items are recognised — enumeration goes through S2
+(`work_slug_for`), so an unrecognised fragment is really an alias or taxonomy
+gap. A comma-separated residential list (false ceiling, TV units, sofa) must
+still count as a bundle once those words are in the catalog; do not bring back
+slugify-unknown.
+
+**Symptom: unrelated lumpsums appeared as one Mixed package.**
+`bundle_comparison_rows` summed leftover `mixed` bundles. Emit one row per
+mixed `bundle_id` instead.
 
 **Symptom: the wrong counterpart lines were summed.**
 The `FAMILY` map is too coarse. Split the family rather than special-casing the

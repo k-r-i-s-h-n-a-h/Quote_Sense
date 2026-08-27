@@ -304,6 +304,25 @@
   box-shadow: 0 1px 0 var(--border);
 }
 
+.qs-table-doc {
+  background: #fff;
+}
+
+.qs-table-doc table {
+  border-spacing: 0;
+}
+
+.qs-table-doc thead th {
+  background: #1c1917;
+  color: #fafaf9;
+  box-shadow: 0 2px 0 var(--accent);
+}
+
+.qs-table-doc tbody tr:not([role="presentation"]) td {
+  border-bottom: 1px solid #e7e5e4;
+  vertical-align: middle;
+}
+
 .qs-skeleton {
   background: linear-gradient(
     90deg,

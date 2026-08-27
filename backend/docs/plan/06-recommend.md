@@ -57,7 +57,8 @@ bullet now grounded in real data rather than guesswork:
 
 - **Lowest Total**
 - **By Space** — name rooms that are `comparable`, and only those
-- **Scope Difference** — bundle rows and `not_quoted` gaps, kept distinct
+- **Package vs itemised** — copy the deterministic `takeaway` text when present
+- **Scope Difference** — other bundle rows and `not_quoted` gaps, kept distinct
 - **Watch Out** — `overlap_flags`, when any exist
 - **Recommendation**
 
@@ -69,9 +70,10 @@ Unchanged: the Gemini call runs in a worker thread with a hard
 always finishes with a report. The matrix is published to the frontend before
 this call starts, so a slow recommendation never blocks the table.
 
-`_build_fallback_report` gains one line when bundles exist, noting that some
-scopes are bundled and need confirming — otherwise the fallback would repeat the
-old "smaller scope" hand-wave while the data now says something specific.
+`_build_fallback_report` copies a bundle `takeaway` as **Package vs itemised**
+when one exists, otherwise notes that some scopes are bundled and need
+confirming — so a timeout still talks money rather than repeating the old
+"smaller scope" hand-wave.
 
 ## Tests
 

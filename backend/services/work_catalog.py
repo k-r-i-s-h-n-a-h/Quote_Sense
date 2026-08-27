@@ -109,6 +109,17 @@ WORK_ALIASES = {
     "console": "console_unit",
     "tv": "tv_units",
     "bench seating": "bench_seating",
+    # A seater unit mis-filed under crockery is its own work, not bench seating
+    # and not a crockery wall.
+    "seater": "seating_unit",
+    "seater unit": "seating_unit",
+    "sofa": "sofa",
+    "chimney": "chimney",
+    "sink": "sink",
+    "electrical": "electrical_points",
+    "2d flooring": "2d_floor_planning",
+    "material assistence": "material_selection_assistance",
+    "material assistance": "material_selection_assistance",
     "vanity": "vanity_units",
     # Wet areas. A shower cubicle and a bathroom glass partition are the same
     # scope quoted two ways.
@@ -165,6 +176,12 @@ WORK_LABELS = {
     "console_unit": "Console unit",
     "tv_units": "TV units",
     "bench_seating": "Bench seating",
+    "seating_unit": "Seater unit",
+    "sofa": "Sofa",
+    "chimney": "Chimney",
+    "sink": "Sink",
+    "2d_floor_planning": "2D floor planning",
+    "material_selection_assistance": "Material selection assistance",
     "vanity_units": "Vanity units",
     "shower_enclosure": "Shower / glass partition",
     "lighting_points": "Lighting points",
@@ -296,6 +313,34 @@ def _is_specific(text: str) -> bool:
     return 1 <= len(cleaned.split()) <= 5
 
 
+def _specific_overrides(description: str, item_name: str, sub_service: str) -> list[str]:
+    """Short labels that may contradict the catalog sub_service.
+
+    Vendors often write `Seater unit - Matt / Hi Glossy Laminates ...`: the
+    real item name is the prefix, and the rest is finish boilerplate that
+    would fail `_is_specific` on word count.
+    """
+    seen: list[str] = []
+    sub_fold = (sub_service or "").strip().casefold()
+
+    def add(text: str) -> None:
+        cleaned = re.sub(r"\s+", " ", (text or "").strip())
+        if not cleaned or not _is_specific(cleaned):
+            return
+        if cleaned.casefold() == sub_fold:
+            return
+        if cleaned not in seen:
+            seen.append(cleaned)
+
+    add(description)
+    for sep in (" - ", " – ", " — "):
+        if sep in (description or ""):
+            add(description.split(sep, 1)[0])
+            break
+    add(item_name)
+    return seen
+
+
 def resolve_work(row: dict[str, Any]) -> dict[str, Any]:
     """Resolve one row's work identity. Deterministic; no I/O."""
     sub_service = str(row.get("sub_service") or "").strip()
@@ -307,14 +352,14 @@ def resolve_work(row: dict[str, Any]) -> dict[str, Any]:
     # Description-wins: fires only on contradiction. A vendor occasionally puts
     # the wrong sub_service on a line (a dressing mirror labelled as used-cloth
     # storage); taking the label at face value files it under the wrong work.
-    if _is_specific(description):
-        from_desc = _resolve_label(description)
+    for candidate in _specific_overrides(description, item_name, sub_service):
+        from_desc = _resolve_label(candidate)
         if from_desc and (primary is None or from_desc[0] != primary[0]):
             key, _source, _conf = from_desc
             slug = key.split(":", 1)[1]
             return {
                 "work_key": key,
-                "work_label": work_label_for(slug, description),
+                "work_label": work_label_for(slug, candidate),
                 "work_confidence": 0.6,
                 "work_source": "description",
             }
@@ -505,3 +550,17 @@ def is_known_work_label(raw: str) -> bool:
     sub-service automatically stops it becoming a phantom space.
     """
     return _resolve_label(raw) is not None
+
+
+def work_slug_for(raw: str) -> str | None:
+    """Canonical slug for a work-item phrase, or None when the catalog misses.
+
+    S4 uses this so a lumpsum description is enumerated against the same
+    vocabulary as S2: adding a sub-service to the taxonomy teaches the bundle
+    detector the new word automatically, instead of extending a second token
+    list.
+    """
+    hit = _resolve_label(raw)
+    if hit is None:
+        return None
+    return hit[0].split(":", 1)[1]

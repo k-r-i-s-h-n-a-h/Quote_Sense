@@ -329,15 +329,10 @@
      "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
      "item": "Crockery Wall unit",
      "amount": 15576
-    },
-    {
-     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
-     "item": "Crockery Wall unit",
-     "amount": 31152
     }
    ],
    "INFOSYS LIMITED (Q2OE1CX)": 38940,
-   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 70092,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 38940,
    "coverage": {
     "INFOSYS LIMITED (Q2OE1CX)": "quoted",
     "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"
@@ -1330,6 +1325,10 @@
     "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 5
    },
    "has_bundle": true,
+   "placement": {
+    "INFOSYS LIMITED (Q2OE1CX)": "bundle",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "space"
+   },
    "INFOSYS LIMITED (Q2OE1CX)": 100300,
    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 37198
   },
@@ -1353,6 +1352,10 @@
     "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 5
    },
    "has_bundle": false,
+   "placement": {
+    "INFOSYS LIMITED (Q2OE1CX)": "space",
+    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "mixed"
+   },
    "INFOSYS LIMITED (Q2OE1CX)": 17700,
    "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 72629
   }
@@ -1898,15 +1901,10 @@
      "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
      "item": "Crockery Wall unit",
      "amount": 15576
-    },
-    {
-     "vendor": "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)",
-     "item": "Crockery Wall unit",
-     "amount": 31152
     }
    ],
    "INFOSYS LIMITED (Q2OE1CX)": 38940,
-   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 70092,
+   "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": 38940,
    "coverage": {
     "INFOSYS LIMITED (Q2OE1CX)": "quoted",
     "TATA CONSULTANCY SERVICES LIMITED (QGT3A1I)": "quoted"

@@ -48,10 +48,18 @@ def test_ambiguous_bedroom_does_not_pick_a_floor():
 
 
 def test_living_room_abbreviations_merge():
-    """L R / LVR / Living Room are one room, headed by the spelled-out name."""
-    mapping = cluster_spaces_heuristic(["Living Room", "L R", "LVR", "Liv"])
+    """LIVING / L R / LVR / L ROOM / Lroom / Living Room are one customer space.
+
+    Showing each spelling as its own section is the failure this test locks.
+    Customers need one living-area total, not four fragments to add by hand.
+    """
+    mapping = cluster_spaces_heuristic(
+        ["LIVING", "Living Room", "L R", "LVR", "L ROOM", "Lroom", "Liv"]
+    )
     assert len({mapping[k]["cluster_id"] for k in mapping}) == 1
-    assert {mapping[k]["canonical"] for k in mapping} == {"Living Room"}
+    assert mapping["Living Room"]["cluster_id"] == "living"
+    heading = mapping["Living Room"]["canonical"]
+    assert "living" in heading.casefold()
 
 
 def test_abbreviation_only_cluster_falls_back_to_a_room_word():
@@ -104,6 +112,119 @@ def test_kids_bedroom_is_not_a_numbered_bedroom():
     mapping = cluster_spaces_heuristic(["Kids bedroom", "Kids Bedroom"])
     assert mapping["Kids bedroom"]["cluster_id"] == "kids_bedroom"
     assert mapping["Kids bedroom"]["canonical"] == "Kids Bedroom"
+
+
+def test_lounge_spellings_on_one_floor_merge():
+    mapping = cluster_spaces_heuristic(
+        ["Second Floor Family Lounge", "Second Floor Lounge", "Second F Lounge"]
+    )
+    ids = {mapping[k]["cluster_id"] for k in mapping}
+    assert len(ids) == 1
+    heading = mapping["Second Floor Family Lounge"]["canonical"]
+    assert heading in {
+        "Second Floor Family Lounge",
+        "Second Floor Lounge",
+        "Second F Lounge",
+    }
+
+
+def test_bathroom_is_not_swallowed_by_the_bedroom_it_is_attached_to():
+    """'Master attached' names the wet room, not the bedroom."""
+    assert (
+        resolve_space({"space_raw": "First floor Bathroom (Master attached)"})["space_id"]
+        == "1f_mbr_bathroom"
+    )
+    assert resolve_space({"space_raw": "Kids room attached bathroom"})["space_id"] == "kids_bathroom"
+
+
+def test_unqualified_bathroom_is_not_the_ground_floor_common():
+    """The old fallback filed every unknown bathroom as common_washroom."""
+    third = resolve_space({"space_raw": "Third Floor Bathroom Attached"})
+    assert third["space_id"] == "3f_attached_bathroom"
+    assert "common" not in third["space_id"]
+
+
+def test_bathroom_typo_still_groups():
+    mapping = cluster_spaces_heuristic(
+        ["Third Floor Bathroom Attached", "Third floor Attached batroom"]
+    )
+    assert mapping["Third Floor Bathroom Attached"]["cluster_id"] == mapping[
+        "Third floor Attached batroom"
+    ]["cluster_id"]
+
+
+def test_ground_floor_bathroom_joins_the_common_one_not_the_attached():
+    mapping = cluster_spaces_heuristic(
+        [
+            "Ground floor Common Bathroom",
+            "Ground floor bathroom",
+            "bedroom ground floor attached bathroom",
+        ]
+    )
+    common_id = mapping["Ground floor Common Bathroom"]["cluster_id"]
+    assert mapping["Ground floor bathroom"]["cluster_id"] == common_id
+    assert mapping["bedroom ground floor attached bathroom"]["cluster_id"] != common_id
+
+
+def test_floor_only_label_uses_the_description_hint():
+    """'Ground floor' is not a room; the line is about the living room."""
+    assert is_room_label("Ground floor") is False
+    resolved = resolve_space(
+        {
+            "space_raw": "Ground floor",
+            "item_name": "TV Units",
+            "description": "Tv units for living room",
+        }
+    )
+    assert resolved["space_id"] == "living"
+    assert resolved["space_source"] == "description"
+
+
+def test_bare_room_on_a_floor_joins_the_unique_bedroom():
+    df = pd.DataFrame(
+        {
+            "space_raw": [
+                "ground floor bedroom",
+                "G F room",
+                "Third Floor Bedroom(Guest/Kids)",
+                "Third floor room",
+            ]
+        }
+    )
+    out = apply_space_clusters(df)
+    gf = out[out["space_raw"].isin(["ground floor bedroom", "G F room"])]
+    assert len(set(gf["space_id"])) == 1
+    third = out[
+        out["space_raw"].isin(
+            ["Third Floor Bedroom(Guest/Kids)", "Third floor room"]
+        )
+    ]
+    assert len(set(third["space_id"])) == 1
+    assert set(gf["space_id"]).isdisjoint(set(third["space_id"]))
+
+
+def test_whole_home_and_full_house_are_project_level():
+    for raw in ("Whole Home", "Full House design", "Full House"):
+        resolved = resolve_space({"space_raw": raw})
+        assert resolved["space_id"] == "project_level", raw
+
+
+def test_kids_attached_bathroom_joins_the_third_floor_attached():
+    mapping = cluster_spaces_heuristic(
+        [
+            "Third Floor Bedroom(Guest/Kids)",
+            "Third Floor Bathroom Attached",
+            "Kids room attached bathroom",
+        ]
+    )
+    assert (
+        mapping["Kids room attached bathroom"]["cluster_id"]
+        == mapping["Third Floor Bathroom Attached"]["cluster_id"]
+    )
+    assert (
+        mapping["Third Floor Bedroom(Guest/Kids)"]["cluster_id"]
+        != mapping["Third Floor Bathroom Attached"]["cluster_id"]
+    )
 
 
 def test_apply_space_clusters_column():
@@ -285,6 +406,121 @@ def test_mongodb_keeps_nested_object_ids(monkeypatch):
     assert df.iloc[0]["pricing_method_id"] == "cccccccccccccccccccccccc"
     assert df.iloc[0]["service_id"] == "aaaaaaaaaaaaaaaaaaaaaaaa"
     assert df.iloc[0]["space_raw"] == "Bedroom 1"
+
+
+def test_gst_mode_from_work_summary_flags():
+    from services.comparator import gst_mode_from_quote
+
+    assert gst_mode_from_quote(
+        {"workSummary": [{"exclusiveGst": True, "inclusiveGst": False}]}
+    ) == "exclusive"
+    assert gst_mode_from_quote(
+        {"workSummary": [{"exclusiveGst": False, "inclusiveGst": True}]}
+    ) == "inclusive"
+    assert gst_mode_from_quote({"workSummary": []}) == ""
+    assert gst_mode_from_quote(
+        {
+            "workSummary": [
+                {"exclusiveGst": True, "inclusiveGst": False},
+                {"exclusiveGst": False, "inclusiveGst": True},
+            ]
+        }
+    ) == "mixed"
+
+
+def test_exclusive_quote_compares_grand_total_not_pre_gst_amount(monkeypatch):
+    monkeypatch.setattr(
+        "services.tatva_catalog.harvest_ids_from_quotes",
+        lambda quotes: {},
+    )
+    from services.comparator import mongodb_quotes_to_dataframe
+
+    quotes = [
+        {
+            "quoteNumber": "QEXC",
+            "quoteType": "essential",
+            "vendorDetail": {"companyName": "INFOSYS LIMITED"},
+            "pricingSummary": [{"label": "Grand total", "value": 1180}],
+            "workSummary": [
+                {
+                    "exclusiveGst": True,
+                    "inclusiveGst": False,
+                    "services": [
+                        {
+                            "serviceId": {"_id": "aaaaaaaaaaaaaaaaaaaaaaaa", "name": "Interiors"},
+                            "workItems": [
+                                {
+                                    "workTitle": "Bedroom",
+                                    "subService": {
+                                        "_id": "bbbbbbbbbbbbbbbbbbbbbbbb",
+                                        "name": "Wardrobe",
+                                    },
+                                    "pricingMethod": {
+                                        "_id": "cccccccccccccccccccccccc",
+                                        "name": "Per Sqft",
+                                    },
+                                    "pricingInput": [
+                                        {
+                                            "amount": 1000,
+                                            "gstPercentage": 18,
+                                            "grandTotal": 1180,
+                                            "quantity": 1,
+                                            "rate": 1000,
+                                        }
+                                    ],
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ],
+        },
+        {
+            "quoteNumber": "QINC",
+            "quoteType": "essential",
+            "vendorDetail": {"companyName": "INFOSYS LIMITED"},
+            "pricingSummary": [{"label": "Grand total", "value": 1180}],
+            "workSummary": [
+                {
+                    "exclusiveGst": False,
+                    "inclusiveGst": True,
+                    "services": [
+                        {
+                            "serviceId": {"_id": "aaaaaaaaaaaaaaaaaaaaaaaa", "name": "Interiors"},
+                            "workItems": [
+                                {
+                                    "workTitle": "Bedroom",
+                                    "subService": {
+                                        "_id": "bbbbbbbbbbbbbbbbbbbbbbbb",
+                                        "name": "Wardrobe",
+                                    },
+                                    "pricingMethod": {
+                                        "_id": "cccccccccccccccccccccccc",
+                                        "name": "Per Sqft",
+                                    },
+                                    "pricingInput": [
+                                        {
+                                            "amount": 1180,
+                                            "gstPercentage": 18,
+                                            "grandTotal": 1180,
+                                            "quantity": 1,
+                                            "rate": 1180,
+                                        }
+                                    ],
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ],
+        },
+    ]
+    df = mongodb_quotes_to_dataframe(quotes)
+    by_quote = {row["quote_number"]: row for _, row in df.iterrows()}
+    assert by_quote["QEXC"]["gst_mode"] == "exclusive"
+    assert by_quote["QINC"]["gst_mode"] == "inclusive"
+    assert by_quote["QEXC"]["amount"] == 1180
+    assert by_quote["QINC"]["amount"] == 1180
 
 
 def test_wardrobe_does_not_roll_into_lighting():

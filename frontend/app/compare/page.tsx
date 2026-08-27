@@ -13,6 +13,7 @@ import ComparisonMatrix from "../../components/compare/ComparisonMatrix";
 import CompareChat from "../../components/compare/CompareChat";
 import { buildVendorLabels } from "../../lib/format";
 import { downloadComparisonPdf } from "../../lib/download-comparison-pdf";
+import { readCachedProjectQuotePayloads } from "../../lib/compare-payload-cache";
 import type {
   BundleRow,
   CoverageEntry,
@@ -446,18 +447,32 @@ function QuoteSenseContent() {
     pollingActiveRef.current = false;
   };
 
+  const projectMeta = useMemo(() => {
+    if (!projectIdParam) return { title: "", code: "" };
+    const cached = readCachedProjectQuotePayloads(projectIdParam);
+    return {
+      title: cached?.meta?.title?.trim() || "",
+      code: cached?.meta?.projectCode?.trim() || projectIdParam,
+    };
+  }, [projectIdParam, tableData.length]);
+
   const handleDownloadPdf = async () => {
     if (tableData.length === 0 || vendors.length === 0) return;
-    const quoted: Record<string, number> = {};
-    for (const point of chartData) {
-      quoted[point.vendor] = Number(point.total) || 0;
-    }
-    await downloadComparisonPdf(tableData, vendors, vendorLabels, vendorMeta, {
-      bundleTier,
-      projectTier,
-      coverage,
-      quotedTotals: quoted,
-    });
+    await downloadComparisonPdf(
+      tableData,
+      vendors,
+      vendorLabels,
+      vendorMeta,
+      {
+        bundleTier,
+        projectTier,
+        coverage,
+      },
+      {
+        projectTitle: projectMeta.title,
+        projectCode: projectMeta.code,
+      }
+    );
   };
 
   const handleProgressTick = (data: {
@@ -887,9 +902,8 @@ function QuoteSenseContent() {
             bundleTier={bundleTier}
             projectTier={projectTier}
             coverage={coverage}
-            quotedTotals={Object.fromEntries(
-              chartData.map((point) => [point.vendor, Number(point.total) || 0])
-            )}
+            projectTitle={projectMeta.title}
+            projectCode={projectMeta.code}
           />
         )}
 

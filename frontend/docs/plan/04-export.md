@@ -3,6 +3,7 @@
 Render the comparison to PDF.
 
 **Module:** `lib/download-comparison-pdf.ts` (jsPDF, client-side only).
+Font helper: `lib/pdf-unicode-font.ts` (Noto Sans so `₹` prints).
 
 ---
 
@@ -11,6 +12,24 @@ Render the comparison to PDF.
 The export mirrors the on-screen matrix. It reuses `groupTableData` and
 `sumSubServiceRow` from [02-grouping.md](02-grouping.md) rather than
 re-implementing the hierarchy, so the two can never diverge in structure.
+
+## Document look
+
+The PDF is the artefact a contractor forwards to a client. It is landscape A4
+so two or three vendor names fit without ellipsis, and it is a letterhead
+document rather than a spreadsheet dump:
+
+- **Every page** repeats the Tatva Ops logo, project title, project code, and
+  the quote numbers (`Company · Quote Q2OE1CX`).
+- Amounts use **₹** (Noto Sans). Helvetica cannot draw that glyph; if the font
+  fails to load, the fallback is `INR`, never a broken box.
+- The table uses hairline **horizontal** rules only — no vertical grid.
+- Bundle takeaways and recap placement sit in **full-width note bands** under
+  the amount row, the same structure as the screen. They are not stuffed into
+  the left cell, and they are not duplicated in a second "KEY TAKEAWAYS" block.
+
+`downloadComparisonPdf` takes optional `{ projectTitle, projectCode }` from the
+compare page cache so the letterhead is specific to the job.
 
 ## The problem this solves
 
@@ -33,8 +52,15 @@ Everything load-bearing for a decision:
 | `incl. in <bundle>` cells | otherwise a bundled scope reads as a missing one |
 | Non-comparable space marker | otherwise two unlike totals look comparable |
 | Bundle section with `basis` | the lumpsum-vs-itemised gap is often the biggest number in the comparison |
+| Package takeaway | the customer-facing ask-the-vendor sentence, once, in a note band |
+| Recap placement notes | which quote's figure is already in the spaces vs a whole-home amount in this quote |
+| GST entry chips / mixed banner | how each quote was typed (excl vs incl GST); amounts stay billed totals |
 | Overlap warnings | a possible double-count the reader should raise with the vendor |
 | Footnote explaining the three cell states | the PDF has no tooltips |
+
+Whole-home export uses `projectRowsForDisplay`, the same filter as the screen, so
+electrical compared in "Same work, different spaces" is not listed again. The
+export does not paint a Quote total row; grand totals stay on the chart.
 
 Since colour and hover are unavailable, every state is expressed in text.
 
@@ -46,9 +72,9 @@ matter, because those are the ones a lumpsum absorbed.
 
 ## Pagination
 
-Space groups avoid breaking across a page boundary where possible; the bundle
-section starts on a fresh page when it would otherwise split. Each page repeats
-the vendor column headers — without them, a continuation page is unreadable.
+Space groups avoid breaking across a page boundary where possible. Each page
+repeats the letterhead and the vendor column headers — without them, a
+continuation page is unreadable. A footer stamps `Page n of m`.
 
 ## Tests
 

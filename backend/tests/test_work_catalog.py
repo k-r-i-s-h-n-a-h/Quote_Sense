@@ -19,6 +19,7 @@ from services.work_catalog import (
     is_known_work_label,
     normalize_work_label,
     resolve_work,
+    work_slug_for,
 )
 
 
@@ -81,6 +82,36 @@ def test_description_wins_only_on_contradiction():
         }
     )
     assert wardrobe["work_source"] == "alias"
+
+
+def test_seater_unit_does_not_fold_into_crockery_or_bench():
+    """TCS labelled a seater as Crockery Wall unit; it is neither crockery nor bench."""
+    seater = resolve_work(
+        {
+            "sub_service": "Crockery Wall unit",
+            "item_name": "Crockery Wall unit",
+            "description": (
+                "Seater unit - Matt / Hi Glossy Laminates Finish for shutters "
+                "using HDHMR Greenply brand & Carcass made by using Greenply"
+            ),
+        }
+    )
+    assert seater["work_source"] == "description"
+    assert seater["work_key"] != key("Crockery Units")
+    assert seater["work_key"] != key("Bench Seating")
+
+    # A genuine crockery wall whose spec starts with its own name stays crockery.
+    wall = resolve_work(
+        {
+            "sub_service": "Crockery Wall unit",
+            "item_name": "Crockery Wall unit",
+            "description": (
+                "Crockery Wall unit - Matt / Hi Glossy Laminates Finish for "
+                "shutters using HDHMR Greenply brand"
+            ),
+        }
+    )
+    assert wall["work_key"] == key("Crockery Units")
 
 
 def test_boilerplate_description_never_overrides():
@@ -149,6 +180,13 @@ def test_is_known_work_label_backs_the_space_predicate():
     assert is_known_work_label("Master bedroom") is False
     assert is_known_work_label("Kitchen area") is False
     assert is_known_work_label("Foyer") is False
+
+
+def test_work_slug_for_uses_the_same_vocabulary_as_resolve():
+    assert work_slug_for("False ceiling") == "false_ceiling"
+    assert work_slug_for("TV Units") == "tv_units"
+    assert work_slug_for("Modular Kitchen") == "modular_kitchen"
+    assert work_slug_for("not a real sub-service") is None
 
 
 def test_apply_work_catalog_adds_all_columns():

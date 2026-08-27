@@ -65,6 +65,15 @@ _PROJECT_WIDE = {
     "asian full home painting",
     "ss",
     "quartz",
+    "whole home",
+    "whole house",
+    "full house",
+    "full house design",
+    "full home",
+    "entire house",
+    "entire home",
+    "complete home",
+    "complete house",
 }
 
 # Phrases that mark a label as describing an item or a scope, not a room.
@@ -86,7 +95,12 @@ _CLUSTER_LABELS = {
     "foyer": "Foyer",
     "utility": "Utility",
     "pooja": "Pooja",
+    "lounge": "Lounge",
     "common_washroom": "Common Washroom",
+    "bathroom": "Bathroom",
+    "attached_bathroom": "Attached Bathroom",
+    "kids_bathroom": "Kids Bathroom",
+    "mbr_bathroom": "Master Bathroom",
     "kids_bedroom": "Kids Bedroom",
     "bedroom1": "Bedroom 1",
     "bedroom2": "Bedroom 2",
@@ -143,13 +157,90 @@ def _core(raw: str) -> str:
 # listed once per vendor spelling.
 _ROOM_ABBREVIATIONS: tuple[tuple[str, str], ...] = (
     (r"\bl\s*v?\s*r\b", "living"),
-    (r"\bl\s+room\b", "living"),
+    (r"\bl\s*room\b", "living"),
     (r"\bliv\b", "living"),
     (r"\bd\s*n?\s*r\b", "dining"),
     (r"\bdin\b", "dining"),
     (r"\bkit\b", "kitchen"),
     (r"\bktn\b", "kitchen"),
+    (r"\blng\b", "lounge"),
 )
+
+# Compact spellings after spaces are stripped. Catches Lroom, LR, LVR, LIVING
+# AREA without relying on the LLM. Agents must not remove this: customers need
+# one living-area total, not one section per vendor spelling.
+_COMPACT_ROOMS = {
+    "lr": "living",
+    "lvr": "living",
+    "lroom": "living",
+    "livingroom": "living",
+    "livingarea": "living",
+    "liv": "living",
+    "hall": "living",
+    "drawingroom": "living",
+    "dr": "dining",
+    "dnr": "dining",
+    "diningroom": "dining",
+    "diningarea": "dining",
+    "kit": "kitchen",
+    "ktn": "kitchen",
+    "lng": "lounge",
+}
+
+# Vendor typos seen in Space/Zone strings. Applied before token matching so a
+# misspelling still groups with the room the vendor meant.
+_TYPOS: tuple[tuple[str, str], ...] = (
+    (r"\bbatroom\b", "bathroom"),
+    (r"\bbathrm\b", "bathroom"),
+    (r"\bwashrom\b", "washroom"),
+)
+
+_FLOOR_TOKEN_RE = re.compile(
+    r"\b(ground|first|second|third|fourth|floor|gf|1f|2f|3f|4f|1st|2nd|3rd|4th|g\s*f)\b"
+)
+
+_BATHROOM_RE = re.compile(r"\b(bath\s*room|bathroom|batroom|wash\s*room|washroom|toilet)\b")
+
+
+def _apply_typos(n: str) -> str:
+    for pattern, repl in _TYPOS:
+        n = re.sub(pattern, repl, n)
+    return n
+
+
+def _floor_prefix(n: str) -> str:
+    """Floor qualifier actually stated in the text, or empty.
+
+    Never defaults to ground. `g f` / `gf` count as ground because those are
+    spellings of a floor the vendor did write.
+    """
+    if re.search(r"\b(ground|gf)\b", n) or re.search(r"\bg\s+f\b", n):
+        return "gf_"
+    if re.search(r"\b(first|1st|1f)\b", n):
+        return "1f_"
+    if re.search(r"\b(second|2nd|2f)\b", n):
+        return "2f_"
+    if re.search(r"\b(third|3rd|3f)\b", n):
+        return "3f_"
+    if re.search(r"\b(fourth|4th|4f)\b", n):
+        return "4f_"
+    return ""
+
+
+def _strip_floor_words(n: str) -> str:
+    stripped = _FLOOR_TOKEN_RE.sub(" ", n)
+    return re.sub(r"\s+", " ", stripped).strip()
+
+
+def _is_floor_only(raw: str) -> bool:
+    """True for a label that names a floor and nothing else ('Ground floor').
+
+    Those are not rooms. `is_room_label` rejects them so `resolve_space` can
+    read the description hint ('Tv units for living room') instead of minting
+    a phantom `GROUND FLOOR` cluster.
+    """
+    n = _apply_typos(_core(raw))
+    return bool(n) and not _strip_floor_words(n)
 
 
 def _room_token(text: str) -> str | None:
@@ -159,9 +250,15 @@ def _room_token(text: str) -> str | None:
     unqualified "Bedroom 1" resolves to `bedroom1`, not `gf_bedroom1`, so the
     ground floor is never invented; `_merge_floor_variants` reunites it with a
     floor-qualified twin afterwards when there is exactly one candidate.
+
+    Bathroom is checked before master/kid so "First floor Bathroom (Master
+    attached)" stays a bathroom, not the bedroom it is attached to. An
+    unqualified bathroom is `bathroom`, never silently `common_washroom`.
     """
-    n = _core(text)
+    n = _apply_typos(_core(text))
     if not n:
+        return None
+    if _is_floor_only(text):
         return None
 
     if "kitchen" in n:
@@ -176,36 +273,56 @@ def _room_token(text: str) -> str | None:
         return "utility"
     if "pooja" in n:
         return "pooja"
+    if "lounge" in n:
+        prefix = _floor_prefix(n)
+        return f"{prefix}lounge" if prefix else "lounge"
+
+    # Bathroom before master/kid: attached-bathroom labels name the wet room,
+    # not the bedroom they adjoin.
+    if _BATHROOM_RE.search(n) or ("vanity" in n and "common" in n) or (
+        "attached" in n and re.search(r"\bbr\b", n)
+    ):
+        prefix = _floor_prefix(n)
+        if "common" in n or ("vanity" in n and "common" in n):
+            return f"{prefix}common_washroom" if prefix else "common_washroom"
+        if "kid" in n or "children" in n or "guest" in n:
+            return f"{prefix}kids_bathroom" if prefix else "kids_bathroom"
+        if "master" in n or re.search(r"\bmbr\b", n):
+            return f"{prefix}mbr_bathroom" if prefix else "mbr_bathroom"
+        if "attached" in n:
+            return f"{prefix}attached_bathroom" if prefix else "attached_bathroom"
+        return f"{prefix}bathroom" if prefix else "bathroom"
 
     if "walkin" in n or "walk in" in n:
         return "1f_walkin"
     if re.search(r"\bmbr\b", n) or "master" in n:
         return "mbr"
     if "kid" in n or "children" in n:
-        return "kids_bedroom"
-
-    if "washroom" in n or "bathroom" in n or "wash room" in n or (
-        "vanity" in n and "common" in n
-    ):
-        if "common" in n or "vanity" in n:
-            return "common_washroom"
-        if "first" in n or "1st" in n or re.search(r"\b1f\b", n):
-            return "1f_bathroom"
-        if "ground" in n or re.search(r"\bgf\b", n):
-            return "gf_bathroom"
-        return "common_washroom"
+        prefix = _floor_prefix(n)
+        return f"{prefix}kids_bedroom" if prefix else "kids_bedroom"
 
     if "bedroom" in n or re.search(r"\bbr\b", n):
-        num = "2" if re.search(r"\b(2|two|second)\b", n) else "1"
-        if "first" in n or "1st" in n or re.search(r"\b1f\b", n):
-            return f"1f_bedroom{num}"
-        if "ground" in n or re.search(r"\bgf\b", n):
-            return f"gf_bedroom{num}"
-        return f"bedroom{num}"
+        # "second" is a floor word, not bedroom 2 — "Bedroom 2" / "BR 2" still
+        # match the digit.
+        num = "2" if re.search(r"\b(2|two)\b", n) else "1"
+        prefix = _floor_prefix(n)
+        return f"{prefix}bedroom{num}"
 
     for pattern, token in _ROOM_ABBREVIATIONS:
         if re.search(pattern, n):
             return token
+
+    compact = re.sub(r"\s+", "", n)
+    if compact in _COMPACT_ROOMS:
+        return _COMPACT_ROOMS[compact]
+
+    # Floor + bare "room" ("G F room", "Third floor room") — not a named room
+    # type, but it is a real space. Merge later folds it into the unique
+    # bedroom on that floor when there is one.
+    remainder = _strip_floor_words(n)
+    prefix = _floor_prefix(n)
+    if prefix and remainder in ("room", "rooms"):
+        return f"{prefix}room"
 
     return None
 
@@ -224,6 +341,10 @@ def is_room_label(space_raw: str, item_name: str = "") -> bool:
 
     normalized = _norm(raw)
     if not normalized or normalized in _PROJECT_WIDE or _core(raw) in _PROJECT_WIDE:
+        return False
+
+    # A floor with no room word is not a room. Fall through to the description.
+    if _is_floor_only(raw):
         return False
 
     # An explicit room word wins outright: a label like "Kitchen Accessories"
@@ -294,37 +415,121 @@ def _is_anchor(space_id: str) -> bool:
     """True for a cluster the deterministic rules named with confidence.
 
     Anchors are immutable during the LLM pass: the model may attach a loose
-    label to one, but never move a row out of one.
+    label to one, but never move a row out of one. Anything that is not
+    `project_level` and not a leftover `unique:` cluster was named by a room
+    token, so it is an anchor — including floor-qualified bathrooms that are
+    not in `_CLUSTER_LABELS`.
     """
-    return bool(space_id) and space_id != PROJECT_LEVEL_ID and space_id in _CLUSTER_LABELS
+    return bool(space_id) and space_id != PROJECT_LEVEL_ID and not str(space_id).startswith("unique:")
 
 
-_FLOOR_PREFIXES = ("gf_", "1f_")
+_FLOOR_PREFIXES = ("gf_", "1f_", "2f_", "3f_", "4f_")
+_BEDROOMISH = ("bedroom1", "bedroom2", "kids_bedroom", "mbr")
+_BATHROOM_SPECIFIC = (
+    "common_washroom",
+    "mbr_bathroom",
+    "attached_bathroom",
+    "kids_bathroom",
+)
 
 
 def _merge_floor_variants(space_ids: list[str]) -> dict[str, str]:
-    """Fold an unqualified bedroom into its floor-qualified twin.
+    """Fold an unqualified label into its floor-qualified twin.
 
     One vendor writes "Bedroom 1", another "Ground Floor Bedroom 1": the same
-    room. We only merge when exactly one floor is in play for that bedroom
-    number — if both a GF and a 1F Bedroom 1 exist, the unqualified label is
-    genuinely ambiguous and stays its own cluster rather than being guessed into
-    one of them.
+    room. We only merge when exactly one floor is in play for that base id —
+    if both a GF and a 1F Bedroom 1 exist, the unqualified label is
+    genuinely ambiguous and stays its own cluster rather than being guessed
+    into one of them.
+
+    Same rule for bathrooms, lounges, and kids bedrooms. Extra bathroom
+    rules, applied only when they are unambiguous:
+
+    - a plain `{floor}bathroom` folds into the common washroom on that floor
+      if one exists, else into the unique more-specific bathroom on that floor
+      (so "First Floor Bathroom" joins "Master attached" when that is the only
+      first-floor bathroom named);
+    - `kids_bathroom` folds into the attached bathroom on the same floor as
+      the kids bedroom;
+    - `{floor}room` (bare "G F room") folds into the unique bedroom on that
+      floor.
     """
     present = set(space_ids)
     remap: dict[str, str] = {}
-    for space_id in present:
-        match = re.fullmatch(r"bedroom(\d+)", space_id or "")
-        if not match:
+
+    bases: set[str] = set()
+    for sid in present:
+        matched_prefix = next((p for p in _FLOOR_PREFIXES if sid.startswith(p)), "")
+        if matched_prefix:
+            bases.add(sid[len(matched_prefix):])
+        elif sid and sid != PROJECT_LEVEL_ID and not sid.startswith("unique:"):
+            bases.add(sid)
+
+    for base in bases:
+        if not base or base == "room":
             continue
         qualified = [
-            f"{prefix}bedroom{match.group(1)}"
+            f"{prefix}{base}"
             for prefix in _FLOOR_PREFIXES
-            if f"{prefix}bedroom{match.group(1)}" in present
+            if f"{prefix}{base}" in present
         ]
-        if len(qualified) == 1:
-            remap[space_id] = qualified[0]
+        if base in present and len(qualified) == 1:
+            remap[base] = qualified[0]
+
+    for prefix in _FLOOR_PREFIXES:
+        room_id = f"{prefix}room"
+        if room_id in present:
+            candidates = [f"{prefix}{b}" for b in _BEDROOMISH if f"{prefix}{b}" in present]
+            if len(candidates) == 1:
+                remap[room_id] = candidates[0]
+
+        plain = f"{prefix}bathroom"
+        if plain not in present:
+            continue
+        common = f"{prefix}common_washroom"
+        if common in present:
+            remap[plain] = common
+            continue
+        specific = [
+            f"{prefix}{s}" for s in _BATHROOM_SPECIFIC if f"{prefix}{s}" in present
+        ]
+        if len(specific) == 1:
+            remap[plain] = specific[0]
+
+    # Kids' attached bathroom, no floor of its own: join the attached bathroom
+    # on the floor where the kids bedroom already sits.
+    kids_floors = [
+        prefix
+        for prefix in _FLOOR_PREFIXES
+        if f"{prefix}kids_bedroom" in present
+        or remap.get("kids_bedroom") == f"{prefix}kids_bedroom"
+    ]
+    if "kids_bathroom" in present and len(kids_floors) == 1:
+        attached = f"{kids_floors[0]}attached_bathroom"
+        if attached in present:
+            remap["kids_bathroom"] = attached
+        else:
+            remap["kids_bathroom"] = f"{kids_floors[0]}kids_bathroom"
+
     return remap
+
+
+def _fold_unique_synonyms(buckets: dict[str, list[str]]) -> dict[str, list[str]]:
+    """Join leftover unique: spellings onto the named room they mean.
+
+    Safety net so LR / LVR / L ROOM cannot remain separate sections after
+    `_room_token` has recognised them as living. Do not reverse this.
+    """
+    folded: dict[str, list[str]] = {}
+    for sid, members in buckets.items():
+        target = sid
+        if str(sid).startswith("unique:"):
+            tokens = {_room_token(m) for m in members}
+            tokens.discard(None)
+            if len(tokens) == 1:
+                target = next(iter(tokens))
+        folded.setdefault(target, []).extend(members)
+    return folded
 
 
 def resolve_space(row: dict[str, Any]) -> dict[str, Any]:
@@ -390,6 +595,7 @@ def cluster_spaces_heuristic(space_raws: list[str]) -> dict[str, dict[str, Any]]
         info = resolve_space({"space_raw": key})
         buckets.setdefault(info["space_id"], []).append(key)
 
+    buckets = _fold_unique_synonyms(buckets)
     remap = _merge_floor_variants(list(buckets.keys()))
     if remap:
         merged: dict[str, list[str]] = {}
@@ -468,9 +674,11 @@ def _try_gemini_overlay(
         "label out of a group it already has, and never merge two different "
         "existing groups.\n"
         "Your only job: for every label whose group is empty, decide whether it is "
-        "the same physical room as another label. Vendors abbreviate and rename the "
-        "same room (L R / LVR / Living Room; Ground Floor Bedroom 1 / Bedroom 1) — "
-        "put those in one cluster.\n"
+        "the same physical room as another label. Vendors abbreviate the SAME room "
+        "constantly — LIVING, Living Room, Living area, L R, LR, LVR, L ROOM, Lroom "
+        "are ONE living space; DNR / Dining / Dining area are ONE dining space. "
+        "Put every spelling of one room in a single cluster so the customer sees "
+        "one spend total. Never leave LR and Living as separate groups.\n"
         "NEVER merge Kitchen with Bedroom, or Common Washroom with Walk-in closet.\n"
         "Use the item names and notes to place a label that is an ITEM rather than a "
         "room: a label whose notes mention MBR belongs to the master bedroom.\n"
@@ -705,6 +913,18 @@ def _finalize_space_labels(df, *, raw_col: str, out_col: str) -> None:
     description borrows the room string its siblings supplied, and a cluster
     whose members never mention a floor cannot acquire one.
     """
+    new_ids = []
+    for space_id, label in zip(
+        df["space_id"].tolist(), df[raw_col].fillna("").tolist()
+    ):
+        sid = str(space_id)
+        if sid.startswith("unique:"):
+            tok = _room_token(str(label))
+            new_ids.append(tok or sid)
+        else:
+            new_ids.append(sid)
+    df["space_id"] = new_ids
+
     remap = _merge_floor_variants([str(v) for v in df["space_id"].tolist()])
     if remap:
         df["space_id"] = [remap.get(str(v), str(v)) for v in df["space_id"].tolist()]

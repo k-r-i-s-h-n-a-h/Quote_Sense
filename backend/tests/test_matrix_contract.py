@@ -148,6 +148,41 @@ def test_used_cloth_storage_compares_across_vendors(matrix):
     assert rows[0][VENDOR_B] == 13629
 
 
+def test_dressing_mirror_is_not_rolled_into_used_cloth(matrix):
+    used = rows_named(matrix, "Used cloth storage", "mbr")
+    assert used[0][VENDOR_B] == 13629
+    mirrors = rows_named(matrix, "Mirror", "mbr")
+    assert mirrors and mirrors[0][VENDOR_B] >= 2832
+    assert "mirror" in mirrors[0]["work_key"]
+
+
+def test_seater_does_not_merge_with_bench_or_crockery(matrix):
+    crockery = rows_named(matrix, "Crockery units", "dining")
+    assert len(crockery) == 1
+    assert crockery[0][VENDOR_B] == 38940
+    bench = rows_named(matrix, "Bench seating", "dining")
+    assert len(bench) == 1
+    assert bench[0][VENDOR_A] == 40120
+    assert bench[0][VENDOR_B] in (0, None)
+    seater = [
+        row
+        for row in matrix["spaceTier"]
+        if row["space_id"] == "dining" and str(row["work_key"]).endswith("seating_unit")
+    ]
+    assert len(seater) == 1
+    assert seater[0][VENDOR_B] == 31152
+
+
+def test_tcs_wall_decor_stays_in_its_rooms(matrix):
+    """Single-item lumpsums are not a Mixed (Wall decor) package of ₹50,150."""
+    foyer = rows_named(matrix, "Wall decor", "foyer")
+    living = rows_named(matrix, "Wall decor", "living")
+    assert foyer and foyer[0][VENDOR_B] == 8850
+    assert living and living[0][VENDOR_B] == 8850
+    mixed = [r for r in matrix["bundleTier"] if r["bundle_family"] == "mixed"]
+    assert all(r.get(VENDOR_B, 0) != 50150 for r in mixed)
+
+
 @pytest.mark.parametrize(
     "label,space_id,amount_a,amount_b",
     [
@@ -155,7 +190,7 @@ def test_used_cloth_storage_compares_across_vendors(matrix):
         ("Rolling shutter", "kitchen", 27258, 17700),
         ("False ceiling", "living", 61950, 49560),
         ("Loft", "kitchen", 60534, 47082),
-        ("Crockery units", "dining", 38940, 70092),
+        ("Crockery units", "dining", 38940, 38940),
         ("Study table", "kids_bedroom", 14160, 23364),
     ],
 )
@@ -177,11 +212,28 @@ def test_base_and_wall_units_stay_separate(matrix):
 # --- bundles and coverage ---------------------------------------------------
 
 
+def test_space_and_project_rows_carry_bundle_family(matrix):
+    lighting_project = [
+        row
+        for row in matrix["projectTier"]
+        if any(
+            token in str(row["work_key"])
+            for token in ("lighting", "adaptor", "electrical")
+        )
+    ]
+    assert lighting_project
+    assert all(row.get("bundle_family") == "lighting" for row in lighting_project)
+    blinds = [row for row in matrix["projectTier"] if "blind" in str(row["work_key"])]
+    assert blinds and not blinds[0].get("bundle_family")
+
+
 def test_hardware_bundle_is_paired_in_the_bundle_tier(matrix):
     row = next(r for r in matrix["bundleTier"] if r["bundle_family"] == "hardware")
     assert row[VENDOR_A] == 100300
     assert row[VENDOR_B] == 37198
     assert row["overlap_flags"]
+    assert row["takeaway"]["kind"] == "package_higher"
+    assert "1,00,300" in row["takeaway"]["text"]
 
 
 def test_electrical_is_visible_for_both_vendors(matrix):
@@ -189,6 +241,8 @@ def test_electrical_is_visible_for_both_vendors(matrix):
     row = next(r for r in matrix["bundleTier"] if r["bundle_family"] == "lighting")
     assert row[VENDOR_A] > 0
     assert row[VENDOR_B] > 0
+    assert row["placement"][VENDOR_A] == "space"
+    assert row["placement"][VENDOR_B] == "mixed"
 
 
 def test_bundled_cells_are_not_reported_as_not_quoted(matrix):
@@ -244,6 +298,8 @@ def test_prompt_does_not_claim_zero_means_not_quoted():
     assert "incl_in_bundle" in prompt
     assert "possible_double_count" in prompt
     assert "NOT DIRECTLY COMPARABLE" in prompt
+    assert "Package vs itemised" in prompt
+    assert "takeaway" in prompt
 
 
 def test_fallback_report_mentions_bundles_only_when_present(matrix):
@@ -251,5 +307,6 @@ def test_fallback_report_mentions_bundles_only_when_present(matrix):
 
     with_bundles = _build_fallback_report(matrix["chartData"], matrix["bundleTier"])
     without = _build_fallback_report(matrix["chartData"], [])
-    assert "Bundled Scope" in with_bundles
-    assert "Bundled Scope" not in without
+    assert "Package vs itemised" in with_bundles
+    assert "1,00,300" in with_bundles
+    assert "Package vs itemised" not in without

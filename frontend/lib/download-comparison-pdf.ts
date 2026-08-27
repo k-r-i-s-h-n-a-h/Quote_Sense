@@ -23,7 +23,8 @@ import {
   type CoverageEntry,
   type SpaceRow,
 } from "./compare-types";
-import { type VendorLabel, type VendorMeta } from "./format";
+import { formatInrFull, type VendorLabel, type VendorMeta } from "./format";
+import { PDF_FONT_FAMILY, registerPdfUnicodeFont } from "./pdf-unicode-font";
 
 type TableRow = SpaceRow;
 
@@ -34,62 +35,72 @@ export type PdfTiers = {
   coverage?: CoverageEntry[];
 };
 
-/** jsPDF built-in Helvetica — clean sans-serif for comparison exports. */
-const FONT = "helvetica";
+export type PdfExportOptions = {
+  projectTitle?: string;
+  projectCode?: string;
+};
 
-/** Typography + layout tuned for 2–3 quote columns on portrait A4. */
+type BodyCell =
+  | string
+  | {
+      content: string;
+      colSpan?: number;
+      styles?: Record<string, unknown>;
+    };
+
+const TATVA_LOGO_PATH = "/tatva_assets.jpg";
+
+const INK: [number, number, number] = [28, 25, 23];
+const MUTED: [number, number, number] = [87, 83, 78];
+const RULE: [number, number, number] = [214, 211, 209];
+const HEAD_FILL: [number, number, number] = [28, 25, 23];
+const HEAD_TEXT: [number, number, number] = [250, 248, 245];
+const ACCENT: [number, number, number] = [192, 74, 0];
+const SPACE_FILL: [number, number, number] = [245, 241, 235];
+const BAND_FILL: [number, number, number] = [250, 248, 245];
+const AMBER_FILL: [number, number, number] = [255, 251, 235];
+const AMBER_TEXT: [number, number, number] = [120, 53, 15];
+const AMBER_NOTE: [number, number, number] = [69, 26, 3];
+const SKY_FILL: [number, number, number] = [240, 249, 255];
+const SKY_TEXT: [number, number, number] = [12, 74, 110];
+const SKY_NOTE: [number, number, number] = [12, 74, 110];
+const ROSE_FILL: [number, number, number] = [255, 241, 242];
+const ROSE_TEXT: [number, number, number] = [136, 19, 55];
+const INFO_FILL: [number, number, number] = [240, 249, 255];
+const INFO_TEXT: [number, number, number] = [12, 74, 110];
+
 function pdfLayout(vendorCount: number) {
   const cols = Math.min(Math.max(vendorCount, 2), 3);
-  if (cols >= 3) {
-    return {
-      title: 11,
-      subtitle: 8,
-      head: 7,
-      body: 6.5,
-      category: 7.5,
-      subTotalLabel: 8,
-      subTotalAmount: 9,
-      subGap: 3,
-      headMinHeight: 14,
-      cellPad: 2,
-      descShare: 0.32,
-      vendorTruncate: 18,
-      variantTruncate: 16,
-    };
-  }
   return {
-    title: 12,
-    subtitle: 8.5,
+    title: 13,
+    subtitle: 8,
+    meta: 7.5,
     head: 8,
-    body: 7,
-    category: 8.5,
+    body: 8,
+    note: 7,
+    category: 8,
     subTotalLabel: 8.5,
-    subTotalAmount: 9.5,
-    subGap: 3.5,
-    headMinHeight: 16,
-    cellPad: 2.5,
-      descShare: 0.36,
-      vendorTruncate: 20,
-      variantTruncate: 18,
+    subTotalAmount: 10,
+    subGap: 2.2,
+    headMinHeight: 20,
+    cellPad: 2.6,
+    descShare: cols >= 3 ? 0.26 : 0.3,
+    headerH: 30,
+    footerH: 12,
+    margin: 12,
   };
 }
 
-const SUB_ROW_FILL: [number, number, number] = [226, 232, 240];
-const SUB_GAP_FILL: [number, number, number] = [248, 250, 252];
-
-/** ASCII-safe currency — avoids broken ₹ glyph in standard PDF fonts. */
-function formatPdfAmount(value: number): string {
+function formatPdfAmount(value: number, unicode: boolean): string {
+  if (unicode) return formatInrFull(value);
   const n = Math.round(Number(value));
   if (!Number.isFinite(n)) return "N/A";
-  const formatted = n.toLocaleString("en-IN", {
-    maximumFractionDigits: 0,
-  });
-  return `Rs. ${formatted}`;
+  return `INR ${n.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
 }
 
-function formatPdfPrice(value: unknown): string {
+function formatPdfPrice(value: unknown, unicode: boolean): string {
   if (value === 0 || value === undefined || value === null) return "N/A";
-  return formatPdfAmount(Number(value));
+  return formatPdfAmount(Number(value), unicode);
 }
 
 /**
@@ -97,8 +108,13 @@ function formatPdfPrice(value: unknown): string {
  * who never saw the app, so a bundled amount must not print as a bare "N/A" —
  * that is how a vendor gets wrongly excluded from a shortlist.
  */
-function cellText(row: SpaceRow, vendor: string, total: number): string {
-  if (total > 0) return formatPdfAmount(total);
+function cellText(
+  row: SpaceRow,
+  vendor: string,
+  total: number,
+  unicode: boolean
+): string {
+  if (total > 0) return formatPdfAmount(total, unicode);
   const { status, bundleLabel } = parseCellStatus(row.coverage?.[vendor]);
   if (status === "incl_in_bundle") {
     return `incl. in ${bundleLabel || "package"}`;
@@ -106,31 +122,36 @@ function cellText(row: SpaceRow, vendor: string, total: number): string {
   return "N/A";
 }
 
-function truncate(text: string, maxLen: number): string {
-  const t = text.trim();
-  if (t.length <= maxLen) return t;
-  return `${t.slice(0, maxLen - 1)}…`;
-}
-
 function vendorHeaderCell(
   vendor: string,
   vendorLabels: Record<string, VendorLabel>,
-  vendorMeta: Record<string, VendorMeta>,
-  compact = false,
-  companyMax = 32,
-  variantMax = 28
+  vendorMeta: Record<string, VendorMeta>
 ): string {
   const info = vendorLabels[vendor];
   const meta = vendorMeta[vendor] || {};
-  const company = truncate(info?.company ?? vendor.split(" (")[0], compact ? companyMax : 32);
+  const company = (info?.company ?? vendor.split(" (")[0]).trim();
   const lines = [company];
-  if (info?.variant) lines.push(truncate(info.variant, compact ? variantMax : 28));
-  const qno = info?.quoteNumber ? `#${info.quoteNumber}` : "";
+  if (info?.variant) lines.push(info.variant);
+  const qno = info?.quoteNumber ? `Quote ${info.quoteNumber}` : "";
   const qdate = info?.quoteDate || meta.quote_date || "";
-  if (qno || qdate) lines.push([qno, qdate].filter(Boolean).join(" · "));
+  if (qno || qdate) lines.push([qno, qdate].filter(Boolean).join("  ·  "));
   const gstChip = gstEntryChip(gstModeOf(meta));
   if (gstChip) lines.push(gstChip);
   return lines.join("\n");
+}
+
+function quoteIndexLine(
+  vendors: string[],
+  vendorLabels: Record<string, VendorLabel>
+): string {
+  return vendors
+    .map((vendor) => {
+      const info = vendorLabels[vendor];
+      const company = (info?.company ?? vendor.split(" (")[0]).trim();
+      const qno = info?.quoteNumber ? `Quote ${info.quoteNumber}` : "";
+      return qno ? `${company} · ${qno}` : company;
+    })
+    .join("   |   ");
 }
 
 function buildColumnStyles(
@@ -138,19 +159,17 @@ function buildColumnStyles(
   tableWidth: number,
   layout: ReturnType<typeof pdfLayout>
 ): Record<number, { cellWidth: number; halign?: "right" | "left" }> {
-  const descWidth = Math.min(62, tableWidth * layout.descShare);
+  const descWidth = Math.min(78, tableWidth * layout.descShare);
   const vendorWidth = (tableWidth - descWidth) / Math.max(vendors.length, 1);
-
-  const styles: Record<number, { cellWidth: number; halign?: "right" | "left" }> = {
-    0: { cellWidth: descWidth, halign: "left" },
-  };
+  const styles: Record<number, { cellWidth: number; halign?: "right" | "left" }> =
+    {
+      0: { cellWidth: descWidth, halign: "left" },
+    };
   vendors.forEach((_, i) => {
     styles[i + 1] = { cellWidth: vendorWidth, halign: "right" };
   });
   return styles;
 }
-
-const TATVA_LOGO_PATH = "/tatva_assets.jpg";
 
 function loadLogoForPdf(): Promise<{
   dataUrl: string;
@@ -185,108 +204,217 @@ function loadLogoForPdf(): Promise<{
   });
 }
 
+function drawLetterhead(
+  doc: jsPDF,
+  font: string,
+  layout: ReturnType<typeof pdfLayout>,
+  logo: { dataUrl: string; width: number; height: number } | null,
+  opts: {
+    projectTitle: string;
+    projectCode: string;
+    quoteLine: string;
+    generated: string;
+  }
+) {
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const m = layout.margin;
+  const y0 = 8;
+  let textX = m;
+
+  if (logo) {
+    const logoW = 34;
+    const logoH = Math.min(10, (logo.height / logo.width) * logoW);
+    doc.addImage(logo.dataUrl, "JPEG", m, y0, logoW, logoH);
+    textX = m + logoW + 5;
+  }
+
+  const rightWidth = Math.min(118, pageWidth * 0.38);
+  const rightX = pageWidth - m;
+  const titleWidth = rightX - rightWidth - 8 - textX;
+
+  doc.setFont(font, "bold");
+  doc.setFontSize(7);
+  doc.setTextColor(...ACCENT);
+  doc.text("TATVA OPS", textX, y0 + 3);
+
+  doc.setFontSize(12);
+  doc.setTextColor(...INK);
+  const titleLines = doc.splitTextToSize(opts.projectTitle, Math.max(titleWidth, 60));
+  doc.text(titleLines, textX, y0 + 9);
+
+  doc.setFont(font, "normal");
+  doc.setFontSize(layout.meta);
+  doc.setTextColor(...MUTED);
+  if (opts.projectCode) {
+    doc.text(`Project ${opts.projectCode}`, textX, y0 + 15.5);
+  }
+
+  doc.setFont(font, "bold");
+  doc.setFontSize(7);
+  doc.setTextColor(...INK);
+  doc.text("QUOTES IN THIS COMPARISON", rightX, y0 + 3, { align: "right" });
+  doc.setFont(font, "normal");
+  doc.setFontSize(7);
+  doc.setTextColor(...MUTED);
+  const quoteLines = doc.splitTextToSize(opts.quoteLine.replace(/ {3}\| {3}/g, "\n"), rightWidth);
+  doc.text(quoteLines, rightX, y0 + 8, { align: "right" });
+  doc.text(opts.generated, rightX, layout.headerH - 6, { align: "right" });
+
+  const ruleY = layout.headerH - 3;
+  doc.setDrawColor(...ACCENT);
+  doc.setLineWidth(0.7);
+  doc.line(m, ruleY, pageWidth - m, ruleY);
+  doc.setDrawColor(...RULE);
+  doc.setLineWidth(0.2);
+  doc.line(m, ruleY + 1.1, pageWidth - m, ruleY + 1.1);
+}
+
+function drawFooter(
+  doc: jsPDF,
+  font: string,
+  layout: ReturnType<typeof pdfLayout>,
+  page: number,
+  pageCount: number
+) {
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const m = layout.margin;
+  const y = pageHeight - 7;
+  doc.setDrawColor(...RULE);
+  doc.setLineWidth(0.25);
+  doc.line(m, y - 4, pageWidth - m, y - 4);
+  doc.setFont(font, "normal");
+  doc.setFontSize(7);
+  doc.setTextColor(...MUTED);
+  doc.text("Tatva Ops  ·  Quote comparison  ·  Prepared for the client", m, y);
+  doc.text(`Page ${page} of ${pageCount}`, pageWidth - m, y, { align: "right" });
+}
+
+function sectionCell(
+  title: string,
+  subtitle: string,
+  colSpan: number,
+  font: string,
+  layout: ReturnType<typeof pdfLayout>,
+  fill: [number, number, number],
+  text: [number, number, number]
+): BodyCell[] {
+  return [
+    {
+      content: subtitle ? `${title}\n${subtitle}` : title,
+      colSpan,
+      styles: {
+        font,
+        fillColor: fill,
+        textColor: text,
+        fontStyle: "bold",
+        fontSize: layout.category,
+        cellPadding: { top: 3.2, bottom: 3.2, left: 4, right: 4 },
+      },
+    },
+  ];
+}
+
+function noteRow(
+  content: string,
+  colSpan: number,
+  font: string,
+  layout: ReturnType<typeof pdfLayout>,
+  fill: [number, number, number],
+  text: [number, number, number]
+): BodyCell[] {
+  return [
+    {
+      content,
+      colSpan,
+      styles: {
+        font,
+        fontStyle: "normal",
+        fillColor: fill,
+        textColor: text,
+        fontSize: layout.note,
+        cellPadding: { top: 2.4, bottom: 2.6, left: 6, right: 4 },
+      },
+    },
+  ];
+}
+
+function sanitizeFilePart(value: string): string {
+  return value.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-|-$/g, "");
+}
+
 /** Generate and download comparison matrix PDF directly (no print dialog). */
 export async function downloadComparisonPdf(
   tableData: TableRow[],
   vendors: string[],
   vendorLabels: Record<string, VendorLabel>,
   vendorMeta: Record<string, VendorMeta> = {},
-  tiers: PdfTiers = {}
+  tiers: PdfTiers = {},
+  options: PdfExportOptions = {}
 ): Promise<void> {
   const layout = pdfLayout(vendors.length);
-  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+  const unicode = await registerPdfUnicodeFont(doc);
+  const font = unicode ? PDF_FONT_FAMILY : "helvetica";
   const pageWidth = doc.internal.pageSize.getWidth();
-  const margin = 10;
+  const margin = layout.margin;
   const tableWidth = pageWidth - margin * 2;
 
   const logo = await loadLogoForPdf();
-  let headerY = 12;
-  if (logo) {
-    const logoW = 38;
-    const logoH = (logo.height / logo.width) * logoW;
-    doc.addImage(logo.dataUrl, "JPEG", margin, 6, logoW, logoH);
-    headerY = 6 + logoH + 5;
-  }
-
   const today = new Date().toLocaleDateString("en-IN", {
     year: "numeric",
     month: "short",
     day: "numeric",
   });
+  const projectTitle =
+    options.projectTitle?.trim() || "Quote comparison";
+  const projectCode = options.projectCode?.trim() || "";
+  const quoteLine = quoteIndexLine(vendors, vendorLabels);
+  const generated = `Generated ${today}`;
 
-  doc.setFont(FONT, "bold");
-  doc.setFontSize(layout.title);
-  doc.setTextColor(15, 23, 42);
-  doc.text("Tatva Quotes Comparison Matrix", margin, headerY);
-  doc.setFont(FONT, "normal");
-  doc.setFontSize(layout.subtitle);
-  doc.setTextColor(100, 116, 139);
-  doc.text(`Generated by QuoteSense · ${today}`, margin, headerY + 5);
-  doc.setTextColor(0, 0, 0);
+  doc.setProperties({
+    title: projectCode
+      ? `${projectTitle} (${projectCode}) — comparison`
+      : `${projectTitle} — comparison`,
+    author: "Tatva Ops",
+    subject: "Vendor quote comparison",
+    creator: "QuoteSense",
+  });
 
-  const tableStartY = headerY + 10;
+  doc.setFont(font, "normal");
+  doc.setFontSize(layout.body);
 
-  const vendorHeaders = vendors.map((v) =>
-    vendorHeaderCell(v, vendorLabels, vendorMeta, true, layout.vendorTruncate, layout.variantTruncate)
-  );
-  const head = [["Space / work", ...vendorHeaders]];
-
-  type BodyCell =
-    | string
-    | {
-        content: string;
-        colSpan?: number;
-        styles?: Record<string, unknown>;
-      };
-
-  const body: BodyCell[][] = [];
   const pad = layout.cellPad;
+  const colSpan = vendors.length + 1;
+  const body: BodyCell[][] = [];
 
   const bundleTier = tiers.bundleTier ?? [];
   const projectTier = tiers.projectTier ?? [];
   const projectForDisplay = projectRowsForDisplay(projectTier, bundleTier);
   const coverIdx = coverageIndex(tiers.coverage ?? []);
-
-  // Project-level rows are exported after the bundle section, so the space tier
-  // here excludes them when the tiers are available.
   const spaceRows = projectTier.length
     ? tableData.filter((r) => String(r.space_id ?? "") !== "project_level")
     : tableData;
 
   const gstBanner = gstCompareBanner(vendors, vendorMeta, vendorLabels);
   if (gstBanner) {
-    body.push([
-      {
-        content: gstBanner,
-        colSpan: vendors.length + 1,
-        styles: {
-          font: FONT,
-          fillColor: [224, 242, 254],
-          textColor: [7, 89, 133],
-          fontSize: layout.body,
-          cellPadding: { top: 2, bottom: 2, left: 3, right: 3 },
-        },
-      },
-    ]);
+    body.push(noteRow(gstBanner, colSpan, font, layout, INFO_FILL, INFO_TEXT));
   }
 
   const grouped = groupTableData(spaceRows);
   for (const cat of grouped) {
     if (grouped.length > 1) {
-      body.push([
-        {
-          content: cat.category.toUpperCase(),
-          colSpan: vendors.length + 1,
-          styles: {
-            font: FONT,
-            fillColor: [238, 242, 255],
-            textColor: [30, 58, 138],
-            fontStyle: "bold",
-            fontSize: layout.category,
-            cellPadding: { top: 2, bottom: 2, left: 3, right: 3 },
-          },
-        },
-      ]);
+      body.push(
+        sectionCell(
+          cat.category.toUpperCase(),
+          "",
+          colSpan,
+          font,
+          layout,
+          BAND_FILL,
+          INK
+        )
+      );
     }
     for (let spaceIdx = 0; spaceIdx < cat.spaces.length; spaceIdx++) {
       const spaceGroup = cat.spaces[spaceIdx];
@@ -294,9 +422,9 @@ export async function downloadComparisonPdf(
         body.push([
           {
             content: "",
-            colSpan: vendors.length + 1,
+            colSpan,
             styles: {
-              fillColor: SUB_GAP_FILL,
+              fillColor: [255, 255, 255],
               minCellHeight: layout.subGap,
               cellPadding: 0,
               lineWidth: 0,
@@ -305,18 +433,8 @@ export async function downloadComparisonPdf(
         ]);
       }
 
-      const spaceRows = spaceGroup.subs.flatMap((s) => s.rows);
-      const totals = sumSubServiceRow(spaceRows, vendors);
-
-      const spaceCellStyle = {
-        font: FONT,
-        fillColor: SUB_ROW_FILL,
-        fontStyle: "bold" as const,
-        cellPadding: { top: 3, bottom: 3, left: 4, right: 3 },
-        lineColor: [148, 163, 184] as [number, number, number],
-        lineWidth: 0.2,
-      };
-
+      const groupedSpaceRows = spaceGroup.subs.flatMap((s) => s.rows);
+      const totals = sumSubServiceRow(groupedSpaceRows, vendors);
       const comparable = isSpaceComparable(
         coverIdx,
         spaceGroup.spaceId,
@@ -324,7 +442,14 @@ export async function downloadComparisonPdf(
       );
       const spaceTitle = comparable
         ? spaceGroup.space.toUpperCase()
-        : `${spaceGroup.space.toUpperCase()}  (scopes differ — not like-for-like)`;
+        : `${spaceGroup.space.toUpperCase()}   ·   scopes differ — not like-for-like`;
+
+      const spaceCellStyle = {
+        font,
+        fillColor: SPACE_FILL,
+        fontStyle: "bold" as const,
+        cellPadding: { top: 3.2, bottom: 3.2, left: 4, right: 3 },
+      };
 
       body.push([
         {
@@ -332,17 +457,15 @@ export async function downloadComparisonPdf(
           styles: {
             ...spaceCellStyle,
             fontSize: layout.subTotalLabel,
-            textColor: comparable
-              ? [30, 41, 59]
-              : ([146, 64, 14] as [number, number, number]),
+            textColor: comparable ? INK : AMBER_TEXT,
           },
         },
         ...vendors.map((v) => ({
-          content: formatPdfPrice(totals[v]),
+          content: formatPdfPrice(totals[v], unicode),
           styles: {
             ...spaceCellStyle,
             fontSize: layout.subTotalAmount,
-            textColor: [15, 23, 42],
+            textColor: INK,
             halign: "right" as const,
           },
         })),
@@ -355,13 +478,15 @@ export async function downloadComparisonPdf(
           {
             content: sub.sub,
             styles: {
-              font: FONT,
+              font,
               fontSize: layout.body,
               cellPadding: { top: pad, bottom: pad, left: 8, right: pad },
               textColor: [51, 65, 85],
             },
           },
-          ...vendors.map((v) => cellText(first, v, Number(subTotals[v]) || 0)),
+          ...vendors.map((v) =>
+            cellText(first, v, Number(subTotals[v]) || 0, unicode)
+          ),
         ]);
       }
     }
@@ -369,138 +494,129 @@ export async function downloadComparisonPdf(
 
   if (bundleTier.length > 0) {
     const { lumpSums, scattered } = partitionBundleRows(bundleTier);
-
     const sameCompany = vendorsShareCompany(vendors, vendorLabels);
     const scatteredForDisplay = scattered.map((row) =>
       withInferredPlacement(row, vendors, spaceRows, projectTier)
     );
+
     const pushBundleSection = (
       title: string,
+      subtitle: string,
       rows: BundleRow[],
       fill: [number, number, number],
       text: [number, number, number],
       withPlacement = false
     ) => {
       if (rows.length === 0) return;
-      body.push([
-        {
-          content: title,
-          colSpan: vendors.length + 1,
-          styles: {
-            font: FONT,
-            fillColor: fill,
-            textColor: text,
-            fontStyle: "bold",
-            fontSize: layout.category,
-            cellPadding: { top: 2, bottom: 2, left: 3, right: 3 },
-          },
-        },
-      ]);
+      body.push(sectionCell(title, subtitle, colSpan, font, layout, fill, text));
       for (const bundle of rows) {
-        const placeNotes = withPlacement
-          ? recapPlacementNotes(bundle, vendors, vendorLabels)
-          : [];
-        const detail = [
+        const labelBits = [
+          bundle.bundle_label,
           bundle.covered_spaces?.length
             ? `Across: ${bundle.covered_spaces.join(", ")}`
             : "",
-          bundle.overlap_flags?.length
-            ? `May overlap with a separate line for ${bundle.overlap_flags.join(", ")} — confirm with the vendor`
-            : "",
-          bundle.takeaway?.text ? bundle.takeaway.text : "",
-          ...placeNotes,
         ]
           .filter(Boolean)
           .join("\n");
 
         body.push([
           {
-            content: `${bundle.bundle_label}${detail ? `\n${detail}` : ""}`,
+            content: labelBits,
             styles: {
-              font: FONT,
+              font,
               fontSize: layout.body,
-              cellPadding: { top: pad, bottom: pad, left: 8, right: pad },
-              textColor: [51, 65, 85],
+              fontStyle: "bold",
+              cellPadding: { top: pad + 0.4, bottom: pad, left: 8, right: pad },
+              textColor: INK,
             },
           },
           ...vendors.map((v) => {
             const value = amountOf(bundle, v);
             if (value <= 0) return "N/A";
             const note = bundlePriceNote(bundle, v);
-            const placeNote = withPlacement
-              ? recapPlacementNote(bundle, v, vendorLabels, sameCompany)
-              : "";
-            return [formatPdfAmount(value), note && `(${note})`, placeNote]
+            return [formatPdfAmount(value, unicode), note && `(${note})`]
               .filter(Boolean)
               .join("\n");
           }),
         ]);
+
+        if (bundle.overlap_flags?.length) {
+          body.push(
+            noteRow(
+              `May overlap with a separate line for ${bundle.overlap_flags.join(", ")} — confirm with the vendor.`,
+              colSpan,
+              font,
+              layout,
+              ROSE_FILL,
+              ROSE_TEXT
+            )
+          );
+        }
+        if (bundle.takeaway?.text) {
+          body.push(
+            noteRow(
+              bundle.takeaway.text.trim(),
+              colSpan,
+              font,
+              layout,
+              AMBER_FILL,
+              AMBER_NOTE
+            )
+          );
+        }
+        if (withPlacement) {
+          const placeNotes = recapPlacementNotes(bundle, vendors, vendorLabels);
+          for (const note of placeNotes) {
+            body.push(
+              noteRow(note, colSpan, font, layout, SKY_FILL, SKY_NOTE)
+            );
+          }
+          // Per-vendor placement still belongs under the figures when notes
+          // differ; keep a compact right-aligned reminder only if there is no
+          // combined recap sentence.
+          if (placeNotes.length === 0) {
+            const perVendor = vendors
+              .map((v) => recapPlacementNote(bundle, v, vendorLabels, sameCompany))
+              .filter(Boolean);
+            if (perVendor.length) {
+              body.push(
+                noteRow(perVendor.join("  ·  "), colSpan, font, layout, SKY_FILL, SKY_NOTE)
+              );
+            }
+          }
+        }
       }
     };
 
     pushBundleSection(
-      "LUMP SUM PACKAGES (not included in the space totals above)",
+      "LUMP SUM PACKAGES",
+      "Not included in the space totals above. One vendor priced a package; another listed the same kind of work line by line.",
       lumpSums,
-      [254, 243, 199],
-      [146, 64, 14]
+      AMBER_FILL,
+      AMBER_TEXT
     );
-    const takeaways = lumpSums
-      .map((row) => row.takeaway?.text?.trim())
-      .filter((text): text is string => Boolean(text));
-    if (takeaways.length > 0) {
-      body.push([
-        {
-          content: "KEY TAKEAWAYS",
-          colSpan: vendors.length + 1,
-          styles: {
-            font: FONT,
-            fillColor: [255, 251, 235],
-            textColor: [146, 64, 14],
-            fontStyle: "bold",
-            fontSize: layout.category,
-            cellPadding: { top: 2, bottom: 2, left: 3, right: 3 },
-          },
-        },
-      ]);
-      for (const text of takeaways) {
-        body.push([
-          {
-            content: text,
-            colSpan: vendors.length + 1,
-            styles: {
-              font: FONT,
-              fontSize: layout.body,
-              textColor: [69, 26, 3],
-              cellPadding: { top: pad, bottom: pad, left: 8, right: pad },
-            },
-          },
-        ]);
-      }
-    }
     pushBundleSection(
-      "SAME WORK, DIFFERENT SPACES (comparison only — read each quote's note)",
+      "SAME WORK, DIFFERENT SPACES",
+      "Comparison only — not extra spend. A space figure is already in the spaces above; a whole-home figure is included in this quote, not in those space sums.",
       scatteredForDisplay,
-      [224, 242, 254],
-      [7, 89, 133],
+      SKY_FILL,
+      SKY_TEXT,
       true
     );
   }
 
   if (projectForDisplay.length > 0) {
-    body.push([
-      {
-        content: "WHOLE HOME (not tied to one space)",
-        colSpan: vendors.length + 1,
-        styles: {
-          font: FONT,
-          fillColor: [241, 245, 249],
-          textColor: [30, 41, 59],
-          fontStyle: "bold",
-          fontSize: layout.category,
-          cellPadding: { top: 2, bottom: 2, left: 3, right: 3 },
-        },
-      },
-    ]);
+    body.push(
+      sectionCell(
+        "WHOLE HOME",
+        "Work not tied to one space.",
+        colSpan,
+        font,
+        layout,
+        BAND_FILL,
+        INK
+      )
+    );
     for (const cat of groupTableData(projectForDisplay)) {
       for (const spaceGroup of cat.spaces) {
         for (const sub of spaceGroup.subs) {
@@ -510,77 +626,108 @@ export async function downloadComparisonPdf(
             {
               content: sub.sub,
               styles: {
-                font: FONT,
+                font,
                 fontSize: layout.body,
                 cellPadding: { top: pad, bottom: pad, left: 8, right: pad },
                 textColor: [51, 65, 85],
               },
             },
-            ...vendors.map((v) => cellText(first, v, Number(subTotals[v]) || 0)),
+            ...vendors.map((v) =>
+              cellText(first, v, Number(subTotals[v]) || 0, unicode)
+            ),
           ]);
         }
       }
     }
   }
 
+  body.push(
+    noteRow(
+      [
+        '"N/A" = that vendor did not quote this work.  "incl. in …" = price is already inside that vendor\'s package.',
+        "Lump sum packages are separate from space totals. Same work, different spaces is comparison only.",
+        '"Entered excl. GST" / "Entered incl. GST" is how the vendor typed the quote. Figures shown include GST so columns can be compared.',
+      ].join("\n"),
+      colSpan,
+      font,
+      layout,
+      [255, 255, 255],
+      MUTED
+    )
+  );
+
   const columnStyles = buildColumnStyles(vendors, tableWidth, layout);
 
   autoTable(doc, {
-    head,
+    head: [
+      [
+        "Space / work",
+        ...vendors.map((v) => vendorHeaderCell(v, vendorLabels, vendorMeta)),
+      ],
+    ],
     body: body as Parameters<typeof autoTable>[1]["body"],
-    startY: tableStartY,
+    startY: layout.headerH + 2,
     tableWidth,
-    margin: { left: margin, right: margin, top: tableStartY, bottom: 10 },
-    theme: "grid",
+    margin: {
+      left: margin,
+      right: margin,
+      top: layout.headerH + 2,
+      bottom: layout.footerH,
+    },
+    theme: "plain",
     styles: {
-      font: FONT,
+      font,
       fontSize: layout.body,
       cellPadding: { top: pad, bottom: pad, left: pad, right: pad },
       overflow: "linebreak",
       valign: "middle",
-      lineColor: [203, 213, 225],
-      lineWidth: 0.12,
-      textColor: [30, 41, 59],
+      lineWidth: 0,
+      textColor: INK,
     },
     headStyles: {
-      font: FONT,
-      fillColor: [241, 245, 249],
-      textColor: [15, 23, 42],
+      font,
+      fillColor: HEAD_FILL,
+      textColor: HEAD_TEXT,
       fontStyle: "bold",
       fontSize: layout.head,
       minCellHeight: layout.headMinHeight,
-      cellPadding: { top: pad, bottom: pad, left: pad, right: pad },
+      cellPadding: { top: 3, bottom: 3.2, left: 3.2, right: 3.2 },
       overflow: "linebreak",
+      valign: "middle",
     },
     bodyStyles: {
-      font: FONT,
+      font,
       fontSize: layout.body,
     },
     columnStyles,
     showHead: "everyPage",
     rowPageBreak: "avoid",
     horizontalPageBreak: false,
+    didDrawCell: (data) => {
+      if (data.section !== "body" && data.section !== "head") return;
+      const { x, y, width, height } = data.cell;
+      doc.setDrawColor(...RULE);
+      doc.setLineWidth(0.18);
+      doc.line(x, y + height, x + width, y + height);
+    },
+    didDrawPage: () => {
+      drawLetterhead(doc, font, layout, logo, {
+        projectTitle,
+        projectCode,
+        quoteLine,
+        generated,
+      });
+    },
   });
 
-  // The footnote replaces tooltips the printed page cannot have.
-  const finalY =
-    (doc as unknown as { lastAutoTable?: { finalY: number } }).lastAutoTable
-      ?.finalY ?? tableStartY;
-  if (finalY < doc.internal.pageSize.getHeight() - 22) {
-    doc.setFont(FONT, "normal");
-    doc.setFontSize(6.5);
-    doc.setTextColor(120, 113, 108);
-    doc.text(
-      [
-        '"N/A" = that vendor did not quote this work.  "incl. in ..." = price is already inside that vendor\'s package.',
-        "Lump sum packages are separate from space totals. \"Same work, different spaces\" is comparison only — a space figure is already in the spaces above; a whole-home figure is included in this quote, not in those space sums.",
-        '"Entered excl. GST" / "Entered incl. GST" is how the vendor typed the quote. Figures shown include GST so columns can be compared.',
-      ],
-      margin,
-      finalY + 6
-    );
-    doc.setTextColor(0, 0, 0);
+  const pageCount = doc.getNumberOfPages();
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    drawFooter(doc, font, layout, i, pageCount);
   }
 
-  doc.save("comparator.pdf");
+  const fileBits = ["Tatva-comparison", sanitizeFilePart(projectCode)]
+    .filter(Boolean)
+    .join("-");
+  doc.save(`${fileBits || "Tatva-comparison"}.pdf`);
 }

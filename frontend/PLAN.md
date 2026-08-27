@@ -9,7 +9,7 @@ protocol. This file is the frontend-side index.
 | F1 fetch | [docs/plan/01-fetch.md](docs/plan/01-fetch.md) | `lib/compare-progress.ts`, `lib/compare-sync.ts`, `app/api/**` |
 | F2 grouping | [docs/plan/02-grouping.md](docs/plan/02-grouping.md) | `lib/compare-matrix.ts` |
 | F3 matrix UI | [docs/plan/03-matrix-ui.md](docs/plan/03-matrix-ui.md) | `components/compare/ComparisonMatrix.tsx` |
-| F4 export | [docs/plan/04-export.md](docs/plan/04-export.md) | `lib/download-comparison-pdf.ts` |
+| F4 export | [docs/plan/04-export.md](docs/plan/04-export.md) | `lib/download-comparison-pdf.ts`, `lib/pdf-unicode-font.ts` |
 
 ## Where the backend boundary sits
 

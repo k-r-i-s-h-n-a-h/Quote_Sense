@@ -30,6 +30,7 @@ import {
   type SpaceRow,
 } from "@/lib/compare-types";
 import { vendorColor } from "@/lib/vendor-colors";
+import TatvaLogo from "@/components/TatvaLogo";
 
 type Props = {
   tableData: SpaceRow[];
@@ -41,6 +42,8 @@ type Props = {
   bundleTier?: BundleRow[];
   projectTier?: SpaceRow[];
   coverage?: CoverageEntry[];
+  projectTitle?: string;
+  projectCode?: string;
 };
 
 /**
@@ -114,6 +117,8 @@ export default function ComparisonMatrix({
   bundleTier = [],
   projectTier,
   coverage = [],
+  projectTitle,
+  projectCode,
 }: Props) {
   const vendorLabels = useMemo(
     () => buildVendorLabels(vendors, vendorMeta),
@@ -158,81 +163,117 @@ export default function ComparisonMatrix({
     rows: BundleRow[],
     accent: "amber" | "sky"
   ) =>
-    rows.map((bundle, bi) => (
-      <tr key={bundle.bundle_id || bi} className="bg-white">
-        <td
-          className={`py-3 pl-8 pr-4 max-w-[360px] border-l-4 ${
-            accent === "amber" ? "border-amber-200" : "border-sky-200"
-          }`}
-        >
-          <div className="text-sm font-semibold text-stone-800 leading-tight">
-            {bundle.bundle_label}
-          </div>
-          {bundle.covered_spaces?.length ? (
-            <div className="text-[10px] text-stone-500 mt-0.5">
-              Across: {bundle.covered_spaces.join(" · ")}
-            </div>
-          ) : null}
-          {bundle.overlap_flags?.length ? (
-            <div className="text-[10px] text-rose-700 bg-rose-50 border border-rose-200 rounded px-1.5 py-0.5 mt-1 inline-block leading-snug">
-              May overlap with a separate line for{" "}
-              {bundle.overlap_flags.join(", ")} — confirm with the vendor
-            </div>
-          ) : null}
-          {bundle.takeaway?.text ? (
-            <div className="text-[10px] text-amber-950 bg-amber-50 border border-amber-200 rounded px-1.5 py-1 mt-1.5 leading-snug">
-              {bundle.takeaway.text}
-            </div>
-          ) : null}
-          {accent === "sky"
-            ? recapPlacementNotes(bundle, vendors, vendorLabels).map((note) => (
-                <div
-                  key={note}
-                  className="text-[10px] text-sky-900 bg-sky-50 border border-sky-200 rounded px-1.5 py-1 mt-1.5 leading-snug"
-                >
-                  {note}
-                </div>
-              ))
-            : null}
-        </td>
-        {vendors.map((vendor, vIdx) => {
-          const value = amountOf(bundle, vendor);
-          const note = bundlePriceNote(bundle, vendor);
-          const placeNote =
-            accent === "sky"
-              ? recapPlacementNote(bundle, vendor, vendorLabels, sameCompany)
-              : "";
-          return (
+    rows.map((bundle, bi) => {
+      const placeNotes =
+        accent === "sky"
+          ? recapPlacementNotes(bundle, vendors, vendorLabels)
+          : [];
+      const perVendorNotes =
+        accent === "sky" && placeNotes.length === 0
+          ? vendors
+              .map((vendor) =>
+                recapPlacementNote(bundle, vendor, vendorLabels, sameCompany)
+              )
+              .filter(Boolean)
+          : [];
+      const hasNotes = Boolean(
+        bundle.overlap_flags?.length ||
+          bundle.takeaway?.text ||
+          placeNotes.length ||
+          perVendorNotes.length
+      );
+
+      return (
+        <React.Fragment key={bundle.bundle_id || bi}>
+          <tr className="bg-white">
             <td
-              key={vIdx}
-              className="px-4 py-3 text-right tabular-nums align-middle"
+              className={`py-3 pl-6 pr-4 border-l-4 ${
+                accent === "amber" ? "border-amber-300" : "border-sky-300"
+              }`}
             >
-              {value > 0 ? (
-                <>
-                  <div className="text-sm font-bold text-stone-900">
-                    {formatInrFull(value)}
-                  </div>
-                  {note ? (
-                    <div className="text-[9px] text-stone-500 mt-0.5 normal-case">
-                      {note}
-                    </div>
-                  ) : null}
-                  {placeNote ? (
-                    <div className="text-[9px] text-sky-800 mt-0.5 normal-case leading-snug max-w-[14rem] ml-auto">
-                      {placeNote}
-                    </div>
-                  ) : null}
-                </>
-              ) : (
-                <span className="text-sm font-medium text-rose-300 italic">
-                  N/A
-                </span>
-              )}
+              <div className="text-sm font-semibold text-stone-800 leading-tight">
+                {bundle.bundle_label}
+              </div>
+              {bundle.covered_spaces?.length ? (
+                <div className="text-[11px] text-stone-500 mt-0.5">
+                  Across: {bundle.covered_spaces.join(" · ")}
+                </div>
+              ) : null}
             </td>
-          );
-        })}
-      </tr>
-    ));
+            {vendors.map((vendor, vIdx) => {
+              const value = amountOf(bundle, vendor);
+              const note = bundlePriceNote(bundle, vendor);
+              return (
+                <td
+                  key={vIdx}
+                  className="px-4 py-3 text-right tabular-nums align-middle"
+                >
+                  {value > 0 ? (
+                    <>
+                      <div className="text-sm font-bold text-stone-900">
+                        {formatInrFull(value)}
+                      </div>
+                      {note ? (
+                        <div className="text-[10px] text-stone-500 mt-0.5 normal-case">
+                          {note}
+                        </div>
+                      ) : null}
+                    </>
+                  ) : (
+                    <span className="text-sm font-medium text-rose-300 italic">
+                      N/A
+                    </span>
+                  )}
+                </td>
+              );
+            })}
+          </tr>
+          {hasNotes ? (
+            <tr>
+              <td
+                colSpan={colCount}
+                className={`px-6 py-2.5 border-l-4 ${
+                  accent === "amber"
+                    ? "border-amber-300 bg-amber-50/80"
+                    : "border-sky-300 bg-sky-50/80"
+                }`}
+              >
+                <div className="space-y-1.5 max-w-4xl">
+                  {bundle.overlap_flags?.length ? (
+                    <p className="text-[11px] text-rose-800 bg-rose-50 border border-rose-200 rounded-md px-2.5 py-1.5 leading-snug">
+                      May overlap with a separate line for{" "}
+                      {bundle.overlap_flags.join(", ")} — confirm with the
+                      vendor
+                    </p>
+                  ) : null}
+                  {bundle.takeaway?.text ? (
+                    <p className="text-[12px] text-amber-950 leading-relaxed">
+                      {bundle.takeaway.text}
+                    </p>
+                  ) : null}
+                  {placeNotes.map((note) => (
+                    <p
+                      key={note}
+                      className="text-[12px] text-sky-950 leading-relaxed"
+                    >
+                      {note}
+                    </p>
+                  ))}
+                  {perVendorNotes.map((note) => (
+                    <p
+                      key={note}
+                      className="text-[12px] text-sky-950 leading-relaxed"
+                    >
+                      {note}
+                    </p>
+                  ))}
+                </div>
+              </td>
+            </tr>
+          ) : null}
+        </React.Fragment>
+      );
+    });
 
   const renderSectionHeader = (
     title: string,
@@ -243,14 +284,14 @@ export default function ComparisonMatrix({
       <tr role="presentation">
         <td
           colSpan={colCount}
-          className="h-4 p-0 bg-[var(--background)] border-0"
+          className="h-3 p-0 bg-white border-0"
         />
       </tr>
       <tr
         className={
           tone === "amber"
-            ? "bg-amber-50 border-y-2 border-amber-200"
-            : "bg-sky-50 border-y-2 border-sky-200"
+            ? "bg-amber-50"
+            : "bg-sky-50"
         }
       >
         <td
@@ -289,7 +330,6 @@ export default function ComparisonMatrix({
         spaceGroup.spaceId,
         vendors
       );
-      const isLastSpace = si === spaces.length - 1;
 
       return (
         <React.Fragment key={spaceGroup.spaceId || spaceGroup.space}>
@@ -297,12 +337,12 @@ export default function ComparisonMatrix({
             <tr role="presentation">
               <td
                 colSpan={colCount}
-                className="h-3 p-0 bg-[var(--background)] border-0"
+                className="h-2.5 p-0 bg-white border-0"
               />
             </tr>
           )}
 
-          <tr className="bg-stone-200/70 border-y-2 border-stone-300">
+          <tr className="bg-[#f5f1eb]">
             <td className="py-3 pl-5 pr-4 border-l-4 border-[var(--accent)]">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-xs font-extrabold text-stone-800 uppercase tracking-wide">
@@ -347,8 +387,7 @@ export default function ComparisonMatrix({
             })}
           </tr>
 
-          {spaceGroup.subs.map((sub, idx) => {
-            const isLast = idx === spaceGroup.subs.length - 1;
+          {spaceGroup.subs.map((sub) => {
             const first = sub.rows[0] ?? {};
             const pricing = String(first.pricing_method || "");
             // A work row can be fed by several vendor lines; merge their
@@ -374,11 +413,9 @@ export default function ComparisonMatrix({
             return (
               <tr
                 key={`${spaceGroup.spaceId}-${sub.workKey}`}
-                className={`hover:bg-stone-50/80 transition-colors bg-white ${
-                  isLast && !isLastSpace ? "border-b-2 border-stone-200" : ""
-                }`}
+                className="hover:bg-stone-50/90 transition-colors bg-white"
               >
-                <td className="py-2.5 pl-12 pr-4 max-w-[360px] border-l-4 border-transparent">
+                <td className="py-2.5 pl-10 pr-4 border-l-4 border-transparent">
                   <div className="text-sm font-medium text-stone-800 leading-tight">
                     {sub.sub}
                   </div>
@@ -403,50 +440,76 @@ export default function ComparisonMatrix({
       );
     });
 
+  const quoteLine = vendors
+    .map((vendor) => {
+      const info = vendorLabels[vendor];
+      const company = info?.company ?? vendor.split(" (")[0];
+      return info?.quoteNumber ? `${company} · Quote ${info.quoteNumber}` : company;
+    })
+    .join("  ·  ");
+
   return (
     <section className="qs-card p-5 md:p-6 overflow-hidden">
-      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-5">
-        <div>
-          <h2 className="qs-section-title">Tatva Quotes Comparison Matrix</h2>
-          <p className="qs-section-sub">
-            Cost by space, with work items listed under each.
-          </p>
-          {gstBanner ? (
-            <p className="mt-2 text-[11px] leading-snug text-sky-900 bg-sky-50 border border-sky-200 rounded-md px-2.5 py-1.5 max-w-3xl">
-              {gstBanner}
-            </p>
+      <div className="flex flex-col gap-4 mb-5 pb-4 border-b border-stone-200">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+          <div className="flex items-start gap-3 min-w-0">
+            <TatvaLogo size="sm" className="mt-0.5 shrink-0" />
+            <div className="min-w-0">
+              <p className="qs-eyebrow">Quote comparison</p>
+              <h2 className="qs-section-title mt-0.5">
+                {projectTitle || "Tatva Quotes Comparison Matrix"}
+              </h2>
+              <p className="qs-section-sub">
+                {[
+                  projectCode ? `Project ${projectCode}` : "",
+                  "Cost by space, with work listed under each",
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </p>
+              {quoteLine ? (
+                <p className="mt-1.5 text-[11px] text-stone-600 leading-snug">
+                  {quoteLine}
+                </p>
+              ) : null}
+            </div>
+          </div>
+          {onDownloadPdf ? (
+            <button
+              type="button"
+              onClick={onDownloadPdf}
+              className="qs-btn qs-btn-secondary shrink-0"
+              title="Download comparison as PDF"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                className="w-4 h-4"
+                aria-hidden
+              >
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              Export PDF
+            </button>
           ) : null}
         </div>
-        {onDownloadPdf ? (
-          <button
-            type="button"
-            onClick={onDownloadPdf}
-            className="qs-btn qs-btn-secondary shrink-0"
-            title="Download comparison as PDF"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              className="w-4 h-4"
-              aria-hidden
-            >
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <polyline points="7 10 12 15 17 10" />
-              <line x1="12" y1="15" x2="12" y2="3" />
-            </svg>
-            Export PDF
-          </button>
+        {gstBanner ? (
+          <p className="text-[11px] leading-snug text-sky-900 bg-sky-50 border border-sky-200 rounded-md px-2.5 py-1.5 max-w-3xl">
+            {gstBanner}
+          </p>
         ) : null}
       </div>
 
-      <div className="overflow-x-auto border border-stone-200 rounded-lg qs-table-scroll max-h-[70vh]">
-        <table className="w-full text-left border-collapse min-w-[720px]">
+      <div className="overflow-x-auto border border-stone-300 rounded-md qs-table-scroll qs-table-doc max-h-[70vh]">
+        <table className="w-full text-left border-collapse min-w-[800px] table-fixed">
           <thead>
-            <tr className="text-stone-500 uppercase text-[10px] font-bold tracking-widest">
-              <th className="p-4 border-b border-stone-200 w-[280px] bg-stone-50">
+            <tr>
+              <th className="p-3.5 w-[32%] text-[10px] font-bold tracking-[0.14em] uppercase text-stone-100">
                 Space / work
               </th>
               {vendors.map((vendor, i) => {
@@ -455,12 +518,9 @@ export default function ComparisonMatrix({
                 return (
                   <th
                     key={vendor}
-                    className="p-4 border-b border-stone-200 text-right align-top max-w-[170px] bg-stone-50"
+                    className="p-3.5 text-right align-top"
                   >
-                    <div
-                      className="ml-auto max-w-[170px]"
-                      title={info?.full ?? vendor}
-                    >
+                    <div title={info?.full ?? vendor}>
                       <div className="flex items-center justify-end gap-1.5 mb-1">
                         <span
                           className="h-2 w-2 rounded-full"
@@ -468,19 +528,19 @@ export default function ComparisonMatrix({
                           aria-hidden
                         />
                       </div>
-                      <div className="text-[11px] font-bold leading-snug normal-case tracking-normal text-stone-800 line-clamp-2 break-words">
+                      <div className="text-[12px] font-semibold leading-snug normal-case tracking-normal text-white break-words">
                         {info?.company ?? vendor.split(" (")[0]}
                       </div>
                       {info?.variant && (
-                        <div className="text-[10px] font-semibold text-blue-700 normal-case tracking-normal mt-0.5 line-clamp-1">
+                        <div className="text-[10px] font-medium text-stone-300 normal-case tracking-normal mt-0.5">
                           {info.variant}
                         </div>
                       )}
                       {(info?.quoteNumber ||
                         info?.quoteDate ||
                         meta.quote_date) && (
-                        <div className="text-[9px] font-normal text-stone-400 normal-case tracking-normal mt-0.5">
-                          {info?.quoteNumber ? `#${info.quoteNumber}` : ""}
+                        <div className="text-[10px] font-medium text-amber-200/90 normal-case tracking-normal mt-1">
+                          {info?.quoteNumber ? `Quote ${info.quoteNumber}` : ""}
                           {info?.quoteNumber &&
                           (info?.quoteDate || meta.quote_date)
                             ? " · "
@@ -489,7 +549,7 @@ export default function ComparisonMatrix({
                         </div>
                       )}
                       {gstEntryChip(gstModeOf(meta)) ? (
-                        <div className="text-[9px] font-semibold text-stone-500 normal-case tracking-normal mt-0.5">
+                        <div className="text-[9px] font-medium text-stone-400 normal-case tracking-normal mt-0.5">
                           {gstEntryChip(gstModeOf(meta))}
                         </div>
                       ) : null}
@@ -500,14 +560,14 @@ export default function ComparisonMatrix({
             </tr>
           </thead>
 
-          <tbody className="divide-y divide-stone-100">
+          <tbody>
             {grouped.map((cat, ci) => (
               <React.Fragment key={ci}>
                 {grouped.length > 1 ? (
                   <tr className="bg-stone-900/[0.03]">
                     <td
                       colSpan={colCount}
-                      className="p-3 pl-4 text-sm font-bold text-stone-800 uppercase tracking-wider border-y border-stone-200"
+                      className="p-3 pl-4 text-sm font-bold text-stone-800 uppercase tracking-wider"
                     >
                       {cat.category}
                     </td>
@@ -544,10 +604,10 @@ export default function ComparisonMatrix({
                 <tr role="presentation">
                   <td
                     colSpan={colCount}
-                    className="h-4 p-0 bg-[var(--background)] border-0"
+                    className="h-3 p-0 bg-white border-0"
                   />
                 </tr>
-                <tr className="bg-stone-100 border-y border-stone-200">
+                <tr className="bg-stone-100">
                   <td colSpan={colCount} className="p-3 pl-4">
                     <div className="text-sm font-bold text-stone-800 uppercase tracking-wider">
                       Whole home

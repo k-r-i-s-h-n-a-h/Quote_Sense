@@ -24,6 +24,8 @@ document rather than a spreadsheet dump:
 - Amounts use **₹** (Noto Sans). Helvetica cannot draw that glyph; if the font
   fails to load, the fallback is `INR`, never a broken box.
 - The table uses hairline **horizontal** rules only — no vertical grid.
+- Vendor column **headers and rupee amounts are centered** in the cell.
+  Space/work labels stay left-aligned.
 - Bundle takeaways and recap placement sit in **full-width note bands** under
   the amount row, the same structure as the screen. They are not stuffed into
   the left cell, and they are not duplicated in a second "KEY TAKEAWAYS" block.

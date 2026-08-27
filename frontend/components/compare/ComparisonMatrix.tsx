@@ -66,7 +66,7 @@ function AmountCell({
 
   if (value > 0) {
     return (
-      <td className="px-4 py-2.5 text-right tabular-nums">
+      <td className="px-4 py-2.5 text-center tabular-nums">
         <span
           className={
             strong
@@ -82,7 +82,7 @@ function AmountCell({
 
   if (status === "incl_in_bundle") {
     return (
-      <td className="px-4 py-2.5 text-right align-middle">
+      <td className="px-4 py-2.5 text-center align-middle">
         <span
           className="text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 inline-block leading-tight"
           title={`Included in this vendor's ${bundleLabel} package — not a missing item`}
@@ -94,7 +94,7 @@ function AmountCell({
   }
 
   return (
-    <td className="px-4 py-2.5 text-right tabular-nums opacity-50">
+    <td className="px-4 py-2.5 text-center tabular-nums opacity-50">
       <span
         className={
           strong
@@ -206,7 +206,7 @@ export default function ComparisonMatrix({
               return (
                 <td
                   key={vIdx}
-                  className="px-4 py-3 text-right tabular-nums align-middle"
+                  className="px-4 py-3 text-center tabular-nums align-middle"
                 >
                   {value > 0 ? (
                     <>
@@ -369,7 +369,7 @@ export default function ComparisonMatrix({
               return (
                 <td
                   key={vIdx}
-                  className={`px-3 py-3 text-right tabular-nums align-middle ${
+                  className={`px-3 py-3 text-center tabular-nums align-middle ${
                     value === 0 ? "opacity-50" : ""
                   } ${!comparable ? "opacity-70" : ""}`}
                 >
@@ -509,7 +509,7 @@ export default function ComparisonMatrix({
         <table className="w-full text-left border-collapse min-w-[800px] table-fixed">
           <thead>
             <tr>
-              <th className="p-3.5 w-[32%] text-[10px] font-bold tracking-[0.14em] uppercase text-stone-100">
+              <th className="p-3.5 w-[32%] text-center text-[10px] font-bold tracking-[0.14em] uppercase text-stone-100">
                 Space / work
               </th>
               {vendors.map((vendor, i) => {
@@ -518,10 +518,10 @@ export default function ComparisonMatrix({
                 return (
                   <th
                     key={vendor}
-                    className="p-3.5 text-right align-top"
+                    className="p-3.5 text-center align-top"
                   >
                     <div title={info?.full ?? vendor}>
-                      <div className="flex items-center justify-end gap-1.5 mb-1">
+                      <div className="flex items-center justify-center gap-1.5 mb-1">
                         <span
                           className="h-2 w-2 rounded-full"
                           style={{ backgroundColor: vendorColor(i) }}

@@ -158,15 +158,15 @@ function buildColumnStyles(
   vendors: string[],
   tableWidth: number,
   layout: ReturnType<typeof pdfLayout>
-): Record<number, { cellWidth: number; halign?: "right" | "left" }> {
+): Record<number, { cellWidth: number; halign?: "left" | "center" }> {
   const descWidth = Math.min(78, tableWidth * layout.descShare);
   const vendorWidth = (tableWidth - descWidth) / Math.max(vendors.length, 1);
-  const styles: Record<number, { cellWidth: number; halign?: "right" | "left" }> =
+  const styles: Record<number, { cellWidth: number; halign?: "left" | "center" }> =
     {
       0: { cellWidth: descWidth, halign: "left" },
     };
   vendors.forEach((_, i) => {
-    styles[i + 1] = { cellWidth: vendorWidth, halign: "right" };
+    styles[i + 1] = { cellWidth: vendorWidth, halign: "center" };
   });
   return styles;
 }
@@ -466,7 +466,7 @@ export async function downloadComparisonPdf(
             ...spaceCellStyle,
             fontSize: layout.subTotalAmount,
             textColor: INK,
-            halign: "right" as const,
+            halign: "center" as const,
           },
         })),
       ]);
@@ -694,6 +694,7 @@ export async function downloadComparisonPdf(
       cellPadding: { top: 3, bottom: 3.2, left: 3.2, right: 3.2 },
       overflow: "linebreak",
       valign: "middle",
+      halign: "center",
     },
     bodyStyles: {
       font,
@@ -703,6 +704,11 @@ export async function downloadComparisonPdf(
     showHead: "everyPage",
     rowPageBreak: "avoid",
     horizontalPageBreak: false,
+    didParseCell: (data) => {
+      if (data.section === "head") {
+        data.cell.styles.halign = "center";
+      }
+    },
     didDrawCell: (data) => {
       if (data.section !== "body" && data.section !== "head") return;
       const { x, y, width, height } = data.cell;

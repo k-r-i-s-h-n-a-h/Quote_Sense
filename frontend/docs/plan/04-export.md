@@ -15,8 +15,8 @@ re-implementing the hierarchy, so the two can never diverge in structure.
 
 ## Document look
 
-The PDF is the artefact a contractor forwards to a client. It is landscape A4
-so two or three vendor names fit without ellipsis, and it is a letterhead
+The PDF is the artefact a contractor forwards to a client. It is **portrait A4**
+so it prints and shares as a standard vertical sheet, and it is a letterhead
 document rather than a spreadsheet dump:
 
 - **Every page** repeats the Tatva Ops logo, project title, project code, and
@@ -24,6 +24,8 @@ document rather than a spreadsheet dump:
 - Amounts use **₹** (Noto Sans). Helvetica cannot draw that glyph; if the font
   fails to load, the fallback is `INR`, never a broken box.
 - The table uses hairline **horizontal** rules only — no vertical grid.
+- Vendor column **headers and rupee amounts are centered** in the cell.
+  Space/work labels stay left-aligned.
 - Bundle takeaways and recap placement sit in **full-width note bands** under
   the amount row, the same structure as the screen. They are not stuffed into
   the left cell, and they are not duplicated in a second "KEY TAKEAWAYS" block.
@@ -72,9 +74,11 @@ matter, because those are the ones a lumpsum absorbed.
 
 ## Pagination
 
-Space groups avoid breaking across a page boundary where possible. Each page
-repeats the letterhead and the vendor column headers — without them, a
-continuation page is unreadable. A footer stamps `Page n of m`.
+Space groups avoid breaking across a page boundary where possible. Portrait A4
+is taller than landscape, so a typical two-vendor comparison uses more pages
+and fewer columns of empty space. Each page repeats the letterhead and the
+vendor column headers — without them, a continuation page is unreadable. A
+footer stamps `Page n of m`.
 
 ## Tests
 

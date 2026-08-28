@@ -105,7 +105,8 @@ excluded from room totals by design.
 
 Document look rather than a spreadsheet: charcoal sticky header with an orange
 rule, hairline row dividers (no vertical grid), `min-w-[800px]` with horizontal
-scroll, `tabular-nums` on figures, vendor colour dots. Amounts use `₹` via
+scroll, `tabular-nums` on figures, vendor colour dots. Vendor column **headers
+and amounts are centered**; space/work labels stay left-aligned. Amounts use `₹` via
 `formatInrFull`. Badges and chips use text as well as colour so they survive
 greyscale printing and colour-blind viewing.
 

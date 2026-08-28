@@ -72,22 +72,22 @@ const INFO_TEXT: [number, number, number] = [12, 74, 110];
 function pdfLayout(vendorCount: number) {
   const cols = Math.min(Math.max(vendorCount, 2), 3);
   return {
-    title: 13,
+    title: 12,
     subtitle: 8,
     meta: 7.5,
-    head: 8,
+    head: cols >= 3 ? 7 : 8,
     body: 8,
     note: 7,
     category: 8,
     subTotalLabel: 8.5,
-    subTotalAmount: 10,
+    subTotalAmount: 9.5,
     subGap: 2.2,
-    headMinHeight: 20,
-    cellPad: 2.6,
-    descShare: cols >= 3 ? 0.26 : 0.3,
-    headerH: 30,
-    footerH: 12,
-    margin: 12,
+    headMinHeight: 22,
+    cellPad: 2.2,
+    descShare: cols >= 3 ? 0.32 : 0.36,
+    headerH: 32,
+    footerH: 14,
+    margin: 10,
   };
 }
 
@@ -154,12 +154,23 @@ function quoteIndexLine(
     .join("   |   ");
 }
 
+function centeredCell(
+  content: string,
+  styles: Record<string, unknown> = {}
+): BodyCell {
+  return {
+    content,
+    styles: { halign: "center", valign: "middle", ...styles },
+  };
+}
+
 function buildColumnStyles(
   vendors: string[],
   tableWidth: number,
   layout: ReturnType<typeof pdfLayout>
 ): Record<number, { cellWidth: number; halign?: "left" | "center" }> {
-  const descWidth = Math.min(78, tableWidth * layout.descShare);
+  const descCap = vendors.length >= 3 ? 50 : 62;
+  const descWidth = Math.min(descCap, tableWidth * layout.descShare);
   const vendorWidth = (tableWidth - descWidth) / Math.max(vendors.length, 1);
   const styles: Record<number, { cellWidth: number; halign?: "left" | "center" }> =
     {
@@ -222,13 +233,13 @@ function drawLetterhead(
   let textX = m;
 
   if (logo) {
-    const logoW = 34;
+    const logoW = 28;
     const logoH = Math.min(10, (logo.height / logo.width) * logoW);
     doc.addImage(logo.dataUrl, "JPEG", m, y0, logoW, logoH);
     textX = m + logoW + 5;
   }
 
-  const rightWidth = Math.min(118, pageWidth * 0.38);
+  const rightWidth = Math.min(72, pageWidth * 0.36);
   const rightX = pageWidth - m;
   const titleWidth = rightX - rightWidth - 8 - textX;
 
@@ -353,7 +364,7 @@ export async function downloadComparisonPdf(
   options: PdfExportOptions = {}
 ): Promise<void> {
   const layout = pdfLayout(vendors.length);
-  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const unicode = await registerPdfUnicodeFont(doc);
   const font = unicode ? PDF_FONT_FAMILY : "helvetica";
   const pageWidth = doc.internal.pageSize.getWidth();
@@ -460,15 +471,13 @@ export async function downloadComparisonPdf(
             textColor: comparable ? INK : AMBER_TEXT,
           },
         },
-        ...vendors.map((v) => ({
-          content: formatPdfPrice(totals[v], unicode),
-          styles: {
+        ...vendors.map((v) =>
+          centeredCell(formatPdfPrice(totals[v], unicode), {
             ...spaceCellStyle,
             fontSize: layout.subTotalAmount,
             textColor: INK,
-            halign: "center" as const,
-          },
-        })),
+          })
+        ),
       ]);
 
       for (const sub of spaceGroup.subs) {
@@ -485,7 +494,7 @@ export async function downloadComparisonPdf(
             },
           },
           ...vendors.map((v) =>
-            cellText(first, v, Number(subTotals[v]) || 0, unicode)
+            centeredCell(cellText(first, v, Number(subTotals[v]) || 0, unicode))
           ),
         ]);
       }
@@ -532,11 +541,13 @@ export async function downloadComparisonPdf(
           },
           ...vendors.map((v) => {
             const value = amountOf(bundle, v);
-            if (value <= 0) return "N/A";
+            if (value <= 0) return centeredCell("N/A");
             const note = bundlePriceNote(bundle, v);
-            return [formatPdfAmount(value, unicode), note && `(${note})`]
-              .filter(Boolean)
-              .join("\n");
+            return centeredCell(
+              [formatPdfAmount(value, unicode), note && `(${note})`]
+                .filter(Boolean)
+                .join("\n")
+            );
           }),
         ]);
 
@@ -633,7 +644,7 @@ export async function downloadComparisonPdf(
               },
             },
             ...vendors.map((v) =>
-              cellText(first, v, Number(subTotals[v]) || 0, unicode)
+              centeredCell(cellText(first, v, Number(subTotals[v]) || 0, unicode))
             ),
           ]);
         }
@@ -705,7 +716,12 @@ export async function downloadComparisonPdf(
     rowPageBreak: "avoid",
     horizontalPageBreak: false,
     didParseCell: (data) => {
+      const spanned = Number(data.cell.colSpan || 1) > 1;
       if (data.section === "head") {
+        data.cell.styles.halign = "center";
+        return;
+      }
+      if (data.section === "body" && data.column.index > 0 && !spanned) {
         data.cell.styles.halign = "center";
       }
     },

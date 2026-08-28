@@ -88,6 +88,22 @@ export function sumSubServiceRow(
   return totals;
 }
 
+/** How many work rows in this space have a positive amount for each vendor. */
+export function quotedWorkCounts(
+  spaceGroup: SpaceGroup,
+  vendors: string[]
+): AmountTotals {
+  const counts: AmountTotals = {};
+  for (const v of vendors) counts[v] = 0;
+  for (const sub of spaceGroup.subs) {
+    const totals = sumSubServiceRow(sub.rows, vendors);
+    for (const v of vendors) {
+      if ((totals[v] || 0) > 0) counts[v] += 1;
+    }
+  }
+  return counts;
+}
+
 /**
  * Nest rows for rendering. Insertion-ordered throughout: the backend already
  * sorted rows into quote-reading order, so this must never sort.

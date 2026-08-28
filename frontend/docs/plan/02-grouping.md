@@ -86,6 +86,11 @@ Space header totals sum only that space's rows — which, because the backend
 excluded bundles from `spaceTier`, automatically excludes bundled amounts. The
 frontend does not need to know about that rule; it falls out of the tier split.
 
+`quotedWorkCounts` counts work rows with a positive amount per vendor. The
+matrix header and both PDF modes use it as a scope signal (8 items vs 20)
+without regrouping. Collapse in F3 is display-only; this helper does not change
+`space_id`.
+
 ## What this stage must not do
 
 - Sort. The backend's order is meaningful.
@@ -101,7 +106,8 @@ frontend does not need to know about that rule; it falls out of the tier split.
 - legacy rows without `work_key` group by label as before,
 - space aliases accumulate distinctly,
 - insertion order is preserved,
-- `coverageIndex` returns the right entry and tolerates absence.
+- `coverageIndex` returns the right entry and tolerates absence,
+- `quotedWorkCounts` counts positive work rows per vendor on a space group.
 
 ---
 

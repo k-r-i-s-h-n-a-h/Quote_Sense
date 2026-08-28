@@ -181,7 +181,10 @@ Or follow the printed instructions from:
 | `TATVA_ADMIN_TOKEN` | Legacy Bearer fallback |
 | `TATVA_QUOTE_TYPE_*_ID` | Essential / Mid / Luxury ObjectIds |
 | `MARKET_RATE_UPDATES_ENABLED` | `false` freezes MA writes |
-| `GEMINI_EXTRACT_MODEL` | Default `gemini-2.5-flash` |
+| `GEMINI_EXTRACT_MODEL` | PDF extract; default `gemini-3.5-flash` |
+| `GEMINI_COMPARE_MODEL` | S6 narrative + chat; default `gemini-3.7-flash` |
+| `GEMINI_SPACE_MODEL` | S3 leftover overlay; falls back to compare model |
+| `GEMINI_WORK_MODEL` | S2 leftover work merge; falls back to compare model |
 | `GEMINI_EXPLICIT_CACHE` / `GEMINI_CACHE_TTL` | Extraction context cache |
 | `TATVA_CATALOG_CACHE_TTL` | Live catalog cache seconds |
 

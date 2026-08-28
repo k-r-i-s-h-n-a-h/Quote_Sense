@@ -74,6 +74,73 @@ def env_diagnostics() -> dict:
     }
 
 
+DEFAULT_EXTRACT_MODEL = "gemini-3.5-flash"
+DEFAULT_COMPARE_MODEL = "gemini-3.7-flash"
+
+
+def _gemini_model(env_keys: tuple[str, ...], default: str) -> str:
+    for key in env_keys:
+        raw = (os.getenv(key) or "").strip()
+        if raw:
+            return raw
+    return default
+
+
+def gemini_extract_model() -> str:
+    """PDF extraction — Flash 3.5 by default (structured JSON, high volume)."""
+    return _gemini_model(("GEMINI_EXTRACT_MODEL",), DEFAULT_EXTRACT_MODEL)
+
+
+def gemini_compare_model() -> str:
+    """S6 narrative + chat — Flash 3.7 by default."""
+    return _gemini_model(("GEMINI_COMPARE_MODEL",), DEFAULT_COMPARE_MODEL)
+
+
+def gemini_space_model() -> str:
+    """S3 leftover overlay — Flash 3.7; falls back to compare, then extract."""
+    return _gemini_model(
+        ("GEMINI_SPACE_MODEL", "GEMINI_COMPARE_MODEL"),
+        DEFAULT_COMPARE_MODEL,
+    )
+
+
+def gemini_work_model() -> str:
+    """S2 leftover work merge — same family as compare unless overridden."""
+    return _gemini_model(
+        ("GEMINI_WORK_MODEL", "GEMINI_COMPARE_MODEL"),
+        DEFAULT_COMPARE_MODEL,
+    )
+
+
+def gemini_is_v3(model: str) -> bool:
+    return (model or "").strip().lower().startswith("gemini-3")
+
+
+def gemini_generate_config(
+    types,
+    *,
+    model: str,
+    temperature: float | None = None,
+    response_mime_type: str | None = None,
+    response_schema=None,
+    cached_content=None,
+):
+    """
+    Gemini 3.x often rejects explicit temperature/top_p (including 0.0).
+    Omit sampling overrides on 3.x; keep them for 2.5.
+    """
+    kwargs: dict = {}
+    if response_mime_type:
+        kwargs["response_mime_type"] = response_mime_type
+    if response_schema is not None:
+        kwargs["response_schema"] = response_schema
+    if cached_content:
+        kwargs["cached_content"] = cached_content
+    if not gemini_is_v3(model) and temperature is not None:
+        kwargs["temperature"] = temperature
+    return types.GenerateContentConfig(**kwargs)
+
+
 def get_gemini_client():
     global _gemini_client
     if _gemini_client is not None:

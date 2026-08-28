@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import {
   buildVendorLabels,
   formatInrFull,
@@ -10,6 +10,7 @@ import {
   coverageIndex,
   groupTableData,
   isSpaceComparable,
+  quotedWorkCounts,
   sumSubServiceRow,
 } from "@/lib/compare-matrix";
 import {
@@ -31,12 +32,15 @@ import {
 } from "@/lib/compare-types";
 import { vendorColor } from "@/lib/vendor-colors";
 import TatvaLogo from "@/components/TatvaLogo";
+import PdfExportButtons, {
+  type PdfDetailLevel,
+} from "@/components/compare/PdfExportButtons";
 
 type Props = {
   tableData: SpaceRow[];
   vendors: string[];
   vendorMeta?: Record<string, VendorMeta>;
-  onDownloadPdf?: () => void;
+  onDownloadPdf?: (detail: PdfDetailLevel) => void | Promise<void>;
   /** Optional MatrixV1 tiers. Absent for a legacy payload. */
   spaceTier?: SpaceRow[];
   bundleTier?: BundleRow[];
@@ -157,6 +161,27 @@ export default function ComparisonMatrix({
     [projectForDisplay]
   );
   const coverIdx = useMemo(() => coverageIndex(coverage), [coverage]);
+  const allSpaceIds = useMemo(() => {
+    const ids: string[] = [];
+    for (const cat of grouped) {
+      for (const space of cat.spaces) ids.push(space.spaceId);
+    }
+    for (const cat of projectGrouped) {
+      for (const space of cat.spaces) ids.push(space.spaceId);
+    }
+    return ids;
+  }, [grouped, projectGrouped]);
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  const toggleSpace = (spaceId: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(spaceId)) next.delete(spaceId);
+      else next.add(spaceId);
+      return next;
+    });
+  };
+  const expandAll = () => setExpanded(new Set(allSpaceIds));
+  const collapseAll = () => setExpanded(new Set());
   const colCount = vendors.length + 1;
 
   const renderBundleRows = (
@@ -330,6 +355,8 @@ export default function ComparisonMatrix({
         spaceGroup.spaceId,
         vendors
       );
+      const open = expanded.has(spaceGroup.spaceId);
+      const itemCounts = quotedWorkCounts(spaceGroup, vendors);
 
       return (
         <React.Fragment key={spaceGroup.spaceId || spaceGroup.space}>
@@ -344,28 +371,57 @@ export default function ComparisonMatrix({
 
           <tr className="bg-[#f5f1eb]">
             <td className="py-3 pl-5 pr-4 border-l-4 border-[var(--accent)]">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs font-extrabold text-stone-800 uppercase tracking-wide">
-                  {spaceGroup.space}
-                </span>
-                {!comparable && (
-                  <span
-                    className="text-[9px] font-semibold text-amber-800 bg-amber-100 border border-amber-300 rounded px-1.5 py-0.5 uppercase tracking-wide"
-                    title="Vendors priced this space differently, so these totals are not like-for-like"
+              <button
+                type="button"
+                onClick={() => toggleSpace(spaceGroup.spaceId)}
+                className="flex items-start gap-2 text-left w-full"
+                aria-expanded={open}
+              >
+                <span
+                  className={`mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center text-stone-500 transition-transform ${
+                    open ? "rotate-90" : ""
+                  }`}
+                  aria-hidden
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                    className="h-4 w-4"
                   >
-                    scopes differ
+                    <path
+                      fillRule="evenodd"
+                      d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                </span>
+                <span>
+                  <span className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-extrabold text-stone-800 uppercase tracking-wide">
+                      {spaceGroup.space}
+                    </span>
+                    {!comparable && (
+                      <span
+                        className="text-[9px] font-semibold text-amber-800 bg-amber-100 border border-amber-300 rounded px-1.5 py-0.5 uppercase tracking-wide"
+                        title="Vendors priced this space differently, so these totals are not like-for-like"
+                      >
+                        scopes differ
+                      </span>
+                    )}
                   </span>
-                )}
-              </div>
-              {spaceGroup.spaceRaw &&
-              spaceGroup.spaceRaw !== spaceGroup.space ? (
-                <div className="text-[10px] text-stone-500 mt-0.5 font-normal normal-case tracking-normal">
-                  {spaceGroup.spaceRaw}
-                </div>
-              ) : null}
+                  {spaceGroup.spaceRaw &&
+                  spaceGroup.spaceRaw !== spaceGroup.space ? (
+                    <span className="block text-[10px] text-stone-500 mt-0.5 font-normal normal-case tracking-normal">
+                      {spaceGroup.spaceRaw}
+                    </span>
+                  ) : null}
+                </span>
+              </button>
             </td>
             {vendors.map((vendor, vIdx) => {
               const value = Number(spaceTotals[vendor]) || 0;
+              const nItems = itemCounts[vendor] || 0;
               return (
                 <td
                   key={vIdx}
@@ -378,16 +434,22 @@ export default function ComparisonMatrix({
                       N/A
                     </span>
                   ) : (
-                    <span className="text-base font-extrabold text-stone-900">
-                      {formatInrFull(value)}
-                    </span>
+                    <>
+                      <span className="text-base font-extrabold text-stone-900">
+                        {formatInrFull(value)}
+                      </span>
+                      <span className="block text-[10px] font-medium text-stone-500 mt-0.5 normal-case tracking-normal">
+                        {nItems} {nItems === 1 ? "item" : "items"}
+                      </span>
+                    </>
                   )}
                 </td>
               );
             })}
           </tr>
 
-          {spaceGroup.subs.map((sub) => {
+          {open
+            ? spaceGroup.subs.map((sub) => {
             const first = sub.rows[0] ?? {};
             const pricing = String(first.pricing_method || "");
             // A work row can be fed by several vendor lines; merge their
@@ -435,7 +497,8 @@ export default function ComparisonMatrix({
                 ))}
               </tr>
             );
-          })}
+          })
+            : null}
         </React.Fragment>
       );
     });
@@ -462,7 +525,7 @@ export default function ComparisonMatrix({
               <p className="qs-section-sub">
                 {[
                   projectCode ? `Project ${projectCode}` : "",
-                  "Cost by space, with work listed under each",
+                  "Space totals first — open a row for the work list",
                 ]
                   .filter(Boolean)
                   .join(" · ")}
@@ -475,27 +538,7 @@ export default function ComparisonMatrix({
             </div>
           </div>
           {onDownloadPdf ? (
-            <button
-              type="button"
-              onClick={onDownloadPdf}
-              className="qs-btn qs-btn-secondary shrink-0"
-              title="Download comparison as PDF"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                className="w-4 h-4"
-                aria-hidden
-              >
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                <polyline points="7 10 12 15 17 10" />
-                <line x1="12" y1="15" x2="12" y2="3" />
-              </svg>
-              Export PDF
-            </button>
+            <PdfExportButtons onExport={onDownloadPdf} />
           ) : null}
         </div>
         {gstBanner ? (
@@ -505,6 +548,25 @@ export default function ComparisonMatrix({
         ) : null}
       </div>
 
+      <div className="flex flex-wrap items-center gap-2 mb-2">
+        <button
+          type="button"
+          onClick={expandAll}
+          className="text-[11px] font-medium text-stone-600 underline-offset-2 hover:underline"
+        >
+          Expand all work
+        </button>
+        <span className="text-stone-300" aria-hidden>
+          ·
+        </span>
+        <button
+          type="button"
+          onClick={collapseAll}
+          className="text-[11px] font-medium text-stone-600 underline-offset-2 hover:underline"
+        >
+          Collapse to space totals
+        </button>
+      </div>
       <div className="overflow-x-auto border border-stone-300 rounded-md qs-table-scroll qs-table-doc max-h-[70vh]">
         <table className="w-full text-left border-collapse min-w-[800px] table-fixed">
           <thead>
@@ -628,7 +690,9 @@ export default function ComparisonMatrix({
         </table>
       </div>
       <p className="text-[11px] text-stone-400 mt-3">
-        Space headers add up the work listed under them.{" "}
+        Space headers add up the work listed under them. Open a space to see
+        the work list. Item counts on the header show how much of that space
+        each vendor quoted — a low total with few items may mean smaller scope.{" "}
         <span className="font-medium text-rose-400">N/A</span> means that vendor
         did not quote this work.{" "}
         <span className="font-medium text-amber-700">incl. in …</span> means the

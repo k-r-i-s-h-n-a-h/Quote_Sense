@@ -10,6 +10,9 @@ import VendorInsights from "../../components/VendorInsights";
 import RecommendationView from "../../components/RecommendationView";
 import VendorSummary from "../../components/compare/VendorSummary";
 import ComparisonMatrix from "../../components/compare/ComparisonMatrix";
+import PdfExportButtons, {
+  type PdfDetailLevel,
+} from "../../components/compare/PdfExportButtons";
 import CompareChat from "../../components/compare/CompareChat";
 import { buildVendorLabels } from "../../lib/format";
 import { downloadComparisonPdf } from "../../lib/download-comparison-pdf";
@@ -456,7 +459,7 @@ function QuoteSenseContent() {
     };
   }, [projectIdParam, tableData.length]);
 
-  const handleDownloadPdf = async () => {
+  const handleDownloadPdf = async (detail: PdfDetailLevel = "full") => {
     if (tableData.length === 0 || vendors.length === 0) return;
     await downloadComparisonPdf(
       tableData,
@@ -471,6 +474,7 @@ function QuoteSenseContent() {
       {
         projectTitle: projectMeta.title,
         projectCode: projectMeta.code,
+        detail,
       }
     );
   };
@@ -700,13 +704,7 @@ function QuoteSenseContent() {
             actions={
               hasResults ? (
                 <>
-                  <button
-                    type="button"
-                    onClick={handleDownloadPdf}
-                    className="qs-btn qs-btn-secondary"
-                  >
-                    Export PDF
-                  </button>
+                  <PdfExportButtons onExport={handleDownloadPdf} />
                   <button
                     type="button"
                     onClick={handleGoBack}

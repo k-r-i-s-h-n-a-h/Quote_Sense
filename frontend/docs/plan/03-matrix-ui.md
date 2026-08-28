@@ -34,12 +34,20 @@ Hardwares` is neutral information; `N/A` is a warning. They must not look alike.
 
 ## Space header
 
+The header is the decision row: **vendor space totals first**, with a per-vendor
+**item count** (`N items`) so a cheap total with few lines is visible next to a
+deeper quote. Work rows start **collapsed**. A chevron on the heading toggles
+that `space_id`; **Expand all work** / **Collapse to space totals** apply to
+every space. Grouping stays on `space_id` — the accordion is presentation
+([ACTION.md](../../../ACTION.md) §7).
+
 Adds a badge when the space is not comparable:
 
 - `comparable: true` → unchanged.
-- `comparable: false` → a `scope differs` badge with a tooltip naming the bundle,
+- `comparable: false` → a `scopes differ` badge with a tooltip naming the bundle,
   and the totals rendered muted. The numbers are still shown — they are correct
   per vendor — but the visual weight says they are not a like-for-like pair.
+  Collapse must not hide this badge.
 
 Space aliases continue to render under the canonical name, which is how a user
 sanity-checks a merge.
@@ -117,6 +125,8 @@ greyscale printing and colour-blind viewing.
 - a `not_quoted` cell shows `N/A`,
 - a legacy payload with no coverage renders zero as `N/A`,
 - a non-comparable space shows the badge,
+- space work rows start collapsed and expand on the heading,
+- the header shows item counts per vendor,
 - a bundle row shows both basis chips,
 - a mixed recap names each quote and where the rupees already sit,
 - an overlap flag renders a warning.

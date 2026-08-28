@@ -6,18 +6,22 @@ import time
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 from backend.models.schema import ExtractedQuote
 
-from services.env_config import get_gemini_client, get_supabase_client
+from services.env_config import (
+    get_gemini_client,
+    get_supabase_client,
+    gemini_extract_model,
+    gemini_generate_config,
+)
 from services.market_rate import DEFAULT_SERVICE_TYPE
 from services.extraction_cache import get_extraction_cached_content_name
 from services.taxonomy_prompt import build_extraction_system_instruction
-
-EXTRACT_MODEL = os.getenv("GEMINI_EXTRACT_MODEL", "gemini-2.5-flash")
 
 
 def process_quote_with_gemini(pdf_path, temperature=0.0, extra_instruction=""):
     from google.genai import types
 
-    print(f"  -> Sending {os.path.basename(pdf_path)} to Tatva Intelligence ({EXTRACT_MODEL})...")
+    model = gemini_extract_model()
+    print(f"  -> Sending {os.path.basename(pdf_path)} to Tatva Intelligence ({model})...")
 
     with open(pdf_path, "rb") as f:
         pdf_bytes = f.read()
@@ -26,7 +30,7 @@ def process_quote_with_gemini(pdf_path, temperature=0.0, extra_instruction=""):
     is_retry = bool(extra_instruction and extra_instruction.strip())
 
     # Retries add dynamic hints — bypass cache so the hint is in-context.
-    cached_content = None if is_retry else get_extraction_cached_content_name(EXTRACT_MODEL)
+    cached_content = None if is_retry else get_extraction_cached_content_name(model)
 
     if cached_content:
         contents = [
@@ -37,7 +41,7 @@ def process_quote_with_gemini(pdf_path, temperature=0.0, extra_instruction=""):
         ]
         print("  ⚡ Using cached extraction rules + taxonomy (explicit context cache)")
     else:
-        # Static prefix FIRST → Gemini 2.5 implicit cache can hit on PDF 2/3 in same batch.
+        # Static prefix FIRST → Gemini implicit cache can hit on PDF 2/3 in same batch.
         static_prefix = build_extraction_system_instruction(extra_instruction)
         contents = [
             types.Part.from_text(text=static_prefix),
@@ -50,12 +54,14 @@ def process_quote_with_gemini(pdf_path, temperature=0.0, extra_instruction=""):
             print("  📄 Inline static prefix + PDF (implicit cache friendly order)")
 
     response = client.models.generate_content(
-        model=EXTRACT_MODEL,
+        model=model,
         contents=contents,
-        config=types.GenerateContentConfig(
+        config=gemini_generate_config(
+            types,
+            model=model,
+            temperature=temperature,
             response_mime_type="application/json",
             response_schema=ExtractedQuote,
-            temperature=temperature,
             cached_content=cached_content,
         ),
     )

@@ -26,7 +26,12 @@ pd = _PandasLazy()
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 
-from services.env_config import get_gemini_client, get_supabase_client
+from services.env_config import (
+    gemini_compare_model,
+    gemini_generate_config,
+    get_gemini_client,
+    get_supabase_client,
+)
 from services.market_rate import (
     DEFAULT_SERVICE_TYPE,
     normalize_pricing_method,
@@ -334,9 +339,13 @@ def _generate_recommendation(summary_prompt, chart_data, bundle_tier=None):
 
         future = ex.submit(
             lambda: get_gemini_client().models.generate_content(
-                model='gemini-2.5-flash',
+                model=gemini_compare_model(),
                 contents=summary_prompt,
-                config=types.GenerateContentConfig(temperature=0.2),
+                config=gemini_generate_config(
+                    types,
+                    model=gemini_compare_model(),
+                    temperature=0.2,
+                ),
             )
         )
         summary_response = future.result(timeout=RECOMMENDATION_TIMEOUT_SEC)
@@ -880,9 +889,13 @@ def handle_chat_query(session_id, user_message):
         from google.genai import types
 
         chat_response = get_gemini_client().models.generate_content(
-            model='gemini-2.5-flash',
+            model=gemini_compare_model(),
             contents=prompt,
-            config=types.GenerateContentConfig(temperature=0.2)
+            config=gemini_generate_config(
+                types,
+                model=gemini_compare_model(),
+                temperature=0.2,
+            ),
         )
         
         return chat_response.text

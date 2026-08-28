@@ -62,6 +62,12 @@ bullet now grounded in real data rather than guesswork:
 - **Watch Out** — `overlap_flags`, when any exist
 - **Recommendation**
 
+## Model
+
+`GEMINI_COMPARE_MODEL` (default `gemini-3.7-flash`) is used for the narrative
+and for comparison chat. Gemini 3.x omits `temperature` in the generate config
+(see `gemini_generate_config`).
+
 ## Timeout and fallback
 
 Unchanged: the Gemini call runs in a worker thread with a hard

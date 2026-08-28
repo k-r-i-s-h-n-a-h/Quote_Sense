@@ -19,7 +19,9 @@ whether a price is a bundle. Those are `work_key`, `space_id` and `scope`,
 computed in the backend and shipped in `MatrixV1`.
 
 The frontend's only grouping job is presentation nesting — category, then space,
-then work row — keyed on identifiers the backend already resolved.
+then work row — keyed on identifiers the backend already resolved. Collapsing
+work under a space header is display only; it must not invent a second grouping
+key. Export offers two PDFs (`spaces` vs `detailed`) from the same helpers.
 
 Customer copy says **space**, not room. Recap notes name the quote (company if
 they differ, quote number if they are the same company) and say whether a figure

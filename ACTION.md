@@ -112,3 +112,23 @@ pre-GST `amount` from one quote with a GST-inclusive `grandTotal` from
 another. Name how each quote was entered (company if they differ, quote
 number if they are the same company). Do not convert one quote onto the
 other's GST basis by applying a homemade rate.
+
+---
+
+## 7. Space totals first; work list on demand
+
+The comparison matrix must show **whole-space spend on the space header**
+before any work line. Sub-services start **collapsed**; the customer opens a
+space (or Expand all) to see the work list. Item counts on the header show how
+much of that space each vendor quoted so a cheap total with few items is not
+mistaken for a like-for-like saving.
+
+The frontend still groups only on `space_id`. Collapse is presentation, not a
+new grouping layer. Every quoted sub-service remains available under that
+heading when the space is opened — do not drop work lines to make the table
+shorter.
+
+PDF export offers two artefacts: **spaces** (headers + packages/recaps) and
+**detailed** (every work line). Do not ship a space-only PDF that drops lump-sum
+packages or recap notes. Do not hide a scope mismatch to make totals look
+comparable.

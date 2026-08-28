@@ -59,11 +59,15 @@ prefer the printed `grand_total` over the line-item sum.
 
 ## Kill switches
 
-| Env var | Effect |
-| --- | --- |
-| `GEMINI_EXTRACT_MODEL` | Override the extraction model. |
-| `GEMINI_EXPLICIT_CACHE` | Disable prompt caching. |
-| `GEMINI_CACHE_TTL` | Cache lifetime. |
+| Env var | Default | Effect |
+| --- | --- | --- |
+| `GEMINI_EXTRACT_MODEL` | `gemini-3.5-flash` | Override the extraction model. |
+| `GEMINI_EXPLICIT_CACHE` | — | Disable prompt caching. |
+| `GEMINI_CACHE_TTL` | — | Cache lifetime. |
+
+Gemini 3.x often 400s on explicit `temperature` (including `0`).
+`gemini_generate_config` in `services/env_config.py` omits sampling overrides
+on 3.x and keeps them for 2.5.
 
 ## Tests
 

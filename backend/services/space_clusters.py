@@ -650,15 +650,11 @@ def _try_gemini_overlay(
 
     try:
         from google.genai import types
-        from services.env_config import get_gemini_client
+        from services.env_config import gemini_generate_config, gemini_space_model, get_gemini_client
     except Exception:
         return heuristic
 
-    model = (
-        os.getenv("GEMINI_SPACE_MODEL")
-        or os.getenv("GEMINI_EXTRACT_MODEL")
-        or "gemini-2.5-flash"
-    )
+    model = gemini_space_model()
     payload = [
         {
             "label": label,
@@ -669,16 +665,25 @@ def _try_gemini_overlay(
         for label, ctx in contexts.items()
     ]
     prompt = (
-        "You group vendor Space/Zone labels from ONE quote comparison.\n"
+        "You are a conservative site surveyor for one vendor-quote comparison. "
+        "Your job is leftover Space/Zone labels only — you propose, you do not name rooms, "
+        "and you do not override labels that already have a group id.\n"
         "Each label may already carry a group id. Those are FIXED — never move a "
         "label out of a group it already has, and never merge two different "
         "existing groups.\n"
-        "Your only job: for every label whose group is empty, decide whether it is "
-        "the same physical room as another label. Vendors abbreviate the SAME room "
-        "constantly — LIVING, Living Room, Living area, L R, LR, LVR, L ROOM, Lroom "
-        "are ONE living space; DNR / Dining / Dining area are ONE dining space. "
-        "Put every spelling of one room in a single cluster so the customer sees "
-        "one spend total. Never leave LR and Living as separate groups.\n"
+        "LEVEL 1 (mandatory): vendors abbreviate the SAME room constantly — "
+        "LIVING, Living Room, Living area, L R, LR, LVR, L ROOM, Lroom "
+        "are ONE living space; DNR / Dining / Dining area are ONE dining space; "
+        "KIT / Kitchen; MBR / Master Bedroom. Put every spelling of one room in "
+        "a single cluster so the customer sees one spend total. Never leave LR "
+        "and Living as separate groups.\n"
+        "LEVEL 2 (propose only if both are true: same physical room AND comparable "
+        "scope). If either is uncertain, keep TWO clusters. Do not merge across: "
+        "FLOOR (Ground Floor Bathroom ≠ First Floor Bathroom), INSTANCE "
+        "(Bedroom 1 ≠ Bedroom 2; Common Washroom ≠ 1st Floor Washroom), "
+        "CONTAINMENT (Walk-in closet with its own work is not the master bedroom). "
+        "Kids Bedroom vs Bedroom 2 is a proposal only — if you cannot tell they "
+        "are the same room, leave them apart.\n"
         "NEVER merge Kitchen with Bedroom, or Common Washroom with Walk-in closet.\n"
         "Use the item names and notes to place a label that is an ITEM rather than a "
         "room: a label whose notes mention MBR belongs to the master bedroom.\n"
@@ -697,9 +702,11 @@ def _try_gemini_overlay(
         import concurrent.futures
 
         client = get_gemini_client()
-        config = types.GenerateContentConfig(
-            response_mime_type="application/json",
+        config = gemini_generate_config(
+            types,
+            model=model,
             temperature=0.0,
+            response_mime_type="application/json",
         )
         ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
         try:

@@ -23,7 +23,7 @@ or it will state something false.
 
 ```ts
 export type Vendor = string;                  // matrix column key
-export type CoverageStatus = "quoted" | "incl_in_bundle" | "not_quoted";
+export type CoverageStatus = "quoted" | "incl_in_bundle" | "incl_in_parent" | "not_quoted";
 export type PriceBasis = "bundle" | "itemized" | "none";
 
 export interface SpaceRow {
@@ -35,6 +35,9 @@ export interface SpaceRow {
   sub_service: string;
   pricing_method?: string;
   breakdown?: { vendor: string; item: string; amount: number }[];
+  contained_in?: string;
+  measures?: Record<Vendor, { quantity?: number; rate?: number; pricing_method?: string; description?: string }>;
+  summary?: string;
   [vendor: string]: unknown;                  // per-vendor amounts
 }
 
@@ -58,6 +61,7 @@ export interface CoverageEntry {
   status: CoverageStatus;
   bundle_id?: string;
   comparable: boolean;
+  parent_space?: string;
 }
 
 export interface MatrixV1 {

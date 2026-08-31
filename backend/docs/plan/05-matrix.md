@@ -45,6 +45,7 @@ For every (space, vendor) pair, emit a `CoverageEntry` with one of:
 | --- | --- | --- |
 | `quoted` | vendor has priced lines in this room | the amount |
 | `incl_in_bundle` | vendor's price for this room sits inside a bundle | `incl. in <bundle>` |
+| `incl_in_parent` | vendor priced the same work in the parent space | `incl. in <parent>` |
 | `not_quoted` | vendor genuinely quoted nothing here | `N/A` |
 
 This is the single highest-value output of the whole redesign. Previously every
@@ -53,8 +54,15 @@ footnote asserted the third meaning for all of them. Roughly thirty cells in the
 golden comparison were mislabelled that way.
 
 A space is `comparable = false` when any vendor's status there is
-`incl_in_bundle` — the room's totals cannot be compared like for like, and the
-header says so instead of pretending.
+`incl_in_bundle` or `incl_in_parent` — the room's totals cannot be compared
+like for like, and the header says so instead of pretending.
+
+Each `SpaceRow` also carries per-vendor `measures` (quantity, rate, pricing
+method, description) and a deterministic `summary` from
+`services/comparison_summary.py`. On every work row the summary is amount,
+then qty, then rate, then a `specified …` clause when description names a
+finish or brand. Empty qty/rate/description stay silent. The summary explains
+a gap; it does not change amounts.
 
 ## Ordering
 

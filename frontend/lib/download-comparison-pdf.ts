@@ -2,8 +2,11 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import {
   coverageIndex,
+  exclusiveWorkLabels,
   groupTableData,
   isSpaceComparable,
+  mergeWorkRow,
+  quotedWorkCounts,
   sumSubServiceRow,
 } from "./compare-matrix";
 import {
@@ -19,6 +22,8 @@ import {
   gstCompareBanner,
   gstEntryChip,
   gstModeOf,
+  rowComparisonSummary,
+  spaceHeaderSummary,
   type BundleRow,
   type CoverageEntry,
   type SpaceRow,
@@ -35,9 +40,13 @@ export type PdfTiers = {
   coverage?: CoverageEntry[];
 };
 
+export type PdfDetailLevel = "spaces" | "full";
+
 export type PdfExportOptions = {
   projectTitle?: string;
   projectCode?: string;
+  /** `spaces` = header totals only; `full` = every work line (default). */
+  detail?: PdfDetailLevel;
 };
 
 type BodyCell =
@@ -84,7 +93,7 @@ function pdfLayout(vendorCount: number) {
     subGap: 2.2,
     headMinHeight: 22,
     cellPad: 2.2,
-    descShare: cols >= 3 ? 0.32 : 0.36,
+    descShare: cols >= 3 ? 0.26 : 0.30,
     headerH: 32,
     footerH: 14,
     margin: 10,
@@ -118,6 +127,9 @@ function cellText(
   const { status, bundleLabel } = parseCellStatus(row.coverage?.[vendor]);
   if (status === "incl_in_bundle") {
     return `incl. in ${bundleLabel || "package"}`;
+  }
+  if (status === "incl_in_parent") {
+    return `incl. in ${bundleLabel || "parent space"}`;
   }
   return "N/A";
 }
@@ -169,9 +181,11 @@ function buildColumnStyles(
   tableWidth: number,
   layout: ReturnType<typeof pdfLayout>
 ): Record<number, { cellWidth: number; halign?: "left" | "center" }> {
-  const descCap = vendors.length >= 3 ? 50 : 62;
+  const descCap = vendors.length >= 3 ? 42 : 52;
   const descWidth = Math.min(descCap, tableWidth * layout.descShare);
-  const vendorWidth = (tableWidth - descWidth) / Math.max(vendors.length, 1);
+  const summaryWidth = Math.min(42, tableWidth * 0.22);
+  const vendorWidth =
+    (tableWidth - descWidth - summaryWidth) / Math.max(vendors.length, 1);
   const styles: Record<number, { cellWidth: number; halign?: "left" | "center" }> =
     {
       0: { cellWidth: descWidth, halign: "left" },
@@ -179,6 +193,7 @@ function buildColumnStyles(
   vendors.forEach((_, i) => {
     styles[i + 1] = { cellWidth: vendorWidth, halign: "center" };
   });
+  styles[vendors.length + 1] = { cellWidth: summaryWidth, halign: "left" };
   return styles;
 }
 
@@ -364,6 +379,8 @@ export async function downloadComparisonPdf(
   options: PdfExportOptions = {}
 ): Promise<void> {
   const layout = pdfLayout(vendors.length);
+  const detail: PdfDetailLevel = options.detail === "spaces" ? "spaces" : "full";
+  const spacesOnly = detail === "spaces";
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const unicode = await registerPdfUnicodeFont(doc);
   const font = unicode ? PDF_FONT_FAMILY : "helvetica";
@@ -396,7 +413,7 @@ export async function downloadComparisonPdf(
   doc.setFontSize(layout.body);
 
   const pad = layout.cellPad;
-  const colSpan = vendors.length + 1;
+  const colSpan = vendors.length + 2;
   const body: BodyCell[][] = [];
 
   const bundleTier = tiers.bundleTier ?? [];
@@ -410,6 +427,18 @@ export async function downloadComparisonPdf(
   const gstBanner = gstCompareBanner(vendors, vendorMeta, vendorLabels);
   if (gstBanner) {
     body.push(noteRow(gstBanner, colSpan, font, layout, INFO_FILL, INFO_TEXT));
+  }
+  if (spacesOnly) {
+    body.push(
+      noteRow(
+        "Space-level summary — work lines omitted. Open PDF: detailed for the full breakdown. Item counts are on each space total. Lump-sum packages and recaps are included below.",
+        colSpan,
+        font,
+        layout,
+        BAND_FILL,
+        MUTED
+      )
+    );
   }
 
   const grouped = groupTableData(spaceRows);
@@ -455,12 +484,24 @@ export async function downloadComparisonPdf(
         ? spaceGroup.space.toUpperCase()
         : `${spaceGroup.space.toUpperCase()}   ·   scopes differ — not like-for-like`;
 
+      const itemCounts = quotedWorkCounts(spaceGroup, vendors);
+      const exclusiveLabels = exclusiveWorkLabels(spaceGroup, vendors);
+
       const spaceCellStyle = {
         font,
         fillColor: SPACE_FILL,
         fontStyle: "bold" as const,
         cellPadding: { top: 3.2, bottom: 3.2, left: 4, right: 3 },
       };
+
+      const headerSummary = spaceHeaderSummary(
+        totals,
+        vendors,
+        vendors
+          .map((v) => coverIdx.get(`${spaceGroup.spaceId}||${v}`))
+          .filter((e): e is NonNullable<typeof e> => Boolean(e)),
+        { itemCounts, exclusiveLabels, comparable }
+      );
 
       body.push([
         {
@@ -471,32 +512,59 @@ export async function downloadComparisonPdf(
             textColor: comparable ? INK : AMBER_TEXT,
           },
         },
-        ...vendors.map((v) =>
-          centeredCell(formatPdfPrice(totals[v], unicode), {
+        ...vendors.map((v) => {
+          const price = formatPdfPrice(totals[v], unicode);
+          const n = itemCounts[v] || 0;
+          const withCount =
+            price === "N/A" ? price : `${price}\n${n} ${n === 1 ? "item" : "items"}`;
+          return centeredCell(withCount, {
             ...spaceCellStyle,
             fontSize: layout.subTotalAmount,
             textColor: INK,
-          })
-        ),
+          });
+        }),
+        {
+          content: headerSummary,
+          styles: {
+            ...spaceCellStyle,
+            fontStyle: "normal",
+            fontSize: layout.note,
+            halign: "left",
+            textColor: MUTED,
+          },
+        },
       ]);
 
-      for (const sub of spaceGroup.subs) {
-        const subTotals = sumSubServiceRow(sub.rows, vendors);
-        const first = sub.rows[0] ?? ({} as SpaceRow);
-        body.push([
-          {
-            content: sub.sub,
-            styles: {
-              font,
-              fontSize: layout.body,
-              cellPadding: { top: pad, bottom: pad, left: 8, right: pad },
-              textColor: [51, 65, 85],
+      if (!spacesOnly) {
+        for (const sub of spaceGroup.subs) {
+          const merged = mergeWorkRow(sub.rows, vendors);
+          const first = sub.rows[0] ?? ({} as SpaceRow);
+          const subTotals = sumSubServiceRow(sub.rows, vendors);
+          body.push([
+            {
+              content: sub.sub,
+              styles: {
+                font,
+                fontSize: layout.body,
+                cellPadding: { top: pad, bottom: pad, left: 8, right: pad },
+                textColor: [51, 65, 85],
+              },
             },
-          },
-          ...vendors.map((v) =>
-            centeredCell(cellText(first, v, Number(subTotals[v]) || 0, unicode))
-          ),
-        ]);
+            ...vendors.map((v) =>
+              centeredCell(cellText(first, v, Number(subTotals[v]) || 0, unicode))
+            ),
+            {
+              content: rowComparisonSummary(merged, vendors),
+              styles: {
+                font,
+                fontSize: layout.note,
+                halign: "left",
+                textColor: MUTED,
+                cellPadding: { top: pad, bottom: pad, left: pad, right: pad },
+              },
+            },
+          ]);
+        }
       }
     }
   }
@@ -549,6 +617,15 @@ export async function downloadComparisonPdf(
                 .join("\n")
             );
           }),
+          {
+            content: bundle.takeaway?.text?.trim() || "",
+            styles: {
+              font,
+              fontSize: layout.note,
+              halign: "left",
+              textColor: MUTED,
+            },
+          },
         ]);
 
         if (bundle.overlap_flags?.length) {
@@ -630,9 +707,60 @@ export async function downloadComparisonPdf(
     );
     for (const cat of groupTableData(projectForDisplay)) {
       for (const spaceGroup of cat.spaces) {
+        if (spacesOnly) {
+          const groupedSpaceRows = spaceGroup.subs.flatMap((s) => s.rows);
+          const totals = sumSubServiceRow(groupedSpaceRows, vendors);
+          const itemCounts = quotedWorkCounts(spaceGroup, vendors);
+          const exclusiveLabels = exclusiveWorkLabels(spaceGroup, vendors);
+          const comparable = isSpaceComparable(
+            coverIdx,
+            spaceGroup.spaceId,
+            vendors
+          );
+          body.push([
+            {
+              content: spaceGroup.space.toUpperCase(),
+              styles: {
+                font,
+                fontSize: layout.subTotalLabel,
+                fontStyle: "bold",
+                fillColor: SPACE_FILL,
+                cellPadding: { top: pad, bottom: pad, left: 8, right: pad },
+                textColor: INK,
+              },
+            },
+            ...vendors.map((v) => {
+              const price = formatPdfPrice(totals[v], unicode);
+              const n = itemCounts[v] || 0;
+              const withCount =
+                price === "N/A"
+                  ? price
+                  : `${price}\n${n} ${n === 1 ? "item" : "items"}`;
+              return centeredCell(withCount);
+            }),
+            {
+              content: spaceHeaderSummary(
+                totals,
+                vendors,
+                vendors
+                  .map((v) => coverIdx.get(`${spaceGroup.spaceId}||${v}`))
+                  .filter((e): e is NonNullable<typeof e> => Boolean(e)),
+                { itemCounts, exclusiveLabels, comparable }
+              ),
+              styles: {
+                font,
+                fontSize: layout.note,
+                halign: "left",
+                textColor: MUTED,
+              },
+            },
+          ]);
+          continue;
+        }
         for (const sub of spaceGroup.subs) {
-          const subTotals = sumSubServiceRow(sub.rows, vendors);
+          const merged = mergeWorkRow(sub.rows, vendors);
           const first = sub.rows[0] ?? ({} as SpaceRow);
+          const subTotals = sumSubServiceRow(sub.rows, vendors);
           body.push([
             {
               content: sub.sub,
@@ -646,6 +774,16 @@ export async function downloadComparisonPdf(
             ...vendors.map((v) =>
               centeredCell(cellText(first, v, Number(subTotals[v]) || 0, unicode))
             ),
+            {
+              content: rowComparisonSummary(merged, vendors),
+              styles: {
+                font,
+                fontSize: layout.note,
+                halign: "left",
+                textColor: MUTED,
+                cellPadding: { top: pad, bottom: pad, left: pad, right: pad },
+              },
+            },
           ]);
         }
       }
@@ -655,7 +793,8 @@ export async function downloadComparisonPdf(
   body.push(
     noteRow(
       [
-        '"N/A" = that vendor did not quote this work.  "incl. in …" = price is already inside that vendor\'s package.',
+        '"N/A" = that vendor did not quote this work.  "incl. in …" = price is already inside that vendor\'s package or parent space.',
+        "Comparison summary explains a quantity or rate gap; it does not change the rupees.",
         "Lump sum packages are separate from space totals. Same work, different spaces is comparison only.",
         '"Entered excl. GST" / "Entered incl. GST" is how the vendor typed the quote. Figures shown include GST so columns can be compared.',
       ].join("\n"),
@@ -674,6 +813,7 @@ export async function downloadComparisonPdf(
       [
         "Space / work",
         ...vendors.map((v) => vendorHeaderCell(v, vendorLabels, vendorMeta)),
+        "Comparison summary",
       ],
     ],
     body: body as Parameters<typeof autoTable>[1]["body"],
@@ -718,11 +858,13 @@ export async function downloadComparisonPdf(
     didParseCell: (data) => {
       const spanned = Number(data.cell.colSpan || 1) > 1;
       if (data.section === "head") {
-        data.cell.styles.halign = "center";
+        data.cell.styles.halign =
+          data.column.index === vendors.length + 1 ? "left" : "center";
         return;
       }
       if (data.section === "body" && data.column.index > 0 && !spanned) {
-        data.cell.styles.halign = "center";
+        data.cell.styles.halign =
+          data.column.index === vendors.length + 1 ? "left" : "center";
       }
     },
     didDrawCell: (data) => {
@@ -748,7 +890,11 @@ export async function downloadComparisonPdf(
     drawFooter(doc, font, layout, i, pageCount);
   }
 
-  const fileBits = ["Tatva-comparison", sanitizeFilePart(projectCode)]
+  const fileBits = [
+    "Tatva-comparison",
+    sanitizeFilePart(projectCode),
+    spacesOnly ? "spaces" : "detailed",
+  ]
     .filter(Boolean)
     .join("-");
   doc.save(`${fileBits || "Tatva-comparison"}.pdf`);

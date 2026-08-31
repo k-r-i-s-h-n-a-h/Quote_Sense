@@ -26,7 +26,12 @@ pd = _PandasLazy()
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 
-from services.env_config import get_gemini_client, get_supabase_client
+from services.env_config import (
+    gemini_compare_model,
+    gemini_generate_config,
+    get_gemini_client,
+    get_supabase_client,
+)
 from services.market_rate import (
     DEFAULT_SERVICE_TYPE,
     normalize_pricing_method,
@@ -38,8 +43,9 @@ from services.bundles import (
     bundled_families_by_vendor,
     bundled_space_ids,
 )
-from services.space_clusters import apply_space_clusters
+from services.space_clusters import apply_space_clusters, containment_parent
 from services.work_catalog import apply_work_catalog
+from services.comparison_summary import row_comparison_summary
 
 DEBUG_LOG_PATH = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "../../.cursor/debug-b7c34a.log")
@@ -334,9 +340,13 @@ def _generate_recommendation(summary_prompt, chart_data, bundle_tier=None):
 
         future = ex.submit(
             lambda: get_gemini_client().models.generate_content(
-                model='gemini-2.5-flash',
+                model=gemini_compare_model(),
                 contents=summary_prompt,
-                config=types.GenerateContentConfig(temperature=0.2),
+                config=gemini_generate_config(
+                    types,
+                    model=gemini_compare_model(),
+                    temperature=0.2,
+                ),
             )
         )
         summary_response = future.result(timeout=RECOMMENDATION_TIMEOUT_SEC)
@@ -352,6 +362,60 @@ def _generate_recommendation(summary_prompt, chart_data, bundle_tier=None):
         return _build_fallback_report(chart_data, bundle_tier)
     finally:
         ex.shutdown(wait=False)
+
+
+def _vendor_measures(line_slice, vendor: str) -> dict:
+    if "vendor_name" not in line_slice.columns:
+        return {"quantity": 0.0, "rate": 0.0, "pricing_method": "", "description": ""}
+    slice_ = line_slice[line_slice["vendor_name"] == vendor]
+    if len(slice_) == 0:
+        return {"quantity": 0.0, "rate": 0.0, "pricing_method": "", "description": ""}
+    qty = 0.0
+    if "quantity" in slice_.columns:
+        qty = float(pd.to_numeric(slice_["quantity"], errors="coerce").fillna(0).sum())
+    amount = float(pd.to_numeric(slice_["amount"], errors="coerce").fillna(0).sum())
+    rate = 0.0
+    if "rate" in slice_.columns:
+        rates = pd.to_numeric(slice_["rate"], errors="coerce").fillna(0)
+        if len(slice_) == 1:
+            rate = float(rates.iloc[0] or 0)
+        elif qty > 0:
+            rate = amount / qty
+        elif len(rates):
+            rate = float(rates.mean())
+    elif qty > 0:
+        rate = amount / qty
+    method = ""
+    if "pricing_method" in slice_.columns:
+        mode = slice_["pricing_method"].mode()
+        if not mode.empty:
+            method = normalize_pricing_method(str(mode.iloc[0] or "Unit"))
+    desc = ""
+    if "description" in slice_.columns:
+        seen: set[str] = set()
+        parts: list[str] = []
+        for raw in slice_["description"].tolist():
+            text = str(raw or "").strip()
+            key = text.casefold()
+            if not text or key in seen:
+                continue
+            seen.add(key)
+            parts.append(text)
+        desc = " · ".join(parts)[:280]
+    return {
+        "quantity": round(qty, 4),
+        "rate": round(rate, 2),
+        "pricing_method": method,
+        "description": desc,
+    }
+
+
+def _parent_id_for_slice(line_slice, space_id: str, present: set[str]) -> str:
+    if "contained_in" in line_slice.columns:
+        raw = str(line_slice["contained_in"].iloc[0] or "").strip()
+        if raw:
+            return raw
+    return containment_parent(str(space_id), present)
 
 
 def _build_space_rows(subset, vendors, bundled_families=None):
@@ -439,11 +503,22 @@ def _build_space_rows(subset, vendors, bundled_families=None):
             "_work_order": float(work_order.get((space_id, work_key), 1e9)),
         }
         # Cell-level coverage. A zero is only "not quoted" when the vendor has
-        # not bundled this work's family somewhere else in the quote.
+        # not bundled this work's family somewhere else, and not priced the
+        # same work_key in a parent space (nested room).
         family = str(_modal('bundle_family'))
         if family.casefold() in ("nan", "none", "null"):
             family = ""
         row_dict["bundle_family"] = family
+        present_ids = {str(v) for v in subset["space_id"].tolist()}
+        parent_id = _parent_id_for_slice(line_slice, str(space_id), present_ids)
+        parent_label = ""
+        if parent_id:
+            parent_rows = subset[subset["space_id"].astype(str) == parent_id]
+            if len(parent_rows):
+                parent_label = str(parent_rows["space"].iloc[0] or parent_id)
+        row_dict["contained_in"] = parent_id
+        measures = {vendor: _vendor_measures(line_slice, vendor) for vendor in vendors}
+        row_dict["measures"] = measures
         cell_coverage = {}
         for vendor in vendors:
             amount = float(amounts[vendor]) if vendor in amounts.index else 0.0
@@ -454,9 +529,26 @@ def _build_space_rows(subset, vendors, bundled_families=None):
             bundle_label = (bundled_families or {}).get(vendor, {}).get(family)
             if bundle_label:
                 cell_coverage[vendor] = f"incl_in_bundle:{bundle_label}"
-            else:
+                continue
+            parent_hit = False
+            if parent_id:
+                parent_work = subset[
+                    (subset["space_id"].astype(str) == parent_id)
+                    & (subset["work_key"] == work_key)
+                    & (subset["vendor_name"] == vendor)
+                ]
+                parent_amt = (
+                    float(pd.to_numeric(parent_work["amount"], errors="coerce").fillna(0).sum())
+                    if len(parent_work)
+                    else 0.0
+                )
+                if parent_amt > 0:
+                    cell_coverage[vendor] = f"incl_in_parent:{parent_label or parent_id}"
+                    parent_hit = True
+            if not parent_hit:
                 cell_coverage[vendor] = "not_quoted"
         row_dict["coverage"] = cell_coverage
+        row_dict["summary"] = row_comparison_summary(row_dict, vendors)
         rows.append(row_dict)
 
     rows.sort(key=lambda r: (r["_space_order"], r["_work_order"]))
@@ -484,6 +576,7 @@ def _build_coverage(df, vendors):
     ordered = (
         space_rows.groupby(['space_id'])['__seq'].min().sort_values().index.tolist()
     )
+    present_ids = {str(s) for s in ordered}
 
     bundle_label_by_vendor = {}
     for _, row in df[df['scope'] == 'bundle'].iterrows():
@@ -500,18 +593,34 @@ def _build_coverage(df, vendors):
         bundled_here = {
             vendor for vendor, spaces in affected.items() if str(space_id) in spaces
         }
-        comparable = len(bundled_here) == 0
+        parent_id = ""
+        if "contained_in" in slice_.columns:
+            parent_id = str(slice_["contained_in"].iloc[0] or "").strip()
+        if not parent_id:
+            parent_id = containment_parent(str(space_id), present_ids)
+        parent_label = ""
+        parent_quoted: set[str] = set()
+        if parent_id:
+            parent_slice = space_rows[space_rows["space_id"].astype(str) == parent_id]
+            if len(parent_slice):
+                parent_label = str(parent_slice["space"].iloc[0] or parent_id)
+                parent_quoted = set(str(v) for v in parent_slice["vendor_name"].tolist())
 
+        per_vendor: list[tuple[str, str, str]] = []
+        has_parent_gap = False
         for vendor in vendors:
             if vendor in quoted_vendors:
-                status = "quoted"
-                bundle_id = ""
+                per_vendor.append((vendor, "quoted", ""))
             elif vendor in bundled_here:
-                status = "incl_in_bundle"
-                bundle_id = (bundle_label_by_vendor.get(vendor) or [("", "")])[0][0]
+                per_vendor.append((vendor, "incl_in_bundle", (bundle_label_by_vendor.get(vendor) or [("", "")])[0][0]))
+            elif vendor in parent_quoted:
+                per_vendor.append((vendor, "incl_in_parent", parent_id))
+                has_parent_gap = True
             else:
-                status = "not_quoted"
-                bundle_id = ""
+                per_vendor.append((vendor, "not_quoted", ""))
+        comparable = len(bundled_here) == 0 and not has_parent_gap
+
+        for vendor, status, extra_id in per_vendor:
             entry = {
                 "space_id": str(space_id),
                 "space": space_label,
@@ -519,11 +628,14 @@ def _build_coverage(df, vendors):
                 "status": status,
                 "comparable": comparable,
             }
-            if bundle_id:
-                entry["bundle_id"] = bundle_id
+            if status == "incl_in_bundle" and extra_id:
+                entry["bundle_id"] = extra_id
                 entry["bundle_label"] = (
                     bundle_label_by_vendor.get(vendor) or [("", "")]
                 )[0][1]
+            if status == "incl_in_parent":
+                entry["parent_space_id"] = parent_id
+                entry["parent_space"] = parent_label or parent_id
             entries.append(entry)
     return entries
 
@@ -766,6 +878,29 @@ def gst_mode_from_quote(quote_data: dict) -> str:
     return "mixed"
 
 
+def _qty_rate_from_pricing(pricing_list) -> tuple[float, float]:
+    """Copy qty/rate as written. Do not invent area from amount when qty is 0."""
+    qty = 0.0
+    rate = 0.0
+    if not isinstance(pricing_list, list):
+        return 0.0, 0.0
+    for raw in pricing_list:
+        if not isinstance(raw, dict):
+            continue
+        q = raw.get("quantity", raw.get("qty", raw.get("area")))
+        try:
+            qty += float(q or 0)
+        except (TypeError, ValueError):
+            pass
+        if rate <= 0:
+            r = raw.get("rate", raw.get("unitRate"))
+            try:
+                rate = float(r or 0)
+            except (TypeError, ValueError):
+                pass
+    return qty, rate
+
+
 def mongodb_quotes_to_dataframe(quotes_list: list):
     """Build a comparison DataFrame directly from Tatva/MongoDB quote JSON."""
     try:
@@ -820,6 +955,7 @@ def mongodb_quotes_to_dataframe(quotes_list: list):
                     amount = float(pricing.get("grandTotal") or pricing.get("amount") or 0)
                     pm_ref = work_item.get("pricingMethod") or {}
                     pricing_method = _nested_name(pm_ref, "Unit")
+                    qty, rate = _qty_rate_from_pricing(pricing_list)
                     rows.append({
                         "vendor_name": vendor_key,
                         "company": company,
@@ -838,10 +974,10 @@ def mongodb_quotes_to_dataframe(quotes_list: list):
                         "space_raw": space_raw,
                         "item_name": sub_service_name,
                         "description": str(work_item.get("description") or "").replace("&nbsp;", " "),
-                        "quantity": pricing.get("quantity") or 0,
+                        "quantity": qty,
                         "pricing_method": pricing_method,
                         "pricing_method_id": _nested_oid(pm_ref),
-                        "rate": pricing.get("rate") or 0,
+                        "rate": rate,
                         "amount": amount,
                     })
 
@@ -880,9 +1016,13 @@ def handle_chat_query(session_id, user_message):
         from google.genai import types
 
         chat_response = get_gemini_client().models.generate_content(
-            model='gemini-2.5-flash',
+            model=gemini_compare_model(),
             contents=prompt,
-            config=types.GenerateContentConfig(temperature=0.2)
+            config=gemini_generate_config(
+                types,
+                model=gemini_compare_model(),
+                temperature=0.2,
+            ),
         )
         
         return chat_response.text

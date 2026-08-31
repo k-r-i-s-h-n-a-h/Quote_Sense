@@ -26,6 +26,7 @@ The backend now distinguishes them. The UI's job is to show the difference.
 | --- | --- |
 | `quoted` | the amount |
 | `incl_in_bundle` | `incl. in <bundle label>`, muted, not styled as an error |
+| `incl_in_parent` | `incl. in <parent space>`, same treatment as a package — not a miss |
 | `not_quoted` | `N/A`, rose italic — reserved for a genuine gap |
 | no coverage entry | legacy rule: zero → `N/A` |
 
@@ -34,12 +35,33 @@ Hardwares` is neutral information; `N/A` is a warning. They must not look alike.
 
 ## Space header
 
+The header is the decision row: **vendor space totals first**, with a per-vendor
+**item count** (`N items`) so a cheap total with few lines is visible next to a
+deeper quote. Work rows start **collapsed**. A chevron on the heading toggles
+that `space_id`; **Expand all work** / **Collapse to space totals** apply to
+every space. Grouping stays on `space_id` — the accordion is presentation
+([ACTION.md](../../../ACTION.md) §7).
+
 Adds a badge when the space is not comparable:
 
 - `comparable: true` → unchanged.
-- `comparable: false` → a `scope differs` badge with a tooltip naming the bundle,
+- `comparable: false` → a `scopes differ` badge with a tooltip naming the bundle,
   and the totals rendered muted. The numbers are still shown — they are correct
   per vendor — but the visual weight says they are not a like-for-like pair.
+  Collapse must not hide this badge.
+
+A last sticky **Comparison Summary** column explains the row (quantity vs rate
+vs named finish vs parent/package vs true N/A). Space headers show a header
+summary while work is collapsed. The header sentence is amount plus why: item
+counts (`3 items vs 5 — charged more for fewer lines`), exclusive work names
+(capped at three), and `scopes differ (package vs itemised)` when the space is
+not like-for-like. Work rows (every sub-service) lead with the rupee gap, then
+qty and rate when both quoted those figures, then `specified …` only if the
+vendor wrote a finish or brand in `description`. True N/A and `incl. in …`
+stay as they are. The column does not regroup and does not change totals
+([ACTION.md](../../../ACTION.md) §8). Refreshing a compare URL reuses the
+saved `session_id`; qty/rate notes need a matrix that includes `measures`, so
+the page starts a new compare once if that field is missing.
 
 Space aliases continue to render under the canonical name, which is how a user
 sanity-checks a merge.
@@ -117,6 +139,10 @@ greyscale printing and colour-blind viewing.
 - a `not_quoted` cell shows `N/A`,
 - a legacy payload with no coverage renders zero as `N/A`,
 - a non-comparable space shows the badge,
+- space work rows start collapsed and expand on the heading,
+- the header shows item counts per vendor,
+- a Comparison Summary column explains quantity/rate/coverage gaps,
+- an `incl_in_parent` cell shows the parent name and not `N/A`,
 - a bundle row shows both basis chips,
 - a mixed recap names each quote and where the rupees already sit,
 - an overlap flag renders a warning.

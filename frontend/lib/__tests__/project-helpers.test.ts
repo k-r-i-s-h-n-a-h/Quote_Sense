@@ -29,6 +29,7 @@ import {
 } from "../user-display";
 import {
   coverageIndex,
+  exclusiveWorkLabels,
   groupTableData,
   isSpaceComparable,
   lineItemDescription,
@@ -40,6 +41,8 @@ import {
   coverageOf,
   parseCellStatus,
   projectRowsOf,
+  rowComparisonSummary,
+  spaceHeaderSummary,
   spaceRowsOf,
 } from "../compare-types";
 
@@ -398,6 +401,28 @@ describe("compare-matrix", () => {
     );
     expect(totals.VendorA).toBe(50);
   });
+
+  it("lists exclusive work labels on one side only, capped at three", () => {
+    const labels = exclusiveWorkLabels(
+      {
+        space: "Foyer",
+        spaceId: "foyer",
+        spaceRaw: "Foyer",
+        subs: [
+          { sub: "Paint", workKey: "paint", rows: [{ A: 100, B: 80 }] },
+          { sub: "Vanity unit", workKey: "vanity", rows: [{ A: 0, B: 30 }] },
+          { sub: "Side table", workKey: "side", rows: [{ A: 0, B: 20 }] },
+          { sub: "Console", workKey: "console", rows: [{ A: 0, B: 10 }] },
+          { sub: "Mirror", workKey: "mirror", rows: [{ A: 0, B: 5 }] },
+        ],
+      },
+      ["A", "B"]
+    );
+    expect(labels).toEqual({
+      A: [],
+      B: ["Vanity unit", "Side table", "Console"],
+    });
+  });
 });
 
 describe("compare coverage semantics", () => {
@@ -408,6 +433,10 @@ describe("compare coverage semantics", () => {
     });
     expect(parseCellStatus("quoted").status).toBe("quoted");
     expect(parseCellStatus("not_quoted").status).toBe("not_quoted");
+    expect(parseCellStatus("incl_in_parent:Master Bedroom")).toEqual({
+      status: "incl_in_parent",
+      bundleLabel: "Master Bedroom",
+    });
     // A legacy payload has no coverage at all; default to the old reading.
     expect(parseCellStatus(undefined).status).toBe("not_quoted");
   });
@@ -453,6 +482,154 @@ describe("compare coverage semantics", () => {
     // No bundle section for a payload that predates the tiers.
     expect(bundleRowsOf(legacy)).toEqual([]);
     expect(coverageOf(legacy)).toEqual([]);
+  });
+
+  it("explains a quantity gap in the comparison summary", () => {
+    const text = rowComparisonSummary(
+      {
+        coverage: { A: "quoted", B: "quoted" },
+        A: 90000,
+        B: 60000,
+        measures: {
+          A: { quantity: 180, rate: 500, pricing_method: "Area (sqft)" },
+          B: { quantity: 120, rate: 500, pricing_method: "Area (sqft)" },
+        },
+      },
+      ["A", "B"]
+    );
+    expect(text).toContain("₹30,000 higher");
+    expect(text).toContain("180 sqft vs 120 sqft");
+    expect(text).toContain("more area");
+  });
+
+  it("names qty and rate when both differ, plus specified finishes", () => {
+    const text = rowComparisonSummary(
+      {
+        coverage: { A: "quoted", B: "quoted" },
+        A: 12036,
+        B: 29500,
+        measures: {
+          A: {
+            quantity: 12,
+            rate: 850,
+            pricing_method: "Area (sqft)",
+            description:
+              "Wall panelling with designed laminates and glass combinations",
+          },
+          B: {
+            quantity: 20,
+            rate: 1250,
+            pricing_method: "Area (sqft)",
+            description: "Decor wall panelling with louvers",
+          },
+        },
+      },
+      ["A", "B"]
+    );
+    expect(text).toContain("₹17,464 higher");
+    expect(text).toContain("12 sqft vs 20 sqft");
+    expect(text).toContain("₹850/sqft vs ₹1,250/sqft");
+    expect(text).toContain("laminates");
+    expect(text).toContain("louvers");
+  });
+
+  it("omits finish notes when neither vendor wrote a description", () => {
+    const text = rowComparisonSummary(
+      {
+        coverage: { A: "quoted", B: "quoted" },
+        A: 12036,
+        B: 29500,
+        measures: {
+          A: { quantity: 12, rate: 850, pricing_method: "Area (sqft)" },
+          B: { quantity: 20, rate: 1250, pricing_method: "Area (sqft)" },
+        },
+      },
+      ["A", "B"]
+    );
+    expect(text).not.toContain("specified");
+  });
+
+  it("still names qty when measures keys omit the quote suffix", () => {
+    const text = rowComparisonSummary(
+      {
+        coverage: {
+          "Infosys (Q1)": "quoted",
+          "TCS (Q2)": "quoted",
+        },
+        "Infosys (Q1)": 12036,
+        "TCS (Q2)": 29500,
+        measures: {
+          Infosys: {
+            quantity: 12,
+            rate: 850,
+            pricing_method: "Area (sqft)",
+          },
+          TCS: {
+            quantity: 20,
+            rate: 1250,
+            pricing_method: "Area (sqft)",
+          },
+        },
+      },
+      ["Infosys (Q1)", "TCS (Q2)"]
+    );
+    expect(text).toContain("12 sqft vs 20 sqft");
+  });
+});
+
+describe("space header summary reasons", () => {
+  const Infosys = "Infosys (Q1)";
+  const TCS = "TCS (Q2)";
+
+  it("says the higher vendor charged more for fewer lines", () => {
+    const text = spaceHeaderSummary(
+      { [Infosys]: 78942, [TCS]: 75402 },
+      [Infosys, TCS],
+      [],
+      { itemCounts: { [Infosys]: 3, [TCS]: 5 }, comparable: true }
+    );
+    expect(text).toContain("Infosys is ₹3,540 higher");
+    expect(text).toContain("3 items vs 5");
+    expect(text).toContain("charged more for fewer lines");
+  });
+
+  it("names scopes differ and item counts when packages do not match", () => {
+    const text = spaceHeaderSummary(
+      { [Infosys]: 86049, [TCS]: 100000 },
+      [Infosys, TCS],
+      [
+        {
+          space_id: "kitchen",
+          space: "Kitchen",
+          vendor: Infosys,
+          status: "incl_in_bundle",
+          bundle_label: "Kitchen package",
+          comparable: false,
+        },
+      ],
+      { itemCounts: { [Infosys]: 7, [TCS]: 11 }, comparable: false }
+    );
+    expect(text).toContain("TCS is ₹13,951 higher");
+    expect(text).toContain("scopes differ (package vs itemised)");
+    expect(text).toContain("7 items vs 11");
+    expect(text).not.toContain("inside");
+  });
+
+  it("names exclusive work the other vendor quoted", () => {
+    const text = spaceHeaderSummary(
+      { [Infosys]: 171154, [TCS]: 100000 },
+      [Infosys, TCS],
+      [],
+      {
+        exclusiveLabels: {
+          [Infosys]: [],
+          [TCS]: ["Vanity unit", "Side table"],
+        },
+        comparable: true,
+      }
+    );
+    expect(text).toContain("Infosys is ₹71,154 higher");
+    expect(text).toContain("TCS also quoted Vanity unit, Side table");
   });
 });
 

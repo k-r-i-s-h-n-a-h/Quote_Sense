@@ -71,6 +71,7 @@ Two lines from different vendors compare **only** when their `work_key` is equal
 | `space` | str | Display heading, taken from the vendors' own wording for this cluster, e.g. `Master Bedroom`. Cosmetic — group and assert on `space_id`. |
 | `space_confidence` | float | `0.0`–`1.0`. |
 | `space_source` | str | `space_raw`, `description`, `item_name`, `llm`, or `project_level`. |
+| `contained_in` | str | Parent `space_id` when this room is nested. Empty if none. Not a merge. |
 
 `space_id == "project_level"` means the line is not attributable to a room.
 That is a real outcome, not a failure.
@@ -130,6 +131,9 @@ Allocating a lumpsum across rooms would invent numbers the vendor never quoted.
 | `pricing_method` | str | |
 | `breakdown` | list | `{vendor, item, amount}` per contributing line. |
 | `bundle_family` | str | S4 family, or `""`. Lets the UI hide Whole-home rows a scattered recap already compares. |
+| `contained_in` | str | Parent `space_id` when this room is nested (walk-in → mbr). Empty if none. Not a merge. |
+| `measures` | dict | `{ "<vendor>": { quantity, rate, pricing_method, description } }` from the payload. Quantity/rate stay 0 when the vendor left them blank. Description is verbatim, not a work list. |
+| `summary` | str | Deterministic Comparison Summary sentence. Empty when there is nothing to say. |
 | `<vendor name>` | int | One key per vendor; rupees, `0` when absent. |
 
 ### BundleRow
@@ -158,9 +162,10 @@ says so.
 | `space_id` | str | |
 | `space` | str | |
 | `vendor` | str | |
-| `status` | str | `quoted`, `incl_in_bundle`, or `not_quoted`. |
+| `status` | str | `quoted`, `incl_in_bundle`, `incl_in_parent`, or `not_quoted`. |
 | `bundle_id` | str | Set when `status == "incl_in_bundle"`. |
-| `comparable` | bool | `false` when a bundle overlaps this space for any vendor. |
+| `parent_space` / `parent_space_id` | str | Set when `status == "incl_in_parent"`. |
+| `comparable` | bool | `false` when a bundle or nested parent overlaps this space for any vendor. |
 
 This is what turns a misleading `N/A` into `incl. in Hardwares bundle`.
 

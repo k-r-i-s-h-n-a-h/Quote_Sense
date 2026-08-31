@@ -10,6 +10,9 @@ import VendorInsights from "../../components/VendorInsights";
 import RecommendationView from "../../components/RecommendationView";
 import VendorSummary from "../../components/compare/VendorSummary";
 import ComparisonMatrix from "../../components/compare/ComparisonMatrix";
+import PdfExportButtons, {
+  type PdfDetailLevel,
+} from "../../components/compare/PdfExportButtons";
 import CompareChat from "../../components/compare/CompareChat";
 import { buildVendorLabels } from "../../lib/format";
 import { downloadComparisonPdf } from "../../lib/download-comparison-pdf";
@@ -125,7 +128,9 @@ function QuoteSenseContent() {
   const pollingActiveRef = useRef(false);
   const partialAppliedRef = useRef(false);
   const projectCompareStartedRef = useRef(false);
+  const measuresRetryRef = useRef(false);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const [freshCompareNonce, setFreshCompareNonce] = useState(0);
 
   const selectedQuoteIds = useMemo(() => {
     const raw = qp.get("quotes");
@@ -143,6 +148,11 @@ function QuoteSenseContent() {
     if (!projectIdParam || !isValidCompareCount(selectedQuoteIds.length)) return "";
     return `${projectIdParam}:${selectedQuoteIdsKey}`;
   }, [projectIdParam, selectedQuoteIdsKey, selectedQuoteIds.length]);
+
+  useEffect(() => {
+    measuresRetryRef.current = false;
+    setFreshCompareNonce(0);
+  }, [compareRunKey]);
 
   const lane = useMemo(
     () =>
@@ -216,7 +226,44 @@ function QuoteSenseContent() {
     if (Array.isArray(data.coverage)) setCoverage(data.coverage);
   };
 
+  const matrixLacksMeasures = (data: Record<string, unknown> | null | undefined) => {
+    const space = Array.isArray(data?.spaceTier) ? data.spaceTier : [];
+    const table = Array.isArray(data?.tableData) ? data.tableData : [];
+    const rows = [...space, ...table] as Array<{ measures?: unknown }>;
+    if (!rows.length) return false;
+    return !rows.some(
+      (row) =>
+        row &&
+        row.measures &&
+        typeof row.measures === "object" &&
+        Object.keys(row.measures as object).length > 0
+    );
+  };
+
+  const retryCompareForMeasures = (data: Record<string, unknown> | null | undefined) => {
+    if (lane !== "project") return false;
+    if (measuresRetryRef.current) return false;
+    if (!matrixLacksMeasures(data)) return false;
+    measuresRetryRef.current = true;
+    pollingActiveRef.current = false;
+    partialAppliedRef.current = false;
+    projectCompareStartedRef.current = false;
+    setActiveJobId(null);
+    setSessionId("");
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      params.delete("session_id");
+      const qs = params.toString();
+      window.history.replaceState(null, "", qs ? `/compare?${qs}` : "/compare");
+    }
+    setLoading(true);
+    setLoadingMessage("Rebuilding comparison with quantity and rate…");
+    setFreshCompareNonce((n) => n + 1);
+    return true;
+  };
+
   const processComparisonData = (data: any) => {
+    if (retryCompareForMeasures(data)) return;
     if (data.report) {
       setReport(data.report);
       setChartData(data.chartData || []);
@@ -237,6 +284,7 @@ function QuoteSenseContent() {
   // is still being generated. Does NOT set the report or chat greeting yet.
   const applyPartialData = (data: any) => {
     if (!data) return;
+    if (retryCompareForMeasures(data)) return;
     setChartData(data.chartData || []);
     setTableData(data.tableData || []);
     setVendors(data.vendors || []);
@@ -298,12 +346,13 @@ function QuoteSenseContent() {
   // Resume an in-flight project job after refresh (session_id already in URL).
   useEffect(() => {
     if (lane !== "project" || !compareRunKey) return;
+    if (freshCompareNonce > 0) return;
     if (!sessionIdFromUrl || activeJobId) return;
 
     setActiveJobId(sessionIdFromUrl);
     setSessionId(sessionIdFromUrl);
     projectCompareStartedRef.current = true;
-  }, [lane, compareRunKey, sessionIdFromUrl, activeJobId]);
+  }, [lane, compareRunKey, sessionIdFromUrl, activeJobId, freshCompareNonce]);
 
   // Project lane: resolve payloads → start async MongoDB compare job.
   useEffect(() => {
@@ -312,7 +361,11 @@ function QuoteSenseContent() {
     const projectId = projectIdParam;
     if (!projectId) return;
 
-    if (sessionIdFromUrl || activeJobId || projectCompareStartedRef.current) return;
+    const skipBecauseSession =
+      freshCompareNonce === 0 && Boolean(sessionIdFromUrl);
+    if (skipBecauseSession || activeJobId || projectCompareStartedRef.current) {
+      return;
+    }
 
     projectCompareStartedRef.current = true;
 
@@ -377,7 +430,7 @@ function QuoteSenseContent() {
         setLoading(false);
       }
     })();
-  }, [lane, compareRunKey, activeJobId, sessionIdFromUrl, projectIdParam, selectedQuoteIds, user]);
+  }, [lane, compareRunKey, activeJobId, sessionIdFromUrl, projectIdParam, selectedQuoteIds, user, freshCompareNonce]);
 
   // Poll progress for the active comparison job (separate effect — not cancelled on URL tweak).
   useEffect(() => {
@@ -456,7 +509,7 @@ function QuoteSenseContent() {
     };
   }, [projectIdParam, tableData.length]);
 
-  const handleDownloadPdf = async () => {
+  const handleDownloadPdf = async (detail: PdfDetailLevel = "full") => {
     if (tableData.length === 0 || vendors.length === 0) return;
     await downloadComparisonPdf(
       tableData,
@@ -471,6 +524,7 @@ function QuoteSenseContent() {
       {
         projectTitle: projectMeta.title,
         projectCode: projectMeta.code,
+        detail,
       }
     );
   };
@@ -700,13 +754,7 @@ function QuoteSenseContent() {
             actions={
               hasResults ? (
                 <>
-                  <button
-                    type="button"
-                    onClick={handleDownloadPdf}
-                    className="qs-btn qs-btn-secondary"
-                  >
-                    Export PDF
-                  </button>
+                  <PdfExportButtons onExport={handleDownloadPdf} />
                   <button
                     type="button"
                     onClick={handleGoBack}

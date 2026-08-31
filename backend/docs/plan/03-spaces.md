@@ -54,6 +54,15 @@ plainly in the description of the very same line. Reading the whole row fixes
 | 4 | Gemini overlay grouped it with a known room | `llm` | 0.5 |
 | 5 | No room anywhere | `project_level` | 0.4 |
 
+After clustering, `_apply_containment` sets `contained_in` (child → parent
+`space_id`) for nested rooms: walk-in/dressing → master bedroom, attached /
+master bath → that bedroom, balcony → living, utility → kitchen. Floor-aware:
+`1f_walkin` attaches to `1f_mbr`, not `gf_mbr`. This is an **edge**, not a
+merge. Walk-in closet and Master Bedroom stay two `space_id`s.
+
+The leftover LLM still returns `{"clusters":[{"members","kind"}]}` only. It
+must not merge containment.
+
 Rung 5 is a legitimate answer, not a failure. Transport, cleaning and
 whole-project electrical genuinely have no room.
 
@@ -157,6 +166,17 @@ descriptions) rather than bare labels, so it can tell `Used cloth unit` is an MB
 item. Deterministic result computed first; 8s timeout; any failure returns the
 heuristic untouched.
 
+The model is a **conservative site surveyor**: leftover Space/Zone labels only.
+It proposes clusters; it does not name rooms and it does not override labels
+that already have a group id. Level 1 aliases (Living / LVR / L R, Dining /
+DNR, Kitchen / KIT, MBR / Master Bedroom — see [ACTION.md](../../../ACTION.md)
+§1) are **mandatory**. Level 2 may merge only when the same physical room **and**
+comparable scope are both clear; otherwise keep two clusters. Never merge across
+floor, instance, or containment (walk-in closet vs master bedroom).
+
+The JSON contract is unchanged: `{"clusters":[{"members","kind"}]}` — **no**
+`canonical_space` from the model.
+
 Two rules define what it is allowed to do:
 
 - **It groups, it does not name.** The response carries members only, no
@@ -178,7 +198,7 @@ merging.
 | Env var | Default | Effect |
 | --- | --- | --- |
 | `GEMINI_SPACE_LLM` | `1` | `0` disables the overlay. |
-| `GEMINI_SPACE_MODEL` | — | Override the model. |
+| `GEMINI_SPACE_MODEL` | `gemini-3.7-flash` | Override the leftover model (falls back to `GEMINI_COMPARE_MODEL`). |
 
 ## Tests
 

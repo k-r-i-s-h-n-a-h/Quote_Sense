@@ -123,6 +123,7 @@ taxonomy node.
 | Env var | Default | Effect |
 | --- | --- | --- |
 | `GEMINI_WORK_LLM` | `1` | `0` disables rung 5 entirely. |
+| `GEMINI_WORK_MODEL` | `gemini-3.7-flash` | Override leftover work merge (falls back to `GEMINI_COMPARE_MODEL`). |
 
 With the switch off, S2 is pure and deterministic. The test suite runs this way.
 

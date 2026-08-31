@@ -9,9 +9,10 @@ Font helper: `lib/pdf-unicode-font.ts` (Noto Sans so `₹` prints).
 
 ## Rule
 
-The export mirrors the on-screen matrix. It reuses `groupTableData` and
-`sumSubServiceRow` from [02-grouping.md](02-grouping.md) rather than
-re-implementing the hierarchy, so the two can never diverge in structure.
+The **detailed** export mirrors the on-screen matrix. It reuses `groupTableData`,
+`sumSubServiceRow`, and `quotedWorkCounts` from [02-grouping.md](02-grouping.md)
+rather than re-implementing the hierarchy. The **spaces** artefact uses the same
+helpers and omits work lines only.
 
 ## Document look
 
@@ -30,8 +31,23 @@ document rather than a spreadsheet dump:
   the amount row, the same structure as the screen. They are not stuffed into
   the left cell, and they are not duplicated in a second "KEY TAKEAWAYS" block.
 
-`downloadComparisonPdf` takes optional `{ projectTitle, projectCode }` from the
-compare page cache so the letterhead is specific to the job.
+`downloadComparisonPdf` takes optional `{ projectTitle, projectCode, detail }`
+from the compare page. `detail` is `"spaces"` or `"full"` (default full).
+
+## Two artefacts
+
+| Button | `detail` | Filename suffix | Contents |
+| --- | --- | --- | --- |
+| PDF: spaces | `spaces` | `-spaces.pdf` | Space headers, item counts, packages, recaps, whole-home as space totals. No work lines. |
+| PDF: detailed | `full` | `-detailed.pdf` | The on-screen matrix with every work line. |
+
+Spaces mode must still carry lump-sum packages and recap notes. It must not drop
+a `scopes differ` marker. Both stay portrait A4 with centered vendor headers
+and amounts. The **detailed** PDF includes the Comparison Summary column; the
+spaces artefact keeps one summary line on each space header. Those lines use the
+same composition as the matrix: amount plus item-count / exclusive-work /
+scopes-differ reasons. Detailed work-row summaries lead with the money gap, then
+qty/rate, then a specified-finish clause when the vendor wrote one.
 
 ## The problem this solves
 
@@ -86,6 +102,7 @@ Structural rather than pixel-based, since jsPDF output is not usefully
 snapshotted:
 
 - the export uses the same grouping helpers as the screen,
+- `detail: "spaces"` omits work lines and still includes packages/recaps,
 - a bundle in the payload produces a bundle section,
 - an `incl_in_bundle` cell does not render as `N/A`,
 - a legacy payload without tiers still exports the old layout.

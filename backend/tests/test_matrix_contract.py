@@ -77,6 +77,8 @@ def test_every_row_carries_canonical_keys(matrix):
         assert row["work_key"], f"empty work_key on {row['sub_service']}"
         assert row["space_id"]
         assert "coverage" in row
+        assert "measures" in row
+        assert "summary" in row
 
 
 def test_tier_totals_reconcile_with_the_quotes(matrix):

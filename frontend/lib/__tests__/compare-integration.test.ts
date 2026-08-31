@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { coverageIndex, groupTableData, isSpaceComparable, sumSubServiceRow } from "../compare-matrix";
+import { coverageIndex, groupTableData, isSpaceComparable, quotedWorkCounts, sumSubServiceRow } from "../compare-matrix";
 import {
   amountOf,
   bundleRowsOf,
@@ -29,6 +29,7 @@ import {
   gstModesDiffer,
   type BundleRow,
   type MatrixV1,
+  type SpaceRow,
 } from "../compare-types";
 import { buildVendorLabels, type VendorLabel } from "../format";
 import payload from "./fixtures/golden-matrix.json";
@@ -89,6 +90,14 @@ describe("golden MatrixV1 payload", () => {
       expect(amountOf(row, A)).toBe(0);
       expect(parseCellStatus(row.coverage?.[A]).bundleLabel).toBeTruthy();
     }
+  });
+
+  it("counts quoted work rows per vendor on a space group", () => {
+    const groups = groupTableData(spaceRowsOf(matrix));
+    const kitchen = groups.flatMap((c) => c.spaces).find((s) => s.space === "Kitchen")!;
+    const counts = quotedWorkCounts(kitchen, [A, B]);
+    expect(counts[A]).toBeGreaterThan(0);
+    expect(counts[B]).toBeGreaterThan(0);
   });
 
   it("flags the room a bundle overlaps as not comparable", () => {

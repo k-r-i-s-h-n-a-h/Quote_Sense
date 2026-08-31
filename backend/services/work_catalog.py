@@ -419,15 +419,15 @@ def _try_gemini_merge(
 
     try:
         from google.genai import types
-        from services.env_config import get_gemini_client
+        from services.env_config import (
+            gemini_generate_config,
+            gemini_work_model,
+            get_gemini_client,
+        )
     except Exception:
         return {}
 
-    model = (
-        os.getenv("GEMINI_WORK_MODEL")
-        or os.getenv("GEMINI_EXTRACT_MODEL")
-        or "gemini-2.5-flash"
-    )
+    model = gemini_work_model()
     payload = [
         {"label": label, "context": ctx[:3]} for label, ctx in leftovers.items()
     ]
@@ -448,9 +448,11 @@ def _try_gemini_merge(
         import concurrent.futures
 
         client = get_gemini_client()
-        config = types.GenerateContentConfig(
-            response_mime_type="application/json",
+        config = gemini_generate_config(
+            types,
+            model=model,
             temperature=0.0,
+            response_mime_type="application/json",
         )
         ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
         try:

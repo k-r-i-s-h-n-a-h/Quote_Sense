@@ -56,6 +56,8 @@ six accessories **is**.
 Never treat brand prose (`Greenply & Century`) as a work list. Never slugify
 unknown fragments to force a package. Never sum unrelated leftover (`mixed`)
 packages into one comparison row — one vendor line is one package row.
+Brand and finish words in `description` may appear in Comparison Summary as
+`specified …`; they still must not become extra work rows.
 
 Window blinds and a tissue holder are whole-home lines, not wall décor.
 
@@ -112,3 +114,76 @@ pre-GST `amount` from one quote with a GST-inclusive `grandTotal` from
 another. Name how each quote was entered (company if they differ, quote
 number if they are the same company). Do not convert one quote onto the
 other's GST basis by applying a homemade rate.
+
+---
+
+## 7. Space totals first; work list on demand
+
+The comparison matrix must show **whole-space spend on the space header**
+before any work line. Sub-services start **collapsed**; the customer opens a
+space (or Expand all) to see the work list. Item counts on the header show how
+much of that space each vendor quoted so a cheap total with few items is not
+mistaken for a like-for-like saving.
+
+The frontend still groups only on `space_id`. Collapse is presentation, not a
+new grouping layer. Every quoted sub-service remains available under that
+heading when the space is opened — do not drop work lines to make the table
+shorter.
+
+PDF export offers two artefacts: **spaces** (headers + packages/recaps) and
+**detailed** (every work line). Do not ship a space-only PDF that drops lump-sum
+packages or recap notes. Do not hide a scope mismatch to make totals look
+comparable.
+
+---
+
+## 8. Nested spaces and Comparison Summary
+
+A walk-in closet (or attached bath, dressing, balcony, utility) that one vendor
+quoted as its own space, and another folded into a parent room, must stay **two
+`space_id`s**. Do not merge the child into the parent. S3 may only add a
+containment **edge** (`contained_in`). The child's cell for the vendor who
+priced that work in the parent is `incl_in_parent`, not `N/A`.
+
+`N/A` remains for a genuine gap. Do not hide a true miss.
+
+**Comparison Summary** is an explanation column. It must not change space
+totals or invent a new grouping key. The frontend still groups on `space_id`.
+
+The column applies to **every work row**, not one example line. Space headers
+stay amount · item counts · exclusive work · scopes differ. Work rows lead with
+the rupee gap, then quantity, then rate, then a spec note — each only when the
+payload actually has it.
+
+### Extraction the summary is allowed to quote (S1)
+
+S1 copies what the vendor wrote. It does not interpret finishes or invent area.
+
+1. `quantity` and `rate` come from the line as billed (`pricingInput` on the
+   Tatva lane; the QTY/RATE columns on PDF extract). Missing or zero stays
+   missing or zero.
+2. `description` is preserved in full. Do not truncate it so S3/S4 still see
+   room hints and bundle lists.
+3. `pricing_method` is recorded verbatim (so the summary can say sqft vs rft).
+4. Do not fill quantity from amount÷rate when the vendor left qty blank. Do
+   not guess a finish the description never named.
+
+### How the matrix builds the sentence (S5, then UI/PDF)
+
+1. S5 puts per-vendor `measures` on the `SpaceRow`: quantity, rate,
+   pricing_method, description. Amounts are unchanged.
+2. Coverage still wins: `incl_in_parent` / `incl_in_bundle` / true `N/A`
+   (`did not quote this line`) — same as the cell.
+3. When both vendors quoted the line:
+   - always the money gap (`TCS is ₹17,464 higher`);
+   - if both quantities are > 0 and they differ by 10% or more, name both
+     (`12 sqft vs 20 sqft (billed more area)`);
+   - if both rates are > 0 and they differ by 10% or more, name both
+     (`₹850/sqft vs ₹1,250/sqft`), or `same area, X's rate is higher` when
+     qty is similar;
+   - if description names a finish, brand, or material (laminate, louver,
+     HDHMR, ply brand, glass, …), add `X specified …`. If they did not write
+     it, omit. Same tokens on both sides, omit. This is not a claim that the
+     spec *caused* the gap.
+4. The UI and both PDFs render that sentence. They must not regroup or
+   reallocate rupees to make the story tidier.

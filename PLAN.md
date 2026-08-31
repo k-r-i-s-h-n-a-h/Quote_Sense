@@ -16,7 +16,7 @@ an expired session is a login popup rather than an inline button, the matrix
 shows space totals first (work list on demand), PDF export offers a spaces
 artefact and a detailed artefact, nested rooms stay separate `space_id`s with
 an `incl_in_parent` cell instead of a false N/A, and Comparison Summary
-explains a gap without changing totals.
+explains a gap (qty / rate / named spec) without changing totals.
 
 | Where | File | Covers |
 | --- | --- | --- |

@@ -49,6 +49,11 @@ interpretation out of S1 means a model swap cannot corrupt grouping.
    Line `amount` is the billed `grandTotal` so excl. and incl. quotes compare
    on the same GST-inclusive basis. Do not mix a pre-GST `amount` with a
    GST-inclusive total, and do not apply a homemade GST rate.
+7. `quantity` and `rate` are copied as written (`pricingInput` on Tatva;
+   QTY/RATE on PDF). Leave them 0 when the vendor left them blank. S5 may
+   quote them on Comparison Summary; it must not invent area from amount÷rate
+   when qty is 0. `description` stays full text so a named finish can appear
+   in the summary without becoming extra work rows ([ACTION.md](../../../ACTION.md) §8).
 
 ## Validation
 

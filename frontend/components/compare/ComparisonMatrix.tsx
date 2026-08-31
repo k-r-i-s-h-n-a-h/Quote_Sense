@@ -11,6 +11,7 @@ import {
   exclusiveWorkLabels,
   groupTableData,
   isSpaceComparable,
+  mergeWorkRow,
   quotedWorkCounts,
   sumSubServiceRow,
 } from "@/lib/compare-matrix";
@@ -484,16 +485,8 @@ export default function ComparisonMatrix({
 
           {open
             ? spaceGroup.subs.map((sub) => {
-            const first = sub.rows[0] ?? {};
-            const pricing = String(first.pricing_method || "");
-            // A work row can be fed by several vendor lines; merge their
-            // amounts but keep the first row's coverage semantics.
-            const merged: SpaceRow = {
-              ...first,
-              ...Object.fromEntries(
-                vendors.map((v) => [v, sumSubServiceRow(sub.rows, vendors)[v]])
-              ),
-            };
+            const merged = mergeWorkRow(sub.rows, vendors);
+            const pricing = String(merged.pricing_method || "");
             const items = Array.from(
               new Set(
                 sub.rows.flatMap((r) =>

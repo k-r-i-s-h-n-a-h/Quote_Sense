@@ -18,6 +18,7 @@ import {
   type MatrixV1,
   type SpaceRow,
   type Vendor,
+  type VendorMeasures,
 } from "./compare-types";
 
 export type CompareTableRow = SpaceRow;
@@ -125,6 +126,47 @@ export function exclusiveWorkLabels(
     if (label) out[only].push(label);
   }
   return out;
+}
+
+function measureEntry(
+  bag: Record<string, VendorMeasures> | undefined,
+  vendor: string
+): VendorMeasures | undefined {
+  if (!bag) return undefined;
+  if (bag[vendor]) return bag[vendor];
+  const who = vendor.split(" (")[0].trim().toLowerCase();
+  for (const [key, value] of Object.entries(bag)) {
+    if (key.split(" (")[0].trim().toLowerCase() === who) return value;
+  }
+  return undefined;
+}
+
+/** Union per-vendor measures across grouped rows so qty/rate survive a merge. */
+export function mergeVendorMeasures(
+  rows: SpaceRow[],
+  vendors: string[]
+): Record<string, VendorMeasures> {
+  const out: Record<string, VendorMeasures> = {};
+  for (const row of rows) {
+    for (const vendor of vendors) {
+      const hit = measureEntry(row.measures, vendor);
+      if (!hit) continue;
+      out[vendor] = { ...out[vendor], ...hit };
+    }
+  }
+  return out;
+}
+
+/** One work row: summed amounts plus merged measures for Comparison Summary. */
+export function mergeWorkRow(rows: SpaceRow[], vendors: string[]): SpaceRow {
+  const first = rows[0] ?? ({} as SpaceRow);
+  const totals = sumSubServiceRow(rows, vendors);
+  const measures = mergeVendorMeasures(rows, vendors);
+  return {
+    ...first,
+    ...Object.fromEntries(vendors.map((v) => [v, totals[v]])),
+    ...(Object.keys(measures).length ? { measures } : {}),
+  };
 }
 
 /**

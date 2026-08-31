@@ -1,12 +1,51 @@
 """Deterministic row-wise comparison summary (S5).
 
 Explains why one vendor's figure is higher using payload quantity, rate,
-pricing method, and coverage. Does not reallocate rupees or invent area.
+pricing method, coverage, and named finishes in description. Does not
+reallocate rupees or invent area or materials.
 """
 
 from __future__ import annotations
 
+import re
 from typing import Any
+
+# Phrases the vendor must have written. Not a work list (ACTION.md §2).
+_SPEC_TERMS: tuple[tuple[str, str], ...] = (
+    ("hi-gloss", "hi-gloss"),
+    ("hi gloss", "hi-gloss"),
+    ("high gloss", "hi-gloss"),
+    ("hdhmr", "HDHMR"),
+    ("greenply", "Greenply"),
+    ("century", "Century"),
+    ("merino", "Merino"),
+    ("hettich", "Hettich"),
+    ("hafele", "Hafele"),
+    ("laminates", "laminates"),
+    ("laminate", "laminate"),
+    ("louvers", "louvers"),
+    ("louver", "louver"),
+    ("louvres", "louvers"),
+    ("louvre", "louver"),
+    ("plywood", "plywood"),
+    ("beeding", "beeding"),
+    ("beading", "beading"),
+    ("membrane", "membrane"),
+    ("veneer", "veneer"),
+    ("acrylic", "acrylic"),
+    ("premium", "premium"),
+    ("mirror", "mirror"),
+    ("glass", "glass"),
+    ("walnut", "walnut"),
+    ("blum", "Blum"),
+    ("matt", "matt"),
+    ("matte", "matte"),
+    ("teak", "teak"),
+    ("oak", "oak"),
+    ("pvc", "PVC"),
+    ("mdf", "MDF"),
+    ("pu finish", "PU finish"),
+)
 
 
 def _who(vendor: str) -> str:
@@ -39,7 +78,7 @@ def _measure(row: dict[str, Any], vendor: str) -> dict[str, Any]:
     measures = row.get("measures") or {}
     raw = measures.get(vendor) if isinstance(measures, dict) else None
     if not isinstance(raw, dict):
-        return {"quantity": 0.0, "rate": 0.0, "pricing_method": ""}
+        return {"quantity": 0.0, "rate": 0.0, "pricing_method": "", "description": ""}
     try:
         qty = float(raw.get("quantity") or 0)
     except (TypeError, ValueError):
@@ -52,7 +91,43 @@ def _measure(row: dict[str, Any], vendor: str) -> dict[str, Any]:
         "quantity": qty,
         "rate": rate,
         "pricing_method": str(raw.get("pricing_method") or ""),
+        "description": str(raw.get("description") or ""),
     }
+
+
+def _spec_tokens(description: str) -> list[str]:
+    text = re.sub(r"<[^>]+>", " ", description or "")
+    text = re.sub(r"\s+", " ", text).strip()
+    if not text:
+        return []
+    folded = text.casefold()
+    found: list[str] = []
+    seen: set[str] = set()
+    for term, label in _SPEC_TERMS:
+        if label.casefold() in seen:
+            continue
+        if not re.search(rf"(?<![a-z0-9]){re.escape(term)}(?![a-z0-9])", folded):
+            continue
+        found.append(label)
+        seen.add(label.casefold())
+        if len(found) >= 4:
+            break
+    return found
+
+
+def _spec_clause(ma: dict[str, Any], mb: dict[str, Any], a: str, b: str) -> str:
+    ta = _spec_tokens(str(ma.get("description") or ""))
+    tb = _spec_tokens(str(mb.get("description") or ""))
+    if not ta and not tb:
+        return ""
+    if ta and tb and set(x.casefold() for x in ta) == set(x.casefold() for x in tb):
+        return ""
+    bits: list[str] = []
+    if ta:
+        bits.append(f"{_who(a)} specified {', '.join(ta)}")
+    if tb:
+        bits.append(f"{_who(b)} specified {', '.join(tb)}")
+    return "; ".join(bits)
 
 
 def _amount_clause(amt_a: float, amt_b: float, a: str, b: str) -> str:
@@ -60,6 +135,36 @@ def _amount_clause(amt_a: float, amt_b: float, a: str, b: str) -> str:
         return "Same amount"
     higher = a if amt_a > amt_b else b
     return f"{_who(higher)} is {_inr(abs(amt_a - amt_b))} higher"
+
+
+def _qty_rate_parts(
+    qty_a: float,
+    qty_b: float,
+    rate_a: float,
+    rate_b: float,
+    unit: str,
+    a: str,
+    b: str,
+) -> list[str]:
+    parts: list[str] = []
+    qty_gap = False
+    if qty_a > 0 and qty_b > 0:
+        mid = (qty_a + qty_b) / 2.0
+        qty_gap = bool(mid and abs(qty_a - qty_b) / mid >= 0.10)
+        if qty_gap:
+            parts.append(f"{qty_a:g} {unit} vs {qty_b:g} {unit} (billed more area)")
+    if rate_a > 0 and rate_b > 0:
+        rmid = (rate_a + rate_b) / 2.0
+        if rmid and abs(rate_a - rate_b) / rmid >= 0.10:
+            higher = a if rate_a > rate_b else b
+            rates = f"{_inr(rate_a)}/{unit} vs {_inr(rate_b)}/{unit}"
+            if qty_gap:
+                parts.append(rates)
+            elif qty_a > 0 and qty_b > 0:
+                parts.append(f"same area, {_who(higher)}'s rate is higher ({rates})")
+            else:
+                parts.append(f"{_who(higher)}'s rate is higher ({rates})")
+    return parts
 
 
 def row_comparison_summary(row: dict[str, Any], vendors: list[str]) -> str:
@@ -108,18 +213,13 @@ def row_comparison_summary(row: dict[str, Any], vendors: list[str]) -> str:
     unit = _qty_unit(ma["pricing_method"] or mb["pricing_method"])
 
     amount = _amount_clause(amt_a, amt_b, a, b)
-    if qty_a > 0 and qty_b > 0:
-        mid = (qty_a + qty_b) / 2.0
-        qty_gap = abs(qty_a - qty_b) / mid if mid else 0.0
-        if qty_gap >= 0.10:
-            return f"{amount} — {qty_a:g} {unit} vs {qty_b:g} {unit} (billed more area)"
-        if rate_a > 0 and rate_b > 0:
-            rmid = (rate_a + rate_b) / 2.0
-            if rmid and abs(rate_a - rate_b) / rmid >= 0.10:
-                higher = a if rate_a > rate_b else b
-                return f"{amount} — same area, {_who(higher)}'s rate is higher"
-
-    return amount
+    reasons = _qty_rate_parts(qty_a, qty_b, rate_a, rate_b, unit, a, b)
+    spec = _spec_clause(ma, mb, a, b)
+    if spec:
+        reasons.append(spec)
+    if not reasons:
+        return amount
+    return f"{amount} — " + " · ".join(reasons)
 
 
 def _item_count_reason(

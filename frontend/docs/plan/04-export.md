@@ -47,7 +47,7 @@ and amounts. The **detailed** PDF includes the Comparison Summary column; the
 spaces artefact keeps one summary line on each space header. Those lines use the
 same composition as the matrix: amount plus item-count / exclusive-work /
 scopes-differ reasons. Detailed work-row summaries lead with the money gap, then
-qty/rate.
+qty/rate, then a specified-finish clause when the vendor wrote one.
 
 ## The problem this solves
 

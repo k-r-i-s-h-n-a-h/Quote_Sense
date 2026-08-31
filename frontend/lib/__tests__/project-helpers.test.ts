@@ -501,6 +501,80 @@ describe("compare coverage semantics", () => {
     expect(text).toContain("180 sqft vs 120 sqft");
     expect(text).toContain("more area");
   });
+
+  it("names qty and rate when both differ, plus specified finishes", () => {
+    const text = rowComparisonSummary(
+      {
+        coverage: { A: "quoted", B: "quoted" },
+        A: 12036,
+        B: 29500,
+        measures: {
+          A: {
+            quantity: 12,
+            rate: 850,
+            pricing_method: "Area (sqft)",
+            description:
+              "Wall panelling with designed laminates and glass combinations",
+          },
+          B: {
+            quantity: 20,
+            rate: 1250,
+            pricing_method: "Area (sqft)",
+            description: "Decor wall panelling with louvers",
+          },
+        },
+      },
+      ["A", "B"]
+    );
+    expect(text).toContain("₹17,464 higher");
+    expect(text).toContain("12 sqft vs 20 sqft");
+    expect(text).toContain("₹850/sqft vs ₹1,250/sqft");
+    expect(text).toContain("laminates");
+    expect(text).toContain("louvers");
+  });
+
+  it("omits finish notes when neither vendor wrote a description", () => {
+    const text = rowComparisonSummary(
+      {
+        coverage: { A: "quoted", B: "quoted" },
+        A: 12036,
+        B: 29500,
+        measures: {
+          A: { quantity: 12, rate: 850, pricing_method: "Area (sqft)" },
+          B: { quantity: 20, rate: 1250, pricing_method: "Area (sqft)" },
+        },
+      },
+      ["A", "B"]
+    );
+    expect(text).not.toContain("specified");
+  });
+
+  it("still names qty when measures keys omit the quote suffix", () => {
+    const text = rowComparisonSummary(
+      {
+        coverage: {
+          "Infosys (Q1)": "quoted",
+          "TCS (Q2)": "quoted",
+        },
+        "Infosys (Q1)": 12036,
+        "TCS (Q2)": 29500,
+        measures: {
+          Infosys: {
+            quantity: 12,
+            rate: 850,
+            pricing_method: "Area (sqft)",
+          },
+          TCS: {
+            quantity: 20,
+            rate: 1250,
+            pricing_method: "Area (sqft)",
+          },
+        },
+      },
+      ["Infosys (Q1)", "TCS (Q2)"]
+    );
+    expect(text).toContain("12 sqft vs 20 sqft");
+  });
 });
 
 describe("space header summary reasons", () => {

@@ -51,6 +51,49 @@ def test_rate_driven_summary_when_qty_similar():
     assert "₹10,000 higher" in text
 
 
+def test_qty_and_rate_both_named_when_both_differ():
+    row = {
+        A: 12036,
+        B: 29500,
+        "coverage": {A: "quoted", B: "quoted"},
+        "measures": {
+            A: {
+                "quantity": 12,
+                "rate": 850,
+                "pricing_method": "Area – Direct Entry (sq ft)",
+                "description": "Wall panelling with designed laminates and glass combinations",
+            },
+            B: {
+                "quantity": 20,
+                "rate": 1250,
+                "pricing_method": "Area – Direct Entry (sq ft)",
+                "description": "Decor wall panelling with louvers",
+            },
+        },
+    }
+    text = row_comparison_summary(row, VENDORS)
+    assert "TCS is ₹17,464 higher" in text
+    assert "12 sqft vs 20 sqft" in text
+    assert "₹850/sqft vs ₹1,250/sqft" in text
+    assert "laminates" in text and "glass" in text
+    assert "louvers" in text
+
+
+def test_spec_omitted_when_description_empty():
+    row = {
+        A: 12036,
+        B: 29500,
+        "coverage": {A: "quoted", B: "quoted"},
+        "measures": {
+            A: {"quantity": 12, "rate": 850, "pricing_method": "Area (sqft)", "description": ""},
+            B: {"quantity": 20, "rate": 1250, "pricing_method": "Area (sqft)", "description": ""},
+        },
+    }
+    text = row_comparison_summary(row, VENDORS)
+    assert "specified" not in text
+    assert "12 sqft vs 20 sqft" in text
+
+
 def test_true_gap_keeps_did_not_quote():
     row = {
         A: 25000,

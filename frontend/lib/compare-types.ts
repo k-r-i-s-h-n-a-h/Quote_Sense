@@ -23,6 +23,7 @@ export type VendorMeasures = {
   quantity?: number;
   rate?: number;
   pricing_method?: string;
+  description?: string;
 };
 
 /** How a vendor's figure in a bundle row was arrived at. */
@@ -491,16 +492,140 @@ function inrDelta(amount: number): string {
   return `₹${n.toLocaleString("en-IN")}`;
 }
 
+const SPEC_TERMS: [string, string][] = [
+  ["hi-gloss", "hi-gloss"],
+  ["hi gloss", "hi-gloss"],
+  ["high gloss", "hi-gloss"],
+  ["hdhmr", "HDHMR"],
+  ["greenply", "Greenply"],
+  ["century", "Century"],
+  ["merino", "Merino"],
+  ["hettich", "Hettich"],
+  ["hafele", "Hafele"],
+  ["laminates", "laminates"],
+  ["laminate", "laminate"],
+  ["louvers", "louvers"],
+  ["louver", "louver"],
+  ["louvres", "louvers"],
+  ["louvre", "louver"],
+  ["plywood", "plywood"],
+  ["beeding", "beeding"],
+  ["beading", "beading"],
+  ["membrane", "membrane"],
+  ["veneer", "veneer"],
+  ["acrylic", "acrylic"],
+  ["premium", "premium"],
+  ["mirror", "mirror"],
+  ["glass", "glass"],
+  ["walnut", "walnut"],
+  ["blum", "Blum"],
+  ["matt", "matt"],
+  ["matte", "matte"],
+  ["teak", "teak"],
+  ["oak", "oak"],
+  ["pvc", "PVC"],
+  ["mdf", "MDF"],
+  ["pu finish", "PU finish"],
+];
+
+function specTokens(description: string): string[] {
+  const text = String(description || "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!text) return [];
+  const folded = text.toLowerCase();
+  const found: string[] = [];
+  const seen = new Set<string>();
+  for (const [term, label] of SPEC_TERMS) {
+    if (seen.has(label.toLowerCase())) continue;
+    const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    if (!new RegExp(`(?<![a-z0-9])${escaped}(?![a-z0-9])`, "i").test(folded)) {
+      continue;
+    }
+    found.push(label);
+    seen.add(label.toLowerCase());
+    if (found.length >= 4) break;
+  }
+  return found;
+}
+
+function specClause(
+  ma: VendorMeasures,
+  mb: VendorMeasures,
+  a: Vendor,
+  b: Vendor
+): string {
+  const ta = specTokens(String(ma.description || ""));
+  const tb = specTokens(String(mb.description || ""));
+  if (!ta.length && !tb.length) return "";
+  const same =
+    ta.length &&
+    tb.length &&
+    ta.map((x) => x.toLowerCase()).sort().join("|") ===
+      tb.map((x) => x.toLowerCase()).sort().join("|");
+  if (same) return "";
+  const bits: string[] = [];
+  if (ta.length) bits.push(`${whoOf(a)} specified ${ta.join(", ")}`);
+  if (tb.length) bits.push(`${whoOf(b)} specified ${tb.join(", ")}`);
+  return bits.join("; ");
+}
+
+function qtyRateParts(
+  qtyA: number,
+  qtyB: number,
+  rateA: number,
+  rateB: number,
+  unit: string,
+  a: Vendor,
+  b: Vendor
+): string[] {
+  const parts: string[] = [];
+  let qtyGap = false;
+  if (qtyA > 0 && qtyB > 0) {
+    const mid = (qtyA + qtyB) / 2;
+    qtyGap = Boolean(mid && Math.abs(qtyA - qtyB) / mid >= 0.1);
+    if (qtyGap) {
+      parts.push(`${qtyA} ${unit} vs ${qtyB} ${unit} (billed more area)`);
+    }
+  }
+  if (rateA > 0 && rateB > 0) {
+    const rmid = (rateA + rateB) / 2;
+    if (rmid && Math.abs(rateA - rateB) / rmid >= 0.1) {
+      const higher = rateA > rateB ? a : b;
+      const rates = `${inrDelta(rateA)}/${unit} vs ${inrDelta(rateB)}/${unit}`;
+      if (qtyGap) {
+        parts.push(rates);
+      } else if (qtyA > 0 && qtyB > 0) {
+        parts.push(`same area, ${whoOf(higher)}'s rate is higher (${rates})`);
+      } else {
+        parts.push(`${whoOf(higher)}'s rate is higher (${rates})`);
+      }
+    }
+  }
+  return parts;
+}
+
+function measureOf(row: SpaceRow, vendor: Vendor): VendorMeasures {
+  const bag = row.measures;
+  if (!bag) return {};
+  if (bag[vendor]) return bag[vendor];
+  const who = vendor.split(" (")[0].trim().toLowerCase();
+  for (const [key, value] of Object.entries(bag)) {
+    if (key.split(" (")[0].trim().toLowerCase() === who) return value || {};
+  }
+  return {};
+}
+
 /**
- * Row-wise Comparison Summary. Prefers S5 `row.summary`; otherwise mirrors
- * the backend deterministic rules from amounts, measures, and coverage.
+ * Row-wise Comparison Summary. Prefers S5 `row.summary` when it already
+ * names a qty/rate/spec reason; otherwise composes from amounts, measures,
+ * and coverage so every work row can show why, not only the money gap.
  */
 export function rowComparisonSummary(
   row: SpaceRow,
   vendors: Vendor[]
 ): string {
-  const shipped = String(row.summary || "").trim();
-  if (shipped) return shipped;
   if (vendors.length < 2) return "";
 
   const elsewhere: string[] = [];
@@ -532,8 +657,8 @@ export function rowComparisonSummary(
   const b = quoted[1];
   const amtA = amountOf(row, a);
   const amtB = amountOf(row, b);
-  const ma = row.measures?.[a] || {};
-  const mb = row.measures?.[b] || {};
+  const ma = measureOf(row, a);
+  const mb = measureOf(row, b);
   const qtyA = Number(ma.quantity) || 0;
   const qtyB = Number(mb.quantity) || 0;
   const rateA = Number(ma.rate) || 0;
@@ -545,20 +670,14 @@ export function rowComparisonSummary(
       ? "Same amount"
       : `${whoOf(amtA > amtB ? a : b)} is ${inrDelta(Math.abs(amtA - amtB))} higher`;
 
-  if (qtyA > 0 && qtyB > 0) {
-    const mid = (qtyA + qtyB) / 2;
-    if (mid && Math.abs(qtyA - qtyB) / mid >= 0.1) {
-      return `${amountClause} — ${qtyA} ${unit} vs ${qtyB} ${unit} (billed more area)`;
-    }
-    if (rateA > 0 && rateB > 0) {
-      const rmid = (rateA + rateB) / 2;
-      if (rmid && Math.abs(rateA - rateB) / rmid >= 0.1) {
-        const higher = rateA > rateB ? a : b;
-        return `${amountClause} — same area, ${whoOf(higher)}'s rate is higher`;
-      }
-    }
+  const reasons = qtyRateParts(qtyA, qtyB, rateA, rateB, unit, a, b);
+  const spec = specClause(ma, mb, a, b);
+  if (spec) reasons.push(spec);
+  if (!reasons.length) {
+    const shipped = String(row.summary || "").trim();
+    return shipped || amountClause;
   }
-  return amountClause;
+  return `${amountClause} — ${reasons.join(" · ")}`;
 }
 
 export type SpaceHeaderSummaryOpts = {

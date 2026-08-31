@@ -58,9 +58,11 @@ A space is `comparable = false` when any vendor's status there is
 like for like, and the header says so instead of pretending.
 
 Each `SpaceRow` also carries per-vendor `measures` (quantity, rate, pricing
-method) and a deterministic `summary` from
-`services/comparison_summary.py`. The summary explains a gap; it does not
-change amounts.
+method, description) and a deterministic `summary` from
+`services/comparison_summary.py`. On every work row the summary is amount,
+then qty, then rate, then a `specified …` clause when description names a
+finish or brand. Empty qty/rate/description stay silent. The summary explains
+a gap; it does not change amounts.
 
 ## Ordering
 

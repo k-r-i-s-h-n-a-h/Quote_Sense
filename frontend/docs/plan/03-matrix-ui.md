@@ -51,13 +51,17 @@ Adds a badge when the space is not comparable:
   Collapse must not hide this badge.
 
 A last sticky **Comparison Summary** column explains the row (quantity vs rate
-vs parent/package vs true N/A). Space headers show a header summary while work
-is collapsed. The header sentence is amount plus why: item counts (`3 items vs
-5 — charged more for fewer lines`), exclusive work names (capped at three), and
-`scopes differ (package vs itemised)` when the space is not like-for-like. Work
-rows lead with the rupee gap, then qty/rate when both quoted. True N/A and
-`incl. in …` stay as they are. The column does not regroup and does not change
-totals ([ACTION.md](../../../ACTION.md) §8).
+vs named finish vs parent/package vs true N/A). Space headers show a header
+summary while work is collapsed. The header sentence is amount plus why: item
+counts (`3 items vs 5 — charged more for fewer lines`), exclusive work names
+(capped at three), and `scopes differ (package vs itemised)` when the space is
+not like-for-like. Work rows (every sub-service) lead with the rupee gap, then
+qty and rate when both quoted those figures, then `specified …` only if the
+vendor wrote a finish or brand in `description`. True N/A and `incl. in …`
+stay as they are. The column does not regroup and does not change totals
+([ACTION.md](../../../ACTION.md) §8). Refreshing a compare URL reuses the
+saved `session_id`; qty/rate notes need a matrix that includes `measures`, so
+the page starts a new compare once if that field is missing.
 
 Space aliases continue to render under the canonical name, which is how a user
 sanity-checks a merge.

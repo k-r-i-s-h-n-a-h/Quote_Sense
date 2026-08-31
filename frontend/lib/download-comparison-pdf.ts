@@ -5,6 +5,7 @@ import {
   exclusiveWorkLabels,
   groupTableData,
   isSpaceComparable,
+  mergeWorkRow,
   quotedWorkCounts,
   sumSubServiceRow,
 } from "./compare-matrix";
@@ -536,14 +537,9 @@ export async function downloadComparisonPdf(
 
       if (!spacesOnly) {
         for (const sub of spaceGroup.subs) {
-          const subTotals = sumSubServiceRow(sub.rows, vendors);
+          const merged = mergeWorkRow(sub.rows, vendors);
           const first = sub.rows[0] ?? ({} as SpaceRow);
-          const merged: SpaceRow = {
-            ...first,
-            ...Object.fromEntries(
-              vendors.map((v) => [v, Number(subTotals[v]) || 0])
-            ),
-          };
+          const subTotals = sumSubServiceRow(sub.rows, vendors);
           body.push([
             {
               content: sub.sub,
@@ -762,14 +758,9 @@ export async function downloadComparisonPdf(
           continue;
         }
         for (const sub of spaceGroup.subs) {
-          const subTotals = sumSubServiceRow(sub.rows, vendors);
+          const merged = mergeWorkRow(sub.rows, vendors);
           const first = sub.rows[0] ?? ({} as SpaceRow);
-          const merged: SpaceRow = {
-            ...first,
-            ...Object.fromEntries(
-              vendors.map((v) => [v, Number(subTotals[v]) || 0])
-            ),
-          };
+          const subTotals = sumSubServiceRow(sub.rows, vendors);
           body.push([
             {
               content: sub.sub,

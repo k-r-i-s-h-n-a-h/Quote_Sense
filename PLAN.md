@@ -13,8 +13,10 @@ must not be painted again as Whole home, package vs itemised gets a plain-Englis
 ask-the-vendor note, GST-inclusive billed amounts are compared even when quotes
 were entered excl. vs incl. GST, the matrix does not paint a Quote total row,
 an expired session is a login popup rather than an inline button, the matrix
-shows space totals first (work list on demand), and PDF export offers a spaces
-artefact and a detailed artefact.
+shows space totals first (work list on demand), PDF export offers a spaces
+artefact and a detailed artefact, nested rooms stay separate `space_id`s with
+an `incl_in_parent` cell instead of a false N/A, and Comparison Summary
+explains a gap without changing totals.
 
 | Where | File | Covers |
 | --- | --- | --- |

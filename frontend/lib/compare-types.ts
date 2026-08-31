@@ -13,7 +13,17 @@ import type { VendorLabel, VendorMeta } from "./format";
 export type Vendor = string;
 
 /** How a vendor's zero should be read for one cell. */
-export type CoverageStatus = "quoted" | "incl_in_bundle" | "not_quoted";
+export type CoverageStatus =
+  | "quoted"
+  | "incl_in_bundle"
+  | "incl_in_parent"
+  | "not_quoted";
+
+export type VendorMeasures = {
+  quantity?: number;
+  rate?: number;
+  pricing_method?: string;
+};
 
 /** How a vendor's figure in a bundle row was arrived at. */
 export type PriceBasis = "bundle" | "itemized" | "none";
@@ -37,6 +47,10 @@ export interface SpaceRow {
   breakdown?: Breakdown[];
   /** Per-vendor cell status, e.g. "quoted" or "incl_in_bundle:Hardware". */
   coverage?: Record<Vendor, string>;
+  contained_in?: string;
+  measures?: Record<Vendor, VendorMeasures>;
+  /** Deterministic row-wise why-this-gap sentence from S5. */
+  summary?: string;
   /** S4 family, e.g. "lighting" — used to hide Whole-home recap duplicates. */
   bundle_family?: string;
   work_confidence?: number;
@@ -69,6 +83,8 @@ export interface CoverageEntry {
   status: CoverageStatus;
   bundle_id?: string;
   bundle_label?: string;
+  parent_space_id?: string;
+  parent_space?: string;
   comparable: boolean;
 }
 
@@ -448,6 +464,207 @@ export function parseCellStatus(raw: string | undefined): {
     const [, label = ""] = value.split(":");
     return { status: "incl_in_bundle", bundleLabel: label.trim() };
   }
+  if (value.startsWith("incl_in_parent")) {
+    const [, label = ""] = value.split(":");
+    return { status: "incl_in_parent", bundleLabel: label.trim() };
+  }
   if (value === "quoted") return { status: "quoted", bundleLabel: "" };
   return { status: "not_quoted", bundleLabel: "" };
+}
+
+function whoOf(vendor: Vendor): string {
+  return vendor.split(" (")[0].trim() || vendor;
+}
+
+function qtyUnit(pricingMethod: string): string {
+  const pm = pricingMethod.toLowerCase();
+  if (pm.includes("sq ft") || pm.includes("sqft") || pm.includes("sq.ft")) {
+    return "sqft";
+  }
+  if (pm.includes("sq m") || pm.includes("sqm")) return "sqm";
+  if (pm.includes("rft") || pm.includes("running")) return "rft";
+  return "units";
+}
+
+function inrDelta(amount: number): string {
+  const n = Math.round(Number(amount) || 0);
+  return `₹${n.toLocaleString("en-IN")}`;
+}
+
+/**
+ * Row-wise Comparison Summary. Prefers S5 `row.summary`; otherwise mirrors
+ * the backend deterministic rules from amounts, measures, and coverage.
+ */
+export function rowComparisonSummary(
+  row: SpaceRow,
+  vendors: Vendor[]
+): string {
+  const shipped = String(row.summary || "").trim();
+  if (shipped) return shipped;
+  if (vendors.length < 2) return "";
+
+  const elsewhere: string[] = [];
+  const gaps: Vendor[] = [];
+  const quoted: Vendor[] = [];
+  for (const vendor of vendors) {
+    const { status, bundleLabel } = parseCellStatus(row.coverage?.[vendor]);
+    if (status === "incl_in_parent") {
+      elsewhere.push(
+        `${whoOf(vendor)}'s figure is inside ${bundleLabel || "another space"}`
+      );
+    } else if (status === "incl_in_bundle") {
+      elsewhere.push(
+        `${whoOf(vendor)}'s figure is inside ${bundleLabel || "a package"}`
+      );
+    } else if (amountOf(row, vendor) > 0 || status === "quoted") {
+      quoted.push(vendor);
+    } else {
+      gaps.push(vendor);
+    }
+  }
+  if (elsewhere.length) return elsewhere.join("; ");
+  if (quoted.length === 1 && gaps.length) {
+    return `${whoOf(gaps[0])} did not quote this line`;
+  }
+  if (quoted.length < 2) return "";
+
+  const a = quoted[0];
+  const b = quoted[1];
+  const amtA = amountOf(row, a);
+  const amtB = amountOf(row, b);
+  const ma = row.measures?.[a] || {};
+  const mb = row.measures?.[b] || {};
+  const qtyA = Number(ma.quantity) || 0;
+  const qtyB = Number(mb.quantity) || 0;
+  const rateA = Number(ma.rate) || 0;
+  const rateB = Number(mb.rate) || 0;
+  const unit = qtyUnit(String(ma.pricing_method || mb.pricing_method || ""));
+
+  const amountClause =
+    Math.abs(amtA - amtB) < 1
+      ? "Same amount"
+      : `${whoOf(amtA > amtB ? a : b)} is ${inrDelta(Math.abs(amtA - amtB))} higher`;
+
+  if (qtyA > 0 && qtyB > 0) {
+    const mid = (qtyA + qtyB) / 2;
+    if (mid && Math.abs(qtyA - qtyB) / mid >= 0.1) {
+      return `${amountClause} — ${qtyA} ${unit} vs ${qtyB} ${unit} (billed more area)`;
+    }
+    if (rateA > 0 && rateB > 0) {
+      const rmid = (rateA + rateB) / 2;
+      if (rmid && Math.abs(rateA - rateB) / rmid >= 0.1) {
+        const higher = rateA > rateB ? a : b;
+        return `${amountClause} — same area, ${whoOf(higher)}'s rate is higher`;
+      }
+    }
+  }
+  return amountClause;
+}
+
+export type SpaceHeaderSummaryOpts = {
+  itemCounts?: Record<string, number>;
+  exclusiveLabels?: Record<string, string[]>;
+  comparable?: boolean;
+};
+
+function amountDeltaClause(
+  totals: Record<Vendor, number>,
+  vendors: Vendor[],
+  skipGap: boolean
+): string {
+  if (vendors.length < 2) return "";
+  const quoted = vendors.filter((v) => (Number(totals[v]) || 0) > 0);
+  const gaps = vendors.filter((v) => (Number(totals[v]) || 0) <= 0);
+  if (quoted.length === 1 && gaps.length) {
+    return skipGap ? "" : `${whoOf(gaps[0])} did not quote this line`;
+  }
+  if (quoted.length < 2) return "";
+  const a = quoted[0];
+  const b = quoted[1];
+  const amtA = Number(totals[a]) || 0;
+  const amtB = Number(totals[b]) || 0;
+  if (Math.abs(amtA - amtB) < 1) return "Same amount";
+  const higher = amtA > amtB ? a : b;
+  return `${whoOf(higher)} is ${inrDelta(Math.abs(amtA - amtB))} higher`;
+}
+
+function itemCountReason(
+  totals: Record<Vendor, number>,
+  vendors: Vendor[],
+  itemCounts: Record<string, number> | undefined
+): string {
+  if (!itemCounts || vendors.length < 2) return "";
+  const quoted = vendors.filter((v) => (Number(totals[v]) || 0) > 0);
+  if (quoted.length < 2) return "";
+  const a = quoted[0];
+  const b = quoted[1];
+  const nA = Number(itemCounts[a]) || 0;
+  const nB = Number(itemCounts[b]) || 0;
+  if (nA === nB || (nA === 0 && nB === 0)) return "";
+  const amtA = Number(totals[a]) || 0;
+  const amtB = Number(totals[b]) || 0;
+  const higher = amtA >= amtB ? a : b;
+  const higherN = higher === a ? nA : nB;
+  const otherN = higher === a ? nB : nA;
+  let text = `${nA} items vs ${nB}`;
+  if (higherN < otherN) {
+    text += ` — ${whoOf(higher)} charged more for fewer lines`;
+  }
+  return text;
+}
+
+function exclusiveReason(
+  vendors: Vendor[],
+  exclusiveLabels: Record<string, string[]> | undefined
+): string[] {
+  if (!exclusiveLabels) return [];
+  const parts: string[] = [];
+  for (const vendor of vendors) {
+    const labels = (exclusiveLabels[vendor] || []).filter(Boolean).slice(0, 3);
+    if (!labels.length) continue;
+    parts.push(`${whoOf(vendor)} also quoted ${labels.join(", ")}`);
+  }
+  return parts;
+}
+
+/** Space-header summary: amount plus why (counts, exclusives, scopes). */
+export function spaceHeaderSummary(
+  totals: Record<Vendor, number>,
+  vendors: Vendor[],
+  coverageForSpace: CoverageEntry[],
+  opts?: SpaceHeaderSummaryOpts
+): string {
+  const parentNotes = coverageForSpace
+    .filter((e) => e.status === "incl_in_parent")
+    .map(
+      (e) =>
+        `${whoOf(e.vendor)}'s figure is inside ${e.parent_space || "another space"}`
+    );
+  const bundleNotes = coverageForSpace
+    .filter((e) => e.status === "incl_in_bundle")
+    .map(
+      (e) =>
+        `${whoOf(e.vendor)}'s figure is inside ${e.bundle_label || "a package"}`
+    );
+  const hasBundle = coverageForSpace.some((e) => e.status === "incl_in_bundle");
+  const skipGap = parentNotes.length > 0 || bundleNotes.length > 0;
+
+  const parts: string[] = [];
+  const amount = amountDeltaClause(totals, vendors, skipGap);
+  if (amount) parts.push(amount);
+
+  if (opts?.comparable === false) {
+    parts.push(
+      hasBundle ? "scopes differ (package vs itemised)" : "scopes differ"
+    );
+  }
+
+  const counts = itemCountReason(totals, vendors, opts?.itemCounts);
+  if (counts) parts.push(counts);
+
+  parts.push(...exclusiveReason(vendors, opts?.exclusiveLabels));
+  parts.push(...parentNotes);
+  if (opts?.comparable !== false) parts.push(...bundleNotes);
+
+  return parts.join(" · ");
 }

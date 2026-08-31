@@ -43,8 +43,9 @@ from services.bundles import (
     bundled_families_by_vendor,
     bundled_space_ids,
 )
-from services.space_clusters import apply_space_clusters
+from services.space_clusters import apply_space_clusters, containment_parent
 from services.work_catalog import apply_work_catalog
+from services.comparison_summary import row_comparison_summary
 
 DEBUG_LOG_PATH = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "../../.cursor/debug-b7c34a.log")
@@ -363,6 +364,47 @@ def _generate_recommendation(summary_prompt, chart_data, bundle_tier=None):
         ex.shutdown(wait=False)
 
 
+def _vendor_measures(line_slice, vendor: str) -> dict:
+    if "vendor_name" not in line_slice.columns:
+        return {"quantity": 0.0, "rate": 0.0, "pricing_method": ""}
+    slice_ = line_slice[line_slice["vendor_name"] == vendor]
+    if len(slice_) == 0:
+        return {"quantity": 0.0, "rate": 0.0, "pricing_method": ""}
+    qty = 0.0
+    if "quantity" in slice_.columns:
+        qty = float(pd.to_numeric(slice_["quantity"], errors="coerce").fillna(0).sum())
+    amount = float(pd.to_numeric(slice_["amount"], errors="coerce").fillna(0).sum())
+    rate = 0.0
+    if "rate" in slice_.columns:
+        rates = pd.to_numeric(slice_["rate"], errors="coerce").fillna(0)
+        if len(slice_) == 1:
+            rate = float(rates.iloc[0] or 0)
+        elif qty > 0:
+            rate = amount / qty
+        elif len(rates):
+            rate = float(rates.mean())
+    elif qty > 0:
+        rate = amount / qty
+    method = ""
+    if "pricing_method" in slice_.columns:
+        mode = slice_["pricing_method"].mode()
+        if not mode.empty:
+            method = normalize_pricing_method(str(mode.iloc[0] or "Unit"))
+    return {
+        "quantity": round(qty, 4),
+        "rate": round(rate, 2),
+        "pricing_method": method,
+    }
+
+
+def _parent_id_for_slice(line_slice, space_id: str, present: set[str]) -> str:
+    if "contained_in" in line_slice.columns:
+        raw = str(line_slice["contained_in"].iloc[0] or "").strip()
+        if raw:
+            return raw
+    return containment_parent(str(space_id), present)
+
+
 def _build_space_rows(subset, vendors, bundled_families=None):
     """Pivot rows into one entry per (space_id, work_key).
 
@@ -448,11 +490,22 @@ def _build_space_rows(subset, vendors, bundled_families=None):
             "_work_order": float(work_order.get((space_id, work_key), 1e9)),
         }
         # Cell-level coverage. A zero is only "not quoted" when the vendor has
-        # not bundled this work's family somewhere else in the quote.
+        # not bundled this work's family somewhere else, and not priced the
+        # same work_key in a parent space (nested room).
         family = str(_modal('bundle_family'))
         if family.casefold() in ("nan", "none", "null"):
             family = ""
         row_dict["bundle_family"] = family
+        present_ids = {str(v) for v in subset["space_id"].tolist()}
+        parent_id = _parent_id_for_slice(line_slice, str(space_id), present_ids)
+        parent_label = ""
+        if parent_id:
+            parent_rows = subset[subset["space_id"].astype(str) == parent_id]
+            if len(parent_rows):
+                parent_label = str(parent_rows["space"].iloc[0] or parent_id)
+        row_dict["contained_in"] = parent_id
+        measures = {vendor: _vendor_measures(line_slice, vendor) for vendor in vendors}
+        row_dict["measures"] = measures
         cell_coverage = {}
         for vendor in vendors:
             amount = float(amounts[vendor]) if vendor in amounts.index else 0.0
@@ -463,9 +516,26 @@ def _build_space_rows(subset, vendors, bundled_families=None):
             bundle_label = (bundled_families or {}).get(vendor, {}).get(family)
             if bundle_label:
                 cell_coverage[vendor] = f"incl_in_bundle:{bundle_label}"
-            else:
+                continue
+            parent_hit = False
+            if parent_id:
+                parent_work = subset[
+                    (subset["space_id"].astype(str) == parent_id)
+                    & (subset["work_key"] == work_key)
+                    & (subset["vendor_name"] == vendor)
+                ]
+                parent_amt = (
+                    float(pd.to_numeric(parent_work["amount"], errors="coerce").fillna(0).sum())
+                    if len(parent_work)
+                    else 0.0
+                )
+                if parent_amt > 0:
+                    cell_coverage[vendor] = f"incl_in_parent:{parent_label or parent_id}"
+                    parent_hit = True
+            if not parent_hit:
                 cell_coverage[vendor] = "not_quoted"
         row_dict["coverage"] = cell_coverage
+        row_dict["summary"] = row_comparison_summary(row_dict, vendors)
         rows.append(row_dict)
 
     rows.sort(key=lambda r: (r["_space_order"], r["_work_order"]))
@@ -493,6 +563,7 @@ def _build_coverage(df, vendors):
     ordered = (
         space_rows.groupby(['space_id'])['__seq'].min().sort_values().index.tolist()
     )
+    present_ids = {str(s) for s in ordered}
 
     bundle_label_by_vendor = {}
     for _, row in df[df['scope'] == 'bundle'].iterrows():
@@ -509,18 +580,34 @@ def _build_coverage(df, vendors):
         bundled_here = {
             vendor for vendor, spaces in affected.items() if str(space_id) in spaces
         }
-        comparable = len(bundled_here) == 0
+        parent_id = ""
+        if "contained_in" in slice_.columns:
+            parent_id = str(slice_["contained_in"].iloc[0] or "").strip()
+        if not parent_id:
+            parent_id = containment_parent(str(space_id), present_ids)
+        parent_label = ""
+        parent_quoted: set[str] = set()
+        if parent_id:
+            parent_slice = space_rows[space_rows["space_id"].astype(str) == parent_id]
+            if len(parent_slice):
+                parent_label = str(parent_slice["space"].iloc[0] or parent_id)
+                parent_quoted = set(str(v) for v in parent_slice["vendor_name"].tolist())
 
+        per_vendor: list[tuple[str, str, str]] = []
+        has_parent_gap = False
         for vendor in vendors:
             if vendor in quoted_vendors:
-                status = "quoted"
-                bundle_id = ""
+                per_vendor.append((vendor, "quoted", ""))
             elif vendor in bundled_here:
-                status = "incl_in_bundle"
-                bundle_id = (bundle_label_by_vendor.get(vendor) or [("", "")])[0][0]
+                per_vendor.append((vendor, "incl_in_bundle", (bundle_label_by_vendor.get(vendor) or [("", "")])[0][0]))
+            elif vendor in parent_quoted:
+                per_vendor.append((vendor, "incl_in_parent", parent_id))
+                has_parent_gap = True
             else:
-                status = "not_quoted"
-                bundle_id = ""
+                per_vendor.append((vendor, "not_quoted", ""))
+        comparable = len(bundled_here) == 0 and not has_parent_gap
+
+        for vendor, status, extra_id in per_vendor:
             entry = {
                 "space_id": str(space_id),
                 "space": space_label,
@@ -528,11 +615,14 @@ def _build_coverage(df, vendors):
                 "status": status,
                 "comparable": comparable,
             }
-            if bundle_id:
-                entry["bundle_id"] = bundle_id
+            if status == "incl_in_bundle" and extra_id:
+                entry["bundle_id"] = extra_id
                 entry["bundle_label"] = (
                     bundle_label_by_vendor.get(vendor) or [("", "")]
                 )[0][1]
+            if status == "incl_in_parent":
+                entry["parent_space_id"] = parent_id
+                entry["parent_space"] = parent_label or parent_id
             entries.append(entry)
     return entries
 

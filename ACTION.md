@@ -132,3 +132,19 @@ PDF export offers two artefacts: **spaces** (headers + packages/recaps) and
 **detailed** (every work line). Do not ship a space-only PDF that drops lump-sum
 packages or recap notes. Do not hide a scope mismatch to make totals look
 comparable.
+
+---
+
+## 8. Nested spaces and Comparison Summary
+
+A walk-in closet (or attached bath, dressing, balcony, utility) that one vendor
+quoted as its own space, and another folded into a parent room, must stay **two
+`space_id`s**. Do not merge the child into the parent. S3 may only add a
+containment **edge** (`contained_in`). The child's cell for the vendor who
+priced that work in the parent is `incl_in_parent`, not `N/A`.
+
+`N/A` remains for a genuine gap. Do not hide a true miss.
+
+**Comparison Summary** is an explanation column (quantity / rate / coverage).
+It must not change space totals or invent a new grouping key. The frontend
+still groups on `space_id`.

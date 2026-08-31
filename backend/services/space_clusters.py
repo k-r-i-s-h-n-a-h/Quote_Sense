@@ -108,7 +108,13 @@ _CLUSTER_LABELS = {
     "gf_bedroom2": "GF Bedroom 2",
     "1f_bedroom1": "1F Bedroom 1",
     "1f_bedroom2": "1F Bedroom 2",
+    "walkin": "Walk-in Closet",
     "1f_walkin": "Walk-in Closet",
+    "gf_walkin": "Walk-in Closet",
+    "dressing": "Dressing",
+    "balcony": "Balcony",
+    "gf_balcony": "Balcony",
+    "1f_balcony": "Balcony",
     "mbr": "Master Bedroom",
     "1f_bathroom": "1F Bathroom",
     "gf_bathroom": "GF Bathroom",
@@ -269,6 +275,9 @@ def _room_token(text: str) -> str | None:
         return "foyer"
     if "living" in n:
         return "living"
+    if "balcony" in n:
+        prefix = _floor_prefix(n)
+        return f"{prefix}balcony" if prefix else "balcony"
     if "utility" in n or "janitor" in n:
         return "utility"
     if "pooja" in n:
@@ -294,7 +303,11 @@ def _room_token(text: str) -> str | None:
         return f"{prefix}bathroom" if prefix else "bathroom"
 
     if "walkin" in n or "walk in" in n:
-        return "1f_walkin"
+        prefix = _floor_prefix(n)
+        return f"{prefix}walkin" if prefix else "walkin"
+    if re.search(r"\bdressing(\s+room|\s+area)?\b", n) and "unit" not in n and "mirror" not in n:
+        prefix = _floor_prefix(n)
+        return f"{prefix}dressing" if prefix else "dressing"
     if re.search(r"\bmbr\b", n) or "master" in n:
         return "mbr"
     if "kid" in n or "children" in n:
@@ -325,6 +338,62 @@ def _room_token(text: str) -> str | None:
         return f"{prefix}room"
 
     return None
+
+
+_FLOOR_ID_RE = re.compile(r"^(gf_|1f_|2f_|3f_|4f_)")
+
+# Child kind -> preferred parent kinds (same floor first, then unqualified).
+_CONTAINED_KIND_PARENT: dict[str, tuple[str, ...]] = {
+    "walkin": ("mbr",),
+    "dressing": ("mbr",),
+    "mbr_bathroom": ("mbr",),
+    "attached_bathroom": ("mbr", "bedroom1"),
+    "kids_bathroom": ("kids_bedroom",),
+    "utility": ("kitchen",),
+    "balcony": ("living",),
+}
+
+
+def _split_space_id(space_id: str) -> tuple[str, str]:
+    sid = str(space_id or "").strip()
+    match = _FLOOR_ID_RE.match(sid)
+    if match:
+        return match.group(1), sid[len(match.group(1)) :]
+    return "", sid
+
+
+def containment_parent(space_id: str, present: set[str] | None = None) -> str:
+    """Parent space_id for a nested room, or "" if none / parent not quoted.
+
+    This is an edge, not a merge. Walk-in closet stays its own space_id.
+    """
+    present = present or set()
+    prefix, kind = _split_space_id(space_id)
+    parents = _CONTAINED_KIND_PARENT.get(kind)
+    if not parents:
+        return ""
+    candidates: list[str] = []
+    for parent_kind in parents:
+        if prefix:
+            candidates.append(f"{prefix}{parent_kind}")
+        candidates.append(parent_kind)
+    ordered: list[str] = []
+    for candidate in candidates:
+        if candidate != space_id and candidate not in ordered:
+            ordered.append(candidate)
+    if present:
+        for candidate in ordered:
+            if candidate in present:
+                return candidate
+        return ""
+    return ordered[0] if ordered else ""
+
+
+def _apply_containment(df) -> None:
+    present = {str(v) for v in df["space_id"].tolist()}
+    df["contained_in"] = [
+        containment_parent(str(sid), present) for sid in df["space_id"].tolist()
+    ]
 
 
 def is_room_label(space_raw: str, item_name: str = "") -> bool:
@@ -682,6 +751,7 @@ def _try_gemini_overlay(
         "FLOOR (Ground Floor Bathroom ≠ First Floor Bathroom), INSTANCE "
         "(Bedroom 1 ≠ Bedroom 2; Common Washroom ≠ 1st Floor Washroom), "
         "CONTAINMENT (Walk-in closet with its own work is not the master bedroom). "
+        "Never merge a nested room into its parent; S3 only clusters spellings. "
         "Kids Bedroom vs Bedroom 2 is a proposal only — if you cannot tell they "
         "are the same room, leave them apart.\n"
         "NEVER merge Kitchen with Bedroom, or Common Washroom with Walk-in closet.\n"
@@ -826,6 +896,7 @@ def apply_space_clusters(df, *, raw_col: str = "space_raw", out_col: str = "spac
         df["space_id"] = PROJECT_LEVEL_ID
         df["space_confidence"] = 0.4
         df["space_source"] = PROJECT_LEVEL_ID
+        df["contained_in"] = ""
         return df
 
     resolved = [resolve_space(row) for _, row in df.iterrows()]
@@ -836,6 +907,7 @@ def apply_space_clusters(df, *, raw_col: str = "space_raw", out_col: str = "spac
 
     _run_space_overlay(df, raw_col=raw_col, out_col=out_col)
     _finalize_space_labels(df, raw_col=raw_col, out_col=out_col)
+    _apply_containment(df)
     return df
 
 

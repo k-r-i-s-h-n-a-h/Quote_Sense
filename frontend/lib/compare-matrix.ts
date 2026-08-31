@@ -105,6 +105,29 @@ export function quotedWorkCounts(
 }
 
 /**
+ * Work labels quoted on one side only (amount > 0). Caps at 3 names per
+ * vendor so the header stays one sentence.
+ */
+export function exclusiveWorkLabels(
+  spaceGroup: SpaceGroup,
+  vendors: string[]
+): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  for (const v of vendors) out[v] = [];
+  if (vendors.length < 2) return out;
+  for (const sub of spaceGroup.subs) {
+    const totals = sumSubServiceRow(sub.rows, vendors);
+    const quoted = vendors.filter((v) => (totals[v] || 0) > 0);
+    if (quoted.length !== 1) continue;
+    const only = quoted[0];
+    if (out[only].length >= 3) continue;
+    const label = String(sub.sub || "").trim();
+    if (label) out[only].push(label);
+  }
+  return out;
+}
+
+/**
  * Nest rows for rendering. Insertion-ordered throughout: the backend already
  * sorted rows into quote-reading order, so this must never sort.
  */

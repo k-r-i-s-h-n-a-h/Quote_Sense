@@ -54,6 +54,15 @@ plainly in the description of the very same line. Reading the whole row fixes
 | 4 | Gemini overlay grouped it with a known room | `llm` | 0.5 |
 | 5 | No room anywhere | `project_level` | 0.4 |
 
+After clustering, `_apply_containment` sets `contained_in` (child → parent
+`space_id`) for nested rooms: walk-in/dressing → master bedroom, attached /
+master bath → that bedroom, balcony → living, utility → kitchen. Floor-aware:
+`1f_walkin` attaches to `1f_mbr`, not `gf_mbr`. This is an **edge**, not a
+merge. Walk-in closet and Master Bedroom stay two `space_id`s.
+
+The leftover LLM still returns `{"clusters":[{"members","kind"}]}` only. It
+must not merge containment.
+
 Rung 5 is a legitimate answer, not a failure. Transport, cleaning and
 whole-project electrical genuinely have no room.
 

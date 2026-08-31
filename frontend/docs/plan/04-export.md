@@ -43,7 +43,11 @@ from the compare page. `detail` is `"spaces"` or `"full"` (default full).
 
 Spaces mode must still carry lump-sum packages and recap notes. It must not drop
 a `scopes differ` marker. Both stay portrait A4 with centered vendor headers
-and amounts.
+and amounts. The **detailed** PDF includes the Comparison Summary column; the
+spaces artefact keeps one summary line on each space header. Those lines use the
+same composition as the matrix: amount plus item-count / exclusive-work /
+scopes-differ reasons. Detailed work-row summaries lead with the money gap, then
+qty/rate.
 
 ## The problem this solves
 

@@ -8,6 +8,7 @@ import {
 } from "@/lib/format";
 import {
   coverageIndex,
+  exclusiveWorkLabels,
   groupTableData,
   isSpaceComparable,
   quotedWorkCounts,
@@ -21,6 +22,8 @@ import {
   projectRowsForDisplay,
   recapPlacementNote,
   recapPlacementNotes,
+  rowComparisonSummary,
+  spaceHeaderSummary,
   vendorsShareCompany,
   withInferredPlacement,
   gstCompareBanner,
@@ -84,14 +87,18 @@ function AmountCell({
     );
   }
 
-  if (status === "incl_in_bundle") {
+  if (status === "incl_in_bundle" || status === "incl_in_parent") {
     return (
       <td className="px-4 py-2.5 text-center align-middle">
         <span
           className="text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 inline-block leading-tight"
-          title={`Included in this vendor's ${bundleLabel} package — not a missing item`}
+          title={
+            status === "incl_in_parent"
+              ? `Priced inside ${bundleLabel || "the parent space"} — not a missing item`
+              : `Included in this vendor's ${bundleLabel} package — not a missing item`
+          }
         >
-          incl. in {bundleLabel || "package"}
+          incl. in {bundleLabel || (status === "incl_in_parent" ? "parent space" : "package")}
         </span>
       </td>
     );
@@ -182,7 +189,7 @@ export default function ComparisonMatrix({
   };
   const expandAll = () => setExpanded(new Set(allSpaceIds));
   const collapseAll = () => setExpanded(new Set());
-  const colCount = vendors.length + 1;
+  const colCount = vendors.length + 2;
 
   const renderBundleRows = (
     rows: BundleRow[],
@@ -252,6 +259,9 @@ export default function ComparisonMatrix({
                 </td>
               );
             })}
+            <td className="px-3 py-3 text-left align-middle text-[11px] leading-snug text-stone-600">
+              {bundle.takeaway?.text || ""}
+            </td>
           </tr>
           {hasNotes ? (
             <tr>
@@ -357,6 +367,15 @@ export default function ComparisonMatrix({
       );
       const open = expanded.has(spaceGroup.spaceId);
       const itemCounts = quotedWorkCounts(spaceGroup, vendors);
+      const exclusiveLabels = exclusiveWorkLabels(spaceGroup, vendors);
+      const headerSummary = spaceHeaderSummary(
+        spaceTotals,
+        vendors,
+        vendors
+          .map((v) => coverIdx.get(`${spaceGroup.spaceId}||${v}`))
+          .filter((e): e is NonNullable<typeof e> => Boolean(e)),
+        { itemCounts, exclusiveLabels, comparable }
+      );
 
       return (
         <React.Fragment key={spaceGroup.spaceId || spaceGroup.space}>
@@ -422,6 +441,14 @@ export default function ComparisonMatrix({
             {vendors.map((vendor, vIdx) => {
               const value = Number(spaceTotals[vendor]) || 0;
               const nItems = itemCounts[vendor] || 0;
+              const entry = coverIdx.get(`${spaceGroup.spaceId}||${vendor}`);
+              const elsewhere =
+                entry?.status === "incl_in_parent" ||
+                entry?.status === "incl_in_bundle";
+              const elseLabel =
+                entry?.status === "incl_in_parent"
+                  ? entry.parent_space || "parent space"
+                  : entry?.bundle_label || "package";
               return (
                 <td
                   key={vIdx}
@@ -429,7 +456,11 @@ export default function ComparisonMatrix({
                     value === 0 ? "opacity-50" : ""
                   } ${!comparable ? "opacity-70" : ""}`}
                 >
-                  {value === 0 ? (
+                  {value === 0 && elsewhere ? (
+                    <span className="text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 inline-block leading-tight">
+                      incl. in {elseLabel}
+                    </span>
+                  ) : value === 0 ? (
                     <span className="text-sm font-semibold text-rose-400 italic">
                       N/A
                     </span>
@@ -446,6 +477,9 @@ export default function ComparisonMatrix({
                 </td>
               );
             })}
+            <td className="px-3 py-3 text-left align-middle text-[11px] leading-snug text-stone-600">
+              {headerSummary}
+            </td>
           </tr>
 
           {open
@@ -495,6 +529,9 @@ export default function ComparisonMatrix({
                 {vendors.map((vendor, vIdx) => (
                   <AmountCell key={vIdx} row={merged} vendor={vendor} />
                 ))}
+                <td className="px-3 py-2.5 text-left align-middle text-[11px] leading-snug text-stone-600">
+                  {rowComparisonSummary(merged, vendors)}
+                </td>
               </tr>
             );
           })
@@ -568,10 +605,10 @@ export default function ComparisonMatrix({
         </button>
       </div>
       <div className="overflow-x-auto border border-stone-300 rounded-md qs-table-scroll qs-table-doc max-h-[70vh]">
-        <table className="w-full text-left border-collapse min-w-[800px] table-fixed">
+        <table className="w-full text-left border-collapse min-w-[960px] table-fixed">
           <thead>
             <tr>
-              <th className="p-3.5 w-[32%] text-center text-[10px] font-bold tracking-[0.14em] uppercase text-stone-100">
+              <th className="p-3.5 w-[26%] text-center text-[10px] font-bold tracking-[0.14em] uppercase text-stone-100">
                 Space / work
               </th>
               {vendors.map((vendor, i) => {
@@ -619,6 +656,9 @@ export default function ComparisonMatrix({
                   </th>
                 );
               })}
+              <th className="p-3.5 w-[22%] text-left align-middle text-[10px] font-bold tracking-[0.14em] uppercase text-stone-100">
+                Comparison summary
+              </th>
             </tr>
           </thead>
 
@@ -696,7 +736,9 @@ export default function ComparisonMatrix({
         <span className="font-medium text-rose-400">N/A</span> means that vendor
         did not quote this work.{" "}
         <span className="font-medium text-amber-700">incl. in …</span> means the
-        price is already inside that vendor&apos;s package, so it is not missing.
+        price is already inside that vendor&apos;s package or parent space, so it is
+        not missing. Comparison summary explains a rate or quantity gap from the
+        quote payload; it does not change the rupees.
         Same work, different spaces is comparison only — a space figure is already
         in the spaces above; a whole-home figure is included in this quote, not
         in those space sums. Column labels &quot;Entered excl. GST&quot; and

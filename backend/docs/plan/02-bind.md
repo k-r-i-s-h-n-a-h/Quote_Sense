@@ -163,3 +163,18 @@ the prompt. Never fix an LLM merge by hardcoding around it downstream.
 
 **Do not** touch `space_clusters.py` from here. If the room is wrong, that is S3
 — even though S3 now calls into this module to recognise item-as-space labels.
+
+## Tatva pricing-method ObjectIds (market-rate, not matrix join)
+
+Vendor `/by-category` and `/suggest` attach `service_id` / `sub_service_id` /
+`pricing_id` from `market_moving_averages` columns only. Live Tatva catalog
+aliases (e.g. `Square Feet` → Area) must not overwrite those IDs.
+
+Bundle lookup stays label-based (`service_type + category + sub_service +
+pricing_method`). Inbound `pricing_id` / `sub_service_id` reverse-map via the
+same MA columns (and `_PM_STALE_ID_ALIASES` for pre-reset interiors ids) so
+`/suggest` still finds the row after the static JSON maps were removed.
+
+Registering one catalog row must not overwrite another row's label (inactive
+`Square Feet` must not steal `Area – Direct Entry (sq ft)`). That rule is for
+inbound label resolution and matrix bind only — not for recommend responses.

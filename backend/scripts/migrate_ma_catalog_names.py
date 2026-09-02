@@ -3,10 +3,8 @@
 Rename market_moving_averages (and optionally quote_items) to the new Tatva
 catalog labels, and backfill service_id / sub_service_id / pricing_method_id.
 
-Uses the static catalogs in backend/data/:
-  - tatva_service_ids.json
-  - tatva_sub_service_ids.json
-  - tatva_pricing_method_ids.json
+Uses backend/data/tatva_service_ids.json. Sub-service and pricing-method
+JSON maps were removed; those dicts are empty unless leftover files exist.
 
 Usage (from backend/):
 
@@ -96,7 +94,11 @@ PRICING_METHOD_ALIASES: dict[str, str] = {
 
 
 def _load_json(path: Path) -> dict:
-    return json.loads(path.read_text(encoding="utf-8"))
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return raw if isinstance(raw, dict) else {}
 
 
 def load_catalogs() -> tuple[dict[str, str], dict[str, str], dict[str, str]]:

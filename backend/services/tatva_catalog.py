@@ -1,13 +1,15 @@
 """
-Tatva PM ObjectId catalogs for market-rate API responses.
+Tatva PM ObjectId catalogs for inbound label ↔ id resolution.
 
-Maps human labels ↔ Mongo ObjectIds so PM can filter by id (preferred)
-or label (fallback).
+`/by-category` and `/suggest` response IDs come from
+`market_moving_averages` (see `services.market_rate`). This module is for
+inbound ObjectId → label (so label-based lookup still works) and for
+matrix bind when a quote row has no ObjectId.
 
-Sources (in order):
-  1. Live Tatva admin catalogs (cached) — preferred for new IDs tomorrow
-  2. Static JSON seed files
-  3. Learned IDs from quote workItems / explicit sync-catalog maps
+Sources for inbound maps:
+  1. In-memory maps filled by live Tatva admin fetch or sync-catalog
+  2. `market_moving_averages` reverse-map when the catalogs miss an id
+  3. Optional leftover JSON files if present (not written anymore)
 
 Live endpoints (auth via TATVA_API_KEY → x-api-key header):
   GET {TATVA_API_BASE}/admin/api/admin/quote-subservices?serviceId=…
@@ -40,7 +42,7 @@ _SERVICE_FILE = _DATA_DIR / "tatva_service_ids.json"
 _OID_RE = re.compile(r"^[a-fA-F0-9]{24}$")
 
 # Label variants that share one Tatva pricing-method ObjectId once any alias is known.
-# Keys/values are matched casefold against tatva_pricing_method_ids.json labels.
+# Keys/values are matched casefold against catalog / MA pricing-method labels.
 _PM_LABEL_ALIASES: dict[str, tuple[str, ...]] = {
     # Legacy → Area – Direct Entry (sq ft)
     "area (sqft)": ("Area – Direct Entry (sq ft)", "Area (sqft)", "Area (in sqft)"),
@@ -66,6 +68,19 @@ _PM_LABEL_ALIASES: dict[str, tuple[str, ...]] = {
     "dimension(l*b in m)": ("Dimension(L*B in m)", "Area – Length × Breadth (m → sq m)"),
     "dimension(l*b in sq)": ("Dimension(L*B in m)", "Dimension(L*B in sq)"),
     "cubic feet": ("Cubic Feet", "Volume – Direct Entry (cu ft)"),
+}
+
+# Pre-reset Tatva ObjectIds that still appear on old quotes / MA dumps.
+# Reverse-map only — label → id stays the live catalog ObjectId.
+_PM_STALE_ID_ALIASES: dict[str, str] = {
+    "6a02eb4398c21380f8efdd65": "Area – Direct Entry (sq ft)",
+    "69a0426cec94b351bce905a5": "Per Unit / Each",
+    "69a0431fec94b351bce905c2": "Per Point",
+    "69a04289ec94b351bce905b1": "Per Project",
+    "69a0427dec94b351bce905ab": "Running Length (rft)",
+    "69a043b6ec94b351bce905f2": "Per View",
+    "69a042deec94b351bce905bc": "Per Visit",
+    "69a04426ec94b351bce90616": "Per Window",
 }
 
 # Old service category display names → current catalog names (same ObjectId).
@@ -183,6 +198,8 @@ def _pm_map() -> dict[str, str]:
             }
         except (OSError, json.JSONDecodeError):
             _pm_by_id = {oid.lower(): label for label, oid in _pm_by_label.items()}
+        for stale_oid, label in _PM_STALE_ID_ALIASES.items():
+            _pm_by_id.setdefault(stale_oid.lower(), label)
     return _pm_by_label
 
 
@@ -262,12 +279,71 @@ def resolve_pricing_method_id(label: str | None) -> str | None:
     return None
 
 
+def _sub_label_from_ma(oid: str) -> str | None:
+    """Reverse-map a sub-service ObjectId from market_moving_averages."""
+    if not is_object_id(oid):
+        return None
+    try:
+        from services.env_config import get_supabase_client
+
+        res = (
+            get_supabase_client()
+            .table("market_moving_averages")
+            .select("sub_service")
+            .eq("sub_service_id", oid)
+            .limit(1)
+            .execute()
+        )
+        rows = res.data or []
+        label = str((rows[0].get("sub_service") if rows else "") or "").strip()
+        if not label:
+            return None
+        _ensure_maps_loaded()
+        assert _sub_by_id is not None
+        _sub_by_id[oid.lower()] = label
+        return label
+    except Exception as e:
+        print(f"⚠️ MA sub_service_id reverse lookup skipped: {e}")
+        return None
+
+
 def resolve_sub_service_label(sub_service_id: str | None) -> str | None:
     _ensure_maps_loaded()
     oid = (sub_service_id or "").strip().lower()
     if not oid or _sub_by_id is None:
         return None
-    return _sub_by_id.get(oid)
+    hit = _sub_by_id.get(oid)
+    if hit:
+        return hit
+    return _sub_label_from_ma(oid)
+
+
+def _pricing_label_from_ma(oid: str) -> str | None:
+    """Reverse-map a pricing ObjectId from market_moving_averages when catalogs miss it."""
+    if not is_object_id(oid):
+        return None
+    try:
+        from services.env_config import get_supabase_client
+
+        res = (
+            get_supabase_client()
+            .table("market_moving_averages")
+            .select("pricing_method")
+            .eq("pricing_method_id", oid)
+            .limit(1)
+            .execute()
+        )
+        rows = res.data or []
+        label = str((rows[0].get("pricing_method") if rows else "") or "").strip()
+        if not label:
+            return None
+        _ensure_maps_loaded()
+        assert _pm_by_id is not None
+        _pm_by_id[oid.lower()] = label
+        return label
+    except Exception as e:
+        print(f"⚠️ MA pricing_method_id reverse lookup skipped: {e}")
+        return None
 
 
 def resolve_pricing_method_label(pricing_id: str | None) -> str | None:
@@ -275,7 +351,14 @@ def resolve_pricing_method_label(pricing_id: str | None) -> str | None:
     oid = (pricing_id or "").strip().lower()
     if not oid or _pm_by_id is None:
         return None
-    return _pm_by_id.get(oid)
+    hit = _pm_by_id.get(oid)
+    if hit:
+        return hit
+    stale = _PM_STALE_ID_ALIASES.get(oid)
+    if stale:
+        _pm_by_id[oid] = stale
+        return stale
+    return _pricing_label_from_ma(oid)
 
 
 def resolve_item_labels(
@@ -310,20 +393,13 @@ def resolve_item_labels(
     return sub_label, pm_label
 
 
-def _persist_label_map(path: Path, label_map: dict[str, str], display: dict[str, str]) -> None:
-    """Write label→id JSON using display casing when available."""
-    payload: dict[str, str] = {}
-    for key_cf, oid in sorted(label_map.items()):
-        label = display.get(oid.lower()) or key_cf
-        payload[label] = oid
-    try:
-        path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    except OSError as e:
-        print(f"⚠️ Could not persist Tatva catalog {path.name}: {e}")
-
-
 def register_sub_service(label: str | None, object_id: str | None, *, persist: bool = True) -> None:
-    """Learn / refresh a sub-service ObjectId from a live Tatva quote payload."""
+    """Learn / refresh a sub-service ObjectId from a live Tatva quote payload.
+
+    `persist` is accepted for call-site compatibility and is ignored — IDs
+    are not written back to JSON.
+    """
+    del persist
     name = (label or "").strip()
     oid = (object_id or "").strip()
     if not name or not is_object_id(oid):
@@ -331,18 +407,19 @@ def register_sub_service(label: str | None, object_id: str | None, *, persist: b
     _ensure_maps_loaded()
     assert _sub_by_label is not None and _sub_by_id is not None
     key = name.casefold()
-    changed = _sub_by_label.get(key) != oid or _sub_by_id.get(oid.lower()) != name
     _sub_by_label[key] = oid
     _sub_by_id[oid.lower()] = name
     for alias in _SUB_LABEL_ALIASES.get(key, ()):
         _sub_by_label[alias.casefold()] = oid
-        changed = True
-    if changed and persist:
-        _persist_label_map(_SUB_FILE, _sub_by_label, _sub_by_id)
 
 
 def register_pricing_method(label: str | None, object_id: str | None, *, persist: bool = True) -> None:
-    """Learn / refresh a pricing-method ObjectId from a live Tatva quote payload."""
+    """Learn / refresh a pricing-method ObjectId from a live Tatva quote payload.
+
+    `persist` is accepted for call-site compatibility and is ignored — IDs
+    are not written back to JSON.
+    """
+    del persist
     name = (label or "").strip()
     oid = (object_id or "").strip()
     if not name or not is_object_id(oid):
@@ -350,15 +427,17 @@ def register_pricing_method(label: str | None, object_id: str | None, *, persist
     _ensure_maps_loaded()
     assert _pm_by_label is not None and _pm_by_id is not None
     key = name.casefold()
-    changed = _pm_by_label.get(key) != oid or _pm_by_id.get(oid.lower()) != name
     _pm_by_label[key] = oid
     _pm_by_id[oid.lower()] = name
-    # Mirror Area (sqft) family so seed labels and PM labels share one id.
+    # Mirror short/legacy names onto this ObjectId, but never steal a label
+    # that already has its own catalog row (Square Feet must not overwrite
+    # Area – Direct Entry (sq ft)).
     for alias in _PM_LABEL_ALIASES.get(key, ()):
-        _pm_by_label[alias.casefold()] = oid
-        changed = True
-    if changed and persist:
-        _persist_label_map(_PM_FILE, _pm_by_label, _pm_by_id)
+        alias_key = alias.casefold()
+        if alias_key == key:
+            continue
+        if alias_key not in _pm_by_label:
+            _pm_by_label[alias_key] = oid
 
 
 def register_from_work_item(work_item: dict | None, *, persist: bool = True) -> None:
@@ -432,12 +511,9 @@ def harvest_ids_from_quotes(quotes: Any) -> dict[str, int]:
             work_count += 1
             register_from_work_item(work_item, persist=False)
 
-    # Persist once after the batch.
     _ensure_maps_loaded()
     assert _sub_by_label is not None and _sub_by_id is not None
     assert _pm_by_label is not None and _pm_by_id is not None
-    _persist_label_map(_SUB_FILE, _sub_by_label, _sub_by_id)
-    _persist_label_map(_PM_FILE, _pm_by_label, _pm_by_id)
 
     return {
         "quotes": len(quotes),
@@ -488,9 +564,6 @@ def apply_catalog_maps(
     _ensure_maps_loaded()
     assert _sub_by_label is not None and _sub_by_id is not None
     assert _pm_by_label is not None and _pm_by_id is not None
-    if registered_sub or registered_pm:
-        _persist_label_map(_SUB_FILE, _sub_by_label, _sub_by_id)
-        _persist_label_map(_PM_FILE, _pm_by_label, _pm_by_id)
 
     return {
         "registered_sub_services": registered_sub,
@@ -659,7 +732,10 @@ def _mark_cache(key: str) -> None:
 def fetch_pricing_methods_from_tatva(*, force: bool = False, persist: bool = False) -> dict[str, Any]:
     """
     GET /admin/api/admin/pricing-methods → register name→_id in memory.
+
+    `persist` is ignored — maps stay in memory only.
     """
+    del persist
     cache_key = "pricing_methods"
     if not force and _cache_fresh(cache_key):
         _ensure_maps_loaded()
@@ -705,11 +781,6 @@ def fetch_pricing_methods_from_tatva(*, force: bool = False, persist: bool = Fal
         register_pricing_method(name, oid, persist=False)
         registered += 1
 
-    if persist and registered:
-        _ensure_maps_loaded()
-        assert _pm_by_label is not None and _pm_by_id is not None
-        _persist_label_map(_PM_FILE, _pm_by_label, _pm_by_id)
-
     _mark_cache(cache_key)
     return {
         "ok": True,
@@ -729,7 +800,10 @@ def fetch_sub_services_from_tatva(
 ) -> dict[str, Any]:
     """
     GET /admin/api/admin/quote-subservices?serviceId=… → register name→_id.
+
+    `persist` is ignored — maps stay in memory only.
     """
+    del persist
     sid = (service_id or "").strip()
     if not sid:
         return {"ok": False, "registered": 0, "message": "service_id is required."}
@@ -783,11 +857,6 @@ def fetch_sub_services_from_tatva(
         register_sub_service(name, oid, persist=False)
         registered += 1
 
-    if persist and registered:
-        _ensure_maps_loaded()
-        assert _sub_by_label is not None and _sub_by_id is not None
-        _persist_label_map(_SUB_FILE, _sub_by_label, _sub_by_id)
-
     _mark_cache(cache_key)
     return {
         "ok": True,
@@ -832,9 +901,9 @@ def ensure_live_catalog(
     """
     Refresh in-memory ObjectId maps from Tatva admin catalogs.
 
-    Call before /by-category so responses include sub_service_id / pricing_id.
-    Cache TTL defaults to 1h (TATVA_CATALOG_CACHE_TTL) so new Tatva items
-    appear after the next refresh without a redeploy.
+    Used for inbound id→label on /suggest and for matrix bind. Recommend
+    response IDs come from market_moving_averages, not this fetch.
+    Cache TTL defaults to 1h (TATVA_CATALOG_CACHE_TTL).
     """
     sid = (service_id or "").strip() or None
     if not sid and service_category:

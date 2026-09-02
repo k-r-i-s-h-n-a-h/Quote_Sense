@@ -436,8 +436,6 @@ Endpoint pattern: `/vendor/api/vendor/quotes/project/{id}?quotationShare=true`.
 | File | Purpose |
 |------|---------|
 | `backend/data/tatva_service_ids.json` | Main-service ObjectId → `{service_category, service_code}` |
-| `backend/data/tatva_sub_service_ids.json` | Sub-service label → ObjectId (grown by harvest/live fetch) |
-| `backend/data/tatva_pricing_method_ids.json` | Pricing-method label → ObjectId |
 
 ---
 

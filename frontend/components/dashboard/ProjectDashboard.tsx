@@ -15,6 +15,7 @@ import { PdfUploadGateButton } from "./PdfUploadGateButton";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState, ErrorState } from "@/components/ui/EmptyState";
 import SessionExpiredModal from "@/components/SessionExpiredModal";
+import { compareCountPhrase } from "@/lib/compare-limits";
 
 type DashboardError = {
   message: string;
@@ -125,7 +126,7 @@ export default function ProjectDashboard() {
                 </span>
               </>
             }
-            description="Open a project to select 2–3 same-tier vendor quotes, compare costs against market rates, and review an AI recommendation."
+            description={`Open a project to select ${compareCountPhrase()} same-tier vendor quotes, compare costs against market rates, and review an AI recommendation.`}
             actions={
               <PdfUploadGateButton className="qs-btn qs-btn-primary whitespace-nowrap">
                 Upload & compare PDFs

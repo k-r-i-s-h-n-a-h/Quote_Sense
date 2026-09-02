@@ -32,8 +32,8 @@ import {
 } from "../../lib/compare-sync";
 import {
   MAX_COMPARE_QUOTES,
-  MIN_COMPARE_QUOTES,
   clampQuoteIds,
+  compareCountPhrase,
   isValidCompareCount,
 } from "../../lib/compare-limits";
 import { useAuth } from "@/lib/auth";
@@ -598,7 +598,7 @@ function QuoteSenseContent() {
   const handleUpload = async () => {
     if (!isValidCompareCount(files.length)) {
       alert(
-        `Please upload ${MIN_COMPARE_QUOTES}–${MAX_COMPARE_QUOTES} vendor PDFs to run a comparison.`
+        `Please upload ${compareCountPhrase()} vendor PDFs to run a comparison.`
       );
       return;
     }
@@ -813,7 +813,7 @@ function QuoteSenseContent() {
           <PageHeader
             eyebrow="Standalone compare"
             title="Compare vendor quotes"
-            description="Upload 2–3 vendor PDFs for a standalone comparison, or pick quotes from a project."
+            description={`Upload ${compareCountPhrase()} vendor PDFs for a standalone comparison, or pick quotes from a project.`}
           />
         )}
 
@@ -823,7 +823,7 @@ function QuoteSenseContent() {
               <div>
                 <h2 className="qs-section-title">Upload vendor quotes</h2>
                 <p className="qs-section-sub">
-                  PDF only · {MIN_COMPARE_QUOTES}–{MAX_COMPARE_QUOTES} files
+                  PDF only · {compareCountPhrase()} files
                 </p>
               </div>
               {files.length > 0 && !loading && (

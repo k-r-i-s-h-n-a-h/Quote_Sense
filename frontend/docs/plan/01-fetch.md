@@ -25,6 +25,12 @@ Get a `MatrixV1` payload to the compare page.
 All three converge on the same `MatrixV1` payload, so nothing downstream of this
 stage needs to know which lane ran.
 
+A run accepts **exactly two quotes** (`MIN_COMPARE_QUOTES` =
+`MAX_COMPARE_QUOTES` = 2 in `lib/compare-limits.ts` and `backend/main.py`).
+The project hub and PDF upload must refuse a third file; the API returns an
+error if more than two payloads arrive. Do not widen this in the UI without
+the matching backend constant.
+
 ## Progress and the partial matrix
 
 `GET /api/progress/{sessionId}` reports stages `queued` → `extracting` →

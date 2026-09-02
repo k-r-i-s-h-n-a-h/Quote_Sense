@@ -5,6 +5,7 @@ import { getQuoteSelectionSummary, type ProjectData } from "@/lib/project-types"
 import {
   MAX_COMPARE_QUOTES,
   MIN_COMPARE_QUOTES,
+  compareCountPhrase,
   isValidCompareCount,
 } from "@/lib/compare-limits";
 
@@ -17,10 +18,9 @@ type CompareActionBarProps = {
 };
 
 function selectionCopy(count: number): string {
-  if (count <= 0) return "Select 2–3 quotes to compare";
-  if (count === 1) return "Select at least 1 more quote";
-  if (count === 2) return "2 quotes selected";
-  if (count === 3) return "3 quotes selected";
+  if (count <= 0) return `Select ${compareCountPhrase()} quotes to compare`;
+  if (count === 1) return "Select 1 more quote";
+  if (count === MAX_COMPARE_QUOTES) return `${count} quotes selected`;
   return `${count} quotes selected`;
 }
 
@@ -57,7 +57,7 @@ export function CompareActionBar({
             </p>
             {!canCompare && !overLimit && needed > 0 && (
               <p className="text-xs text-amber-700 mt-1">
-                Select {MIN_COMPARE_QUOTES}–{MAX_COMPARE_QUOTES} quotes of the same
+                Select {compareCountPhrase()} quotes of the same
                 tier to compare
               </p>
             )}

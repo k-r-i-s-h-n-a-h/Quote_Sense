@@ -10,7 +10,7 @@ This document is the single handoff for **how the system is connected**, **what 
 
 ## 1. What QuoteSense is (one paragraph)
 
-QuoteSense helps procurement teams compare **2–3 vendor quotes of the same tier** (Essential / Mid / Luxury) for a Tatva project, show a cost matrix + AI recommendation, and expose **market base rates** to Tatva vendor quote forms. Auth is WhatsApp OTP / PM SSO via Tatva. Permanent market rates live in Supabase; compare sessions are temporary.
+QuoteSense helps procurement teams compare **2 vendor quotes of the same tier** (Essential / Mid / Luxury) for a Tatva project, show a cost matrix + AI recommendation, and expose **market base rates** to Tatva vendor quote forms. Auth is WhatsApp OTP / PM SSO via Tatva. Permanent market rates live in Supabase; compare sessions are temporary.
 
 ---
 
@@ -155,7 +155,7 @@ See also: [`COMPARISON_DATA_LIFECYCLE.md`](./COMPARISON_DATA_LIFECYCLE.md).
 ```
 Login
  → /  (ProjectDashboard — list from Tatva via BFF)
- → /project/{publicCode}  (ProjectHub — select 2–3 same-tier quotes)
+ → /project/{publicCode}  (ProjectHub — select 2 same-tier quotes)
  → /compare?projectId=…&quotes=id1,id2
  → resolveQuotesForCompare (cache / BFF)
  → POST /api/compare/sync-mongodb?session_id=session_…
@@ -182,8 +182,8 @@ Login
 | C3 | Loading panel | Progress moves (processed count / stages) |
 | C4 | Network: progress | JSON 200, not HTML 404 |
 | C5 | Result | Matrix + vendor totals + recommendation appear |
-| C6 | Select 1 quote only | Cannot start / blocked by 2–3 rule |
-| C7 | Select 4 quotes | Clamp/block at max 3 |
+| C6 | Select 1 quote only | Cannot start / blocked by exactly-2 rule |
+| C7 | Select 3 quotes | Clamp/block at max 2 |
 | C8 | Different tiers mixed | Product should discourage / block same-tier rule (confirm current UI behavior) |
 | C9 | Refresh mid-job with `session_id` in URL | Either resumes or cleanly recovers (stale session messaging) |
 | C10 | Chat after compare | Answers about the session |

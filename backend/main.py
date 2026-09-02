@@ -34,7 +34,7 @@ from services.market_rate import (
 from services.tatva_services import resolve_service_by_id
 
 MIN_COMPARE_QUOTES = 2
-MAX_COMPARE_QUOTES = 3
+MAX_COMPARE_QUOTES = 2
 
 
 def _comparison_api_payload(
@@ -1440,7 +1440,7 @@ async def sync_mongodb_quotes(
                 "status": "error",
                 "message": (
                     f"Could not load enough quotes for project {query_project_id}. "
-                    f"Provide quote_ids in the body to select {MIN_COMPARE_QUOTES}–{MAX_COMPARE_QUOTES} quotes, "
+                    f"Provide quote_ids in the body to select {MIN_COMPARE_QUOTES} quotes, "
                     "or redirect users to QuoteSense /project/{code} to pick quotes in the UI."
                 ),
             }

@@ -10,7 +10,7 @@
 
 ## Product rules
 
-1. User selects **2–3 quotes among N** for a compare session — only those payloads run comparison / extraction for that session.
+1. User selects **2 quotes among N** for a compare session — only those payloads run comparison / extraction for that session.
 2. Compare is **display-only** for market averages: session rates do **not** update `market_moving_averages`.
 3. When the user marks **one quote as finalized** (`isFinalizeQuote` / `isFinalizedQuote` / `finalizeQuote`), **only that** payload’s line rates merge into `market_moving_averages`.
 

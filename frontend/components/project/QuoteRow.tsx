@@ -3,6 +3,7 @@
 import React from "react";
 import type { VendorQuote } from "@/lib/project-types";
 import { formatInr } from "@/lib/project-types";
+import { MAX_COMPARE_QUOTES } from "@/lib/compare-limits";
 import { QuoteStatusBadge, TierBadge } from "@/components/ui/Badge";
 
 type QuoteRowProps = {
@@ -37,7 +38,8 @@ export function QuoteRow({
       }`}
       title={
         disabled
-          ? disabledReason || "Maximum 3 quotes — deselect one to pick another"
+          ? disabledReason ||
+            `Maximum ${MAX_COMPARE_QUOTES} quotes — deselect one to pick another`
           : undefined
       }
     >

@@ -193,3 +193,15 @@ S1 copies what the vendor wrote. It does not interpret finishes or invent area.
      spec *caused* the gap.
 4. The UI and both PDFs render that sentence. They must not regroup or
    reallocate rupees to make the story tidier.
+
+---
+
+## 9. Exactly two quotes per comparison
+
+A comparison run is **two quotes**, not three. Standalone PDF upload and
+project quote pick both stop at two. A third file or checkbox is blocked
+until one of the two is removed.
+
+Do not raise the cap back to three to "use empty matrix columns". Do not
+allow a one-quote compare. `MIN_COMPARE_QUOTES` and `MAX_COMPARE_QUOTES`
+stay 2 (`frontend/lib/compare-limits.ts`, `backend/main.py`).

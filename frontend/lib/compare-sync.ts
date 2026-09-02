@@ -7,9 +7,8 @@ import {
   getCachedQuotesByIds,
 } from "./compare-payload-cache";
 import {
-  MAX_COMPARE_QUOTES,
-  MIN_COMPARE_QUOTES,
   clampQuoteIds,
+  compareCountPhrase,
   isValidCompareCount,
 } from "./compare-limits";
 import { unwrapApiList } from "./project-mappers";
@@ -113,7 +112,7 @@ export async function resolveQuotesForCompare(
   if (!isValidCompareCount(selected.length)) {
     return {
       ok: false,
-      message: `Select ${MIN_COMPARE_QUOTES}–${MAX_COMPARE_QUOTES} quotes to compare.`,
+      message: `Select ${compareCountPhrase()} quotes to compare.`,
     };
   }
 
@@ -134,7 +133,7 @@ export async function startMongoCompareJob(
   if (!isValidCompareCount(quotes.length)) {
     return {
       ok: false,
-      message: `You can compare ${MIN_COMPARE_QUOTES}–${MAX_COMPARE_QUOTES} quotes at a time.`,
+      message: `You can compare ${compareCountPhrase()} quotes at a time.`,
     };
   }
 

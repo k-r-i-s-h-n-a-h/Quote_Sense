@@ -21,6 +21,7 @@ import {
   MIN_COMPARE_QUOTES,
   MAX_COMPARE_MESSAGE,
   clampQuoteIds,
+  compareCountPhrase,
   isValidCompareCount,
 } from "@/lib/compare-limits";
 import { VendorCard } from "./VendorCard";
@@ -226,7 +227,7 @@ export default function ProjectHub({ project }: ProjectHubProps) {
         <div className="qs-card px-4 py-3.5 border-dashed">
           <p className="text-sm text-stone-700 leading-relaxed">
             <strong className="font-semibold text-stone-900">
-              Pick {MIN_COMPARE_QUOTES}–{MAX_COMPARE_QUOTES} quotes from the same
+              Pick {compareCountPhrase()} quotes from the same
               tier
             </strong>{" "}
             (Essential, Mid-segment, or Luxury), then compare. Mixing tiers is

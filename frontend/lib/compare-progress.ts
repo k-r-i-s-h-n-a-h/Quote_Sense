@@ -47,7 +47,7 @@ export type PollCompareProgressResult =
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** PDF + Gemini extraction can exceed 10 min for 2–3 large quotes. */
+/** PDF + Gemini extraction can exceed 10 min for 2 large quotes. */
 const MAX_MS = 25 * 60 * 1000;
 
 function pollDelayMs(

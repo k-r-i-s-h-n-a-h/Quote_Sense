@@ -4,7 +4,7 @@ AI-powered quote extraction, comparison, and market-rate guidance for TatvaOps. 
 
 **Primary users:** interior design / construction procurement teams selecting among vendor quotes (Essential / Mid / Luxury tiers).
 
-**Primary action:** pick 2–3 same-tier quotes on a project → run AI compare → review matrix, insights, and recommendation.
+**Primary action:** pick 2 same-tier quotes on a project → run AI compare → review matrix, insights, and recommendation.
 
 ---
 
@@ -39,7 +39,7 @@ AI-powered quote extraction, comparison, and market-rate guidance for TatvaOps. 
 QuoteSense:
 
 - Loads Tatva PM projects and vendor quotes (WhatsApp OTP / PM SSO).
-- Lets users select **2–3 quotes of the same tier** and run a comparison job.
+- Lets users select **2 quotes of the same tier** and run a comparison job.
 - Optionally extracts line items from **PDF uploads** (feature-flagged standalone lane).
 - Builds a Pandas comparison matrix with vendor totals and market moving-average baselines.
 - Generates a Gemini AI recommendation and supports follow-up chat over session data.
@@ -240,7 +240,7 @@ cd frontend && ./run_dev.sh         # http://localhost:3000
 
 ```
 /  ProjectDashboard
- → /project/:publicCode  ProjectHub (select 2–3 same-tier quotes)
+ → /project/:publicCode  ProjectHub (select 2 same-tier quotes)
  → /compare?projectId=&quotes=
  → resolveQuotesForCompare (sessionStorage cache → BFF)
  → POST /api/compare/sync-mongodb → poll FastAPI /api/progress/:session_id
@@ -277,13 +277,13 @@ All live routes are defined in `backend/main.py` (not `api/routes.py`, which is 
 | `POST` | `/api/market-rate/recommend` | Suggest with body model |
 | `POST` | `/api/market-rate/apply-finalized` | Merge finalized payloads into MA |
 | `POST` | `/api/market-rate/sync-catalog` | Refresh ObjectId maps |
-| `POST` | `/api/compare-quotes` | Multipart PDF upload → async extract+compare (2–3 files) |
+| `POST` | `/api/compare-quotes` | Multipart PDF upload → async extract+compare (exactly 2 files) |
 | `GET` | `/api/progress/{session_id}` | Poll job status / partial matrix / result |
 | `POST` | `/api/sync-mongodb-quotes` | Tatva JSON or `project_id` fetch → async compare |
 | `GET` | `/api/get-comparison` | Re-run compare from Supabase session |
 | `POST` | `/api/chat` | Gemini Q&A over session quote data |
 
-**Constraints:** 2–3 quotes per compare. Progress is in-process (`JOBS`); use a single Uvicorn worker for local progress polling.
+**Constraints:** exactly 2 quotes per compare. Progress is in-process (`JOBS`); use a single Uvicorn worker for local progress polling.
 
 **Vendor form contracts:** [`docs/VENDOR_MARKET_RATE_API.md`](docs/VENDOR_MARKET_RATE_API.md), [`docs/VENDOR_MARKET_RATE_API_PM.md`](docs/VENDOR_MARKET_RATE_API_PM.md).
 
@@ -628,7 +628,7 @@ Interactive market guidance demo (not auth-guarded).
 | `lib/compare-sync.ts` | `resolveQuotesForCompare`, `startMongoCompareJob`, session id helpers |
 | `lib/compare-progress.ts` | Adaptive poll of `/api/progress/:id` (up to ~25 min) |
 | `lib/compare-payload-cache.ts` | `sessionStorage` quote payload cache (TTL) |
-| `lib/compare-limits.ts` | `MIN/MAX_COMPARE_QUOTES` (2–3), clamp/validate |
+| `lib/compare-limits.ts` | `MIN/MAX_COMPARE_QUOTES` (exactly 2), clamp/validate |
 | `lib/compare-lane.ts` | `getCompareLane`, `showPdfUpload`, `showProjectNav` |
 | `lib/compare-matrix.ts` | Group table rows; sub-service sums incl. `moving_average` |
 | `lib/download-comparison-pdf.ts` | jsPDF export of comparison matrix |
@@ -649,7 +649,7 @@ Interactive market guidance demo (not auth-guarded).
 
 | File | Covers |
 |------|--------|
-| `lib/__tests__/compare-limits.test.ts` | 2–3 quote limits |
+| `lib/__tests__/compare-limits.test.ts` | exactly-2 quote limits |
 | `lib/__tests__/format.test.ts` | Label/INR/baseline helpers |
 | `lib/__tests__/project-helpers.test.ts` | Mappers / project helpers |
 | `lib/__tests__/project-list-filter.test.ts` | Dashboard filter |
@@ -891,7 +891,7 @@ Cleanup only removes rows with `market_rates_applied_at IS NOT NULL`. Until comp
 - [ ] `backend/run_dev.sh` → http://127.0.0.1:8001/docs
 - [ ] `frontend/run_dev.sh` → http://localhost:3000
 - [ ] Login / OTP or PM SSO works
-- [ ] Open a project → select 2–3 quotes → compare completes
+- [ ] Open a project → select 2 quotes → compare completes
 - [ ] (Optional) Supabase migrations applied; seed demo session loaded
 - [ ] Backend tests + frontend tests pass
 

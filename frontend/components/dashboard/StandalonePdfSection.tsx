@@ -2,6 +2,7 @@
 
 import React from "react";
 import { PdfUploadGateButton } from "./PdfUploadGateButton";
+import { compareCountPhrase } from "@/lib/compare-limits";
 
 type StandalonePdfSectionProps = {
   /** When true, show inline after empty projects (not as a distant footer block). */
@@ -33,7 +34,7 @@ export default function StandalonePdfSection({
               {prominent ? "Compare vendor PDFs now" : "Quick PDF compare"}
             </h2>
             <p className="text-sm text-stone-500 mt-1 max-w-lg leading-relaxed">
-              Upload 2–3 vendor quote PDFs. QuoteSense extracts line items, builds a
+              Upload {compareCountPhrase()} vendor quote PDFs. QuoteSense extracts line items, builds a
               comparison matrix, and generates an AI recommendation.
             </p>
           </div>
@@ -44,7 +45,7 @@ export default function StandalonePdfSection({
 
         <ul className="mt-5 grid sm:grid-cols-3 gap-3 text-xs text-stone-600">
           <li className="rounded-lg bg-stone-50 border border-stone-100 px-3 py-2.5">
-            Select 2–3 vendor PDFs
+            Select {compareCountPhrase()} vendor PDFs
           </li>
           <li className="rounded-lg bg-stone-50 border border-stone-100 px-3 py-2.5">
             AI extraction & cost matrix

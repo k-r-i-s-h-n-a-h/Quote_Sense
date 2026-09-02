@@ -682,7 +682,8 @@ async def market_rate_sync_catalog(
     authorization: Optional[str] = Header(None),
 ):
     """
-    Fill sub_service_id / pricing_id catalogs used by /by-category and /suggest.
+    Fill in-memory sub_service / pricing-method maps for inbound id→label.
+    Recommend responses read IDs from market_moving_averages, not this catalog.
 
     Four ways:
       A) POST ?live=1&service_id=… — fetch Tatva admin catalogs (needs TATVA_API_KEY)

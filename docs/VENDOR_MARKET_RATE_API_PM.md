@@ -16,9 +16,9 @@ Item rows:
 
 | Field | Meaning |
 |-------|---------|
-| `sub_service_id` | Tatva sub-service ObjectId (null if not in catalog yet) |
+| `sub_service_id` | Tatva sub-service ObjectId from `market_moving_averages` (null if unset) |
 | `sub_service_label` | Display / match name |
-| `pricing_id` | Tatva pricing-method ObjectId (null if not in catalog yet) |
+| `pricing_id` | Tatva pricing-method ObjectId from `market_moving_averages` (null if unset) |
 | `pricing_method_label` | Display / match name |
 
 ---
@@ -68,41 +68,25 @@ Auth: none.
 
 Match locally with `sub_service_id` + `pricing_id` when present; otherwise `sub_service_label` + `pricing_method_label`.
 
-### Filling ObjectIds (live Tatva catalogs — preferred)
+### ObjectIds on `/by-category` and `/suggest`
 
-QuoteSense resolves `sub_service_id` / `pricing_id` from Tatva admin APIs
-(cached ~1h), so new items added tomorrow appear after the next refresh
-**without** editing static JSON or redeploying.
+Response `service_id` / `sub_service_id` / `pricing_id` come from
+`market_moving_averages` (`service_id`, `sub_service_id`, `pricing_method_id`).
+They are **not** remapped through the live Tatva catalog or static JSON — that
+path used to swap Area (`6a79ab1c…1b3f`) for inactive Square Feet
+(`6a79ab23…1bf7`).
 
-Set on Render / local `.env`:
+Inbound `/suggest` still accepts ObjectIds. Those reverse-map to labels via
+the same MA columns (plus a small set of pre-reset interiors aliases) so
+lookup can stay label-based.
 
-```bash
-TATVA_API_BASE=https://devopsapi.withtatva.ai
-TATVA_API_KEY=<PM service key>
-```
+**Still null?** The MA row has no id column filled for that bundle. Seed /
+UPDATE those columns from the Tatva admin catalogs for that environment —
+do not reuse staging ObjectIds on test or prod.
 
-APIs used automatically on `/by-category`:
-
-```text
-GET {TATVA_API_BASE}/admin/api/admin/quote-subservices?serviceId={service_id}
-GET {TATVA_API_BASE}/admin/api/admin/pricing-methods
-x-api-key: {TATVA_API_KEY}
-```
-
-Force refresh + persist to disk:
-
-```bash
-curl -X POST "https://tatvaops-quotesense.onrender.com/api/market-rate/sync-catalog?live=1&service_id=6926b1978ba6a3cfc5a191ce"
-```
-
-Static JSON (`backend/data/tatva_*_ids.json`) remains a **fallback** when the
-API key is missing or Tatva is down.
-
-**Aliases:** seed labels like `Wardrobe` / `Area (sqft)` map to Tatva names
-`Wardrobes` / `Area (in sqft)` when the live catalog uses those spellings.
-
-**Still null?** Only when Tatva has no matching catalog row for that seed label
-(e.g. a spreadsheet item not in PM’s quote-subservices list).
+**Aliases (inbound / bind only):** seed labels like `Wardrobe` / `Area (sqft)`
+map to Tatva names `Wardrobes` / `Area – Direct Entry (sq ft)`. Inactive
+catalog rows (`Square Feet`) do not overwrite an active row's ObjectId.
 
 ### Filling ObjectIds (manual / quotes harvest)
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -20,7 +21,14 @@ from services.market_rate import (
     resolve_effective_rate,
     resolve_service_type,
     finalized_quote_session_id,
+    _label_ids,
+    list_market_rates_by_category,
 )
+
+LIVE_AREA_SQFT = "6a79ab1cf47d48a866051b3f"
+CATALOG_SQUARE_FEET = "6a79ab23f47d48a866051bf7"
+MA_SUB_SERVICE = "6a744f7c895836cf85370001"
+MA_SERVICE = "6926b1978ba6a3cfc5a191ce"
 
 
 @pytest.mark.parametrize(
@@ -201,4 +209,82 @@ def test_finalize_quote_meets_min_date_default(monkeypatch):
 def test_finalize_quote_meets_min_date_disabled(monkeypatch):
     monkeypatch.setenv("MA_FINALIZE_MIN_DATE", "")
     assert finalize_quote_meets_min_date({"isFinalizeQuote": True, "quoteNumber": "Q1"})
+
+
+def test_label_ids_use_ma_columns_not_catalog(monkeypatch):
+    called = {"pm": 0, "sub": 0}
+
+    def fake_pm(_label):
+        called["pm"] += 1
+        return CATALOG_SQUARE_FEET
+
+    def fake_sub(_label):
+        called["sub"] += 1
+        return "bbbbbbbbbbbbbbbbbbbbbbbb"
+
+    monkeypatch.setattr("services.tatva_catalog.resolve_pricing_method_id", fake_pm)
+    monkeypatch.setattr("services.tatva_catalog.resolve_sub_service_id", fake_sub)
+
+    ids = _label_ids(
+        "Wardrobe",
+        "Area – Direct Entry (sq ft)",
+        pricing_id=LIVE_AREA_SQFT,
+        sub_service_id=MA_SUB_SERVICE,
+        service_id=MA_SERVICE,
+    )
+    assert ids["pricing_id"] == LIVE_AREA_SQFT
+    assert ids["sub_service_id"] == MA_SUB_SERVICE
+    assert ids["service_id"] == MA_SERVICE
+    assert called == {"pm": 0, "sub": 0}
+
+
+def test_by_category_items_use_ma_ids_not_catalog(monkeypatch):
+    monkeypatch.setattr(
+        "services.tatva_catalog.resolve_pricing_method_id",
+        lambda _label: CATALOG_SQUARE_FEET,
+    )
+    monkeypatch.setattr(
+        "services.tatva_catalog.resolve_sub_service_id",
+        lambda _label: "bbbbbbbbbbbbbbbbbbbbbbbb",
+    )
+
+    def _catalog_must_not_run(**_kwargs):
+        raise AssertionError("ensure_live_catalog must not run on /by-category")
+
+    monkeypatch.setattr(
+        "services.tatva_catalog.ensure_live_catalog", _catalog_must_not_run
+    )
+
+    fake_table = MagicMock()
+    fake_table.select.return_value = fake_table
+    fake_table.eq.return_value = fake_table
+    fake_table.execute.return_value = MagicMock(
+        data=[
+            {
+                "service_type": "ESSENTIAL",
+                "service_category": "Residential Interiors",
+                "sub_service": "Wardrobe",
+                "pricing_method": "Area – Direct Entry (sq ft)",
+                "rate_moving_average": 1400,
+                "weight": 5,
+                "pricing_method_id": LIVE_AREA_SQFT,
+                "sub_service_id": MA_SUB_SERVICE,
+                "service_id": MA_SERVICE,
+            }
+        ]
+    )
+    fake_client = MagicMock()
+    fake_client.table.return_value = fake_table
+    monkeypatch.setattr(
+        "services.market_rate.get_supabase_client", lambda: fake_client
+    )
+
+    result = list_market_rates_by_category("Residential Interiors", "ESSENTIAL")
+    assert result["count"] == 1
+    item = result["items"][0]
+    assert item["pricing_id"] == LIVE_AREA_SQFT
+    assert item["pricing_id"] != CATALOG_SQUARE_FEET
+    assert item["sub_service_id"] == MA_SUB_SERVICE
+    assert item["service_id"] == MA_SERVICE
+    assert item["pricing_method_label"] == "Area – Direct Entry (sq ft)"
 

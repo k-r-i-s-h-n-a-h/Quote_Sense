@@ -322,6 +322,9 @@ def lookup_market_rate(
             "service_category": key["service_category"],
             "sub_service": name,
             "pricing_method": key["pricing_method"],
+            "service_id": str(row.get("service_id") or "").strip() or None,
+            "pricing_method_id": str(row.get("pricing_method_id") or "").strip() or None,
+            "sub_service_id": str(row.get("sub_service_id") or "").strip() or None,
             "market_rate": round(rate, 2),
             "weight": weight,
         }
@@ -529,14 +532,33 @@ def _market_hint_message(market_rate: float, pricing_method: str, weight: int) -
     return f"Recommended base rate: ₹{market_rate:,.2f}/{pm}"
 
 
-def _label_ids(sub_service: str, pricing_method: str) -> dict:
-    """Attach Tatva ObjectIds when the catalog (live or static) knows the labels."""
-    from services.tatva_catalog import resolve_pricing_method_id, resolve_sub_service_id
+def _as_object_id(value: str | None) -> str | None:
+    from services.tatva_catalog import is_object_id
 
+    text = str(value or "").strip() or None
+    if text and not is_object_id(text):
+        return None
+    return text
+
+
+def _label_ids(
+    sub_service: str,
+    pricing_method: str,
+    *,
+    pricing_id: str | None = None,
+    sub_service_id: str | None = None,
+    service_id: str | None = None,
+) -> dict:
+    """Attach Tatva ObjectIds from market_moving_averages columns only.
+
+    Catalog / static JSON must not overwrite these — aliases like
+    `Square Feet` → Area would swap the live Area ObjectId.
+    """
     return {
-        "sub_service_id": resolve_sub_service_id(sub_service),
+        "service_id": _as_object_id(service_id),
+        "sub_service_id": _as_object_id(sub_service_id),
         "sub_service_label": sub_service,
-        "pricing_id": resolve_pricing_method_id(pricing_method),
+        "pricing_id": _as_object_id(pricing_id),
         "pricing_method_label": pricing_method,
     }
 
@@ -546,10 +568,20 @@ def _slim_bulk_item(
     pricing_method: str,
     market_rate: float,
     weight: int,
+    *,
+    pricing_id: str | None = None,
+    sub_service_id: str | None = None,
+    service_id: str | None = None,
 ) -> dict:
-    """Flat item row for PM bulk cache — labels + ObjectIds when known."""
+    """Flat item row for PM bulk cache — labels + MA ObjectIds when known."""
     return {
-        **_label_ids(sub_service, pricing_method),
+        **_label_ids(
+            sub_service,
+            pricing_method,
+            pricing_id=pricing_id,
+            sub_service_id=sub_service_id,
+            service_id=service_id,
+        ),
         "market_rate": market_rate,
         "weight": weight,
         "suggestion": _base_rate_message(market_rate, pricing_method),
@@ -565,6 +597,9 @@ def _slim_selected_recommendation(
     labels = _label_ids(
         full.get("sub_service_label") or full.get("sub_service") or sub_service,
         full.get("pricing_method_label") or full.get("pricing_method") or pricing_method,
+        pricing_id=full.get("pricing_id") or full.get("pricing_method_id"),
+        sub_service_id=full.get("sub_service_id"),
+        service_id=full.get("service_id"),
     )
     if not full.get("recommend"):
         return {"recommend": False, **labels}
@@ -592,20 +627,7 @@ def list_market_rates_by_category(
     service_id: str | None = None,
 ) -> dict:
     """Return all recommendable bundles for one service category (PM bulk-load)."""
-    # Refresh ObjectId maps from Tatva admin catalogs (cached) so new items
-    # tomorrow get ids without a redeploy. Falls back to static JSON if no token.
-    try:
-        from services.tatva_catalog import ensure_live_catalog
-
-        ensure_live_catalog(
-            service_id=service_id,
-            service_category=service_category,
-            force=False,
-            persist=False,
-        )
-    except Exception as e:
-        print(f"⚠️ Live Tatva catalog refresh skipped: {e}")
-
+    del service_id  # kept for call-site compatibility; IDs come from MA rows
     cat = normalize_text(service_category, "")
     if not cat:
         return {
@@ -623,7 +645,8 @@ def list_market_rates_by_category(
             .table("market_moving_averages")
             .select(
                 "service_type,service_category,sub_service,pricing_method,"
-                "rate_moving_average,moving_average,weight"
+                "rate_moving_average,moving_average,weight,"
+                "service_id,pricing_method_id,sub_service_id"
             )
             .eq("service_category", cat)
             .eq("service_type", st)
@@ -649,7 +672,17 @@ def list_market_rates_by_category(
         sub = normalize_text(row.get("sub_service"), "General")
         pm = normalize_pricing_method(row.get("pricing_method"))
         rounded_rate = round(rate, 2)
-        items.append(_slim_bulk_item(sub, pm, rounded_rate, weight))
+        items.append(
+            _slim_bulk_item(
+                sub,
+                pm,
+                rounded_rate,
+                weight,
+                pricing_id=row.get("pricing_method_id"),
+                sub_service_id=row.get("sub_service_id"),
+                service_id=row.get("service_id"),
+            )
+        )
 
     items.sort(
         key=lambda x: (
@@ -696,13 +729,6 @@ def recommend_rate(
     - entered_rate > base (even ₹1 above) → recommend=true.
     No ±% interval / band — compare to the single base only.
     """
-    try:
-        from services.tatva_catalog import ensure_live_catalog
-
-        ensure_live_catalog(service_category=service_category, force=False, persist=False)
-    except Exception as e:
-        print(f"⚠️ Live Tatva catalog refresh skipped (suggest): {e}")
-
     lookup = lookup_market_rate(service_type, service_category, sub_service, pricing_method)
     if not lookup:
         return {
@@ -711,7 +737,13 @@ def recommend_rate(
         }
 
     base = round(float(lookup["market_rate"]), 2)
-    labels = _label_ids(lookup["sub_service"], lookup["pricing_method"])
+    labels = _label_ids(
+        lookup["sub_service"],
+        lookup["pricing_method"],
+        pricing_id=lookup.get("pricing_method_id"),
+        sub_service_id=lookup.get("sub_service_id"),
+        service_id=lookup.get("service_id"),
+    )
     common = {
         "service_type": lookup["service_type"],
         "service_category": lookup["service_category"],

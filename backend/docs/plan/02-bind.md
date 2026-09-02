@@ -166,6 +166,11 @@ the prompt. Never fix an LLM merge by hardcoding around it downstream.
 
 ## Tatva pricing-method ObjectIds (market-rate, not matrix join)
 
+Owned by [../../../PLAN_RECOMMENDATIONS.md](../../../PLAN_RECOMMENDATIONS.md)
+and locked in
+[../../../ACTION_RECOMMENDATIONS.md](../../../ACTION_RECOMMENDATIONS.md).
+Do not change that flow from this comparison-bind doc.
+
 Vendor `/by-category` and `/suggest` attach `service_id` / `sub_service_id` /
 `pricing_id` from `market_moving_averages` columns only. Live Tatva catalog
 aliases (e.g. `Square Feet` → Area) must not overwrite those IDs.

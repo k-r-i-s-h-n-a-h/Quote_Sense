@@ -1,0 +1,40 @@
+---
+description: Comparison vs recommendations maps — no graphify
+alwaysApply: true
+---
+
+# Two products, two maps
+
+QuoteSense has two working products. Pick the pair that matches the task.
+Do not use the other product's files to justify edits.
+
+| Task | Plan (how it works) | Action (do not reverse) |
+| --- | --- | --- |
+| Comparison matrix, spaces, packages, GST, PDFs, comparison narrative | [PLAN.md](PLAN.md) then the owning `backend/docs/plan/0N-*.md` or `frontend/docs/plan/0N-*.md` | [ACTION.md](ACTION.md) — never reverse §1–4 |
+| Vendor market-rate list/suggest, `pricing_id`, `/by-category`, base-rate banner | [PLAN_RECOMMENDATIONS.md](PLAN_RECOMMENDATIONS.md) | [ACTION_RECOMMENDATIONS.md](ACTION_RECOMMENDATIONS.md) — never reverse §1–4 |
+
+`backend/docs/plan/06-recommend.md` is comparison S6 (matrix narrative).
+It is not vendor base rates.
+
+If the request would change a flow that already matches the matching ACTION
+file, **do not edit that code**. Explain that it is locked and only change a
+stage that is actually broken.
+
+Do **not** run graphify, query a knowledge graph, or write `graphify-out/`.
+
+After changing **comparison** code, update the matching plan file in the same
+change:
+
+- new or renamed field → `backend/docs/plan/00-contracts.md` (and the frontend
+  mirror if the UI reads it)
+- behaviour → that stage's `backend/docs/plan/0N-*.md` or
+  `frontend/docs/plan/0N-*.md`
+- customer-visible rule → `ACTION.md` (append only; never rewrite §1–4)
+
+After changing **recommendation** code, update in the same change:
+
+- behaviour / fields → `PLAN_RECOMMENDATIONS.md`
+- customer-visible rule → `ACTION_RECOMMENDATIONS.md` (append only; never
+  rewrite §1–4)
+
+Orient with the plan docs, then Read/Grep the modules they name.

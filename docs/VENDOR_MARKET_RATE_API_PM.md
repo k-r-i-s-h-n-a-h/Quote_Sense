@@ -1,5 +1,10 @@
 # Vendor Market Rate API — PM quote form (updated)
 
+Agent map and lock (do not reverse):
+[PLAN_RECOMMENDATIONS.md](../PLAN_RECOMMENDATIONS.md),
+[ACTION_RECOMMENDATIONS.md](../ACTION_RECOMMENDATIONS.md).
+This file is the HTTP contract for PM, not the change protocol.
+
 **Base URL (prod):** `https://tatvaops-quotesense.onrender.com`  
 **Local:** `http://127.0.0.1:8001`
 

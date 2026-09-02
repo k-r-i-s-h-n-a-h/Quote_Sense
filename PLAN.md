@@ -1,8 +1,12 @@
 # QuoteSense comparison pipeline — plan index and change protocol
 
-This is the spine document for the quote-comparison pipeline. It defines the
+This is the spine document for the **quote-comparison** pipeline. It defines the
 stages, the data contract that flows between them, and the rule you follow when
 something breaks so that you change **only the stage that broke**.
+
+Vendor market-rate recommendations (list / suggest / base-rate banner) are a
+different product: [PLAN_RECOMMENDATIONS.md](PLAN_RECOMMENDATIONS.md) and
+[ACTION_RECOMMENDATIONS.md](ACTION_RECOMMENDATIONS.md).
 
 Read this first, then open the stage file you actually need.
 
@@ -20,10 +24,13 @@ explains a gap (qty / rate / named spec) without changing totals.
 
 | Where | File | Covers |
 | --- | --- | --- |
-| Root | `PLAN.md` (this file) | Stage map, contract chain, change protocol |
-| Backend | [backend/PLAN.md](backend/PLAN.md) | Backend stage index |
+| Root | `PLAN.md` (this file) | Comparison stage map, contract chain, change protocol |
+| Root | [ACTION.md](ACTION.md) | Comparison invariants — do not reverse §1–4 |
+| Root | [PLAN_RECOMMENDATIONS.md](PLAN_RECOMMENDATIONS.md) | Vendor market-rate recommendations (not this pipeline) |
+| Root | [ACTION_RECOMMENDATIONS.md](ACTION_RECOMMENDATIONS.md) | Recommendation invariants — do not reverse §1–4 |
+| Backend | [backend/PLAN.md](backend/PLAN.md) | Backend comparison stage index |
 | Backend | [backend/docs/plan/00-contracts.md](backend/docs/plan/00-contracts.md) | Field-level contract definitions |
-| Backend | `backend/docs/plan/01-extract.md` … `06-recommend.md` | One file per stage |
+| Backend | `backend/docs/plan/01-extract.md` … `06-recommend.md` | One file per comparison stage (S6 is matrix narrative) |
 | Frontend | [frontend/PLAN.md](frontend/PLAN.md) | Frontend stage index |
 | Frontend | `frontend/docs/plan/00-contracts.md` … `04-export.md` | One file per stage |
 
@@ -189,8 +196,13 @@ change — never in a follow-up:
    (and the frontend mirror if the UI reads it).
 2. Behaviour change → that stage's `backend/docs/plan/0N-*.md` or
    `frontend/docs/plan/0N-*.md`.
-3. Customer-visible rule → [ACTION.md](ACTION.md) (append only; do not rewrite
+3. Customer-visible comparison rule → [ACTION.md](ACTION.md) (append only; do not rewrite
    §1–4).
+
+Vendor market-rate changes use
+[PLAN_RECOMMENDATIONS.md](PLAN_RECOMMENDATIONS.md) and
+[ACTION_RECOMMENDATIONS.md](ACTION_RECOMMENDATIONS.md) the same way — not
+this file.
 
 If a later agent cannot find the behaviour in these files, the last change
 skipped this step. Fix the doc before adding more code.

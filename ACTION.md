@@ -1,12 +1,18 @@
-# ACTION.md — invariants agents must not reverse
+# ACTION.md — comparison invariants agents must not reverse
 
-This file is the lock on comparison behaviour that customers already agreed.
+This file is the lock on **comparison** behaviour that customers already
+agreed. Vendor market-rate recommendations are a different product — lock
+and map are [ACTION_RECOMMENDATIONS.md](ACTION_RECOMMENDATIONS.md) and
+[PLAN_RECOMMENDATIONS.md](PLAN_RECOMMENDATIONS.md). Do not mix the two.
+`backend/docs/plan/06-recommend.md` is the comparison narrative (S6), not
+vendor base rates.
+
 If a later change looks like an improvement but violates one of these rules,
 **do not ship it**. Update a stage implementation to honour the rule; do not
 weaken the rule to make a model or a heuristic easier.
 
-The pipeline plan stays in [PLAN.md](PLAN.md). This file is the "why we must
-not undo that work" list.
+The comparison pipeline plan stays in [PLAN.md](PLAN.md). This file is the
+"why we must not undo that work" list.
 
 ---
 

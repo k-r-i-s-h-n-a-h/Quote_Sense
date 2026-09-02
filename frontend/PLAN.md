@@ -3,6 +3,8 @@
 Start at [../PLAN.md](../PLAN.md) for the pipeline contract chain and change
 protocol. This file is the frontend-side index.
 
+Vendor market-rate UI/embed is not comparison: [../PLAN_RECOMMENDATIONS.md](../PLAN_RECOMMENDATIONS.md).
+
 | Stage | Doc | Module |
 | --- | --- | --- |
 | F0 contracts | [docs/plan/00-contracts.md](docs/plan/00-contracts.md) | `lib/compare-types.ts` |

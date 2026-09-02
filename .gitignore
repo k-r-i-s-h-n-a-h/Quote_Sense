@@ -5,7 +5,9 @@ venv/
 node_modules*
 __pycache__/
 .test-deps/
-.cursor/
+.cursor/*
+!.cursor/rules/
+!.cursor/rules/**
 *.icloud-broken
 staging_data.sql
 *.icloud

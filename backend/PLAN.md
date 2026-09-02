@@ -12,7 +12,11 @@ implements it, and where to look when it misbehaves.
 | S3 spaces | [docs/plan/03-spaces.md](docs/plan/03-spaces.md) | `services/space_clusters.py` |
 | S4 bundles | [docs/plan/04-bundles.md](docs/plan/04-bundles.md) | `services/bundles.py` |
 | S5 matrix | [docs/plan/05-matrix.md](docs/plan/05-matrix.md) | `services/comparator.py` |
-| S6 recommend | [docs/plan/06-recommend.md](docs/plan/06-recommend.md) | `services/comparator.py` |
+| S6 recommend | [docs/plan/06-recommend.md](docs/plan/06-recommend.md) | `services/comparator.py` (matrix narrative — not vendor MA) |
+
+Vendor market-rate list/suggest is not a comparison stage. Map:
+[../PLAN_RECOMMENDATIONS.md](../PLAN_RECOMMENDATIONS.md). Lock:
+[../ACTION_RECOMMENDATIONS.md](../ACTION_RECOMMENDATIONS.md).
 
 ## Orchestration
 

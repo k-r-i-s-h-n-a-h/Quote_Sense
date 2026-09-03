@@ -379,16 +379,22 @@ def update_rate_moving_average(
     batch_rates: list[float],
     *,
     allow_insert: bool = True,
+    service_id: str | None = None,
+    sub_service_id: str | None = None,
+    pricing_method_id: str | None = None,
 ) -> tuple[float, int]:
     """
     Merge session batch of raw rates into stored weighted moving average.
 
-    When allow_insert=False (finalize path), only update rows that already exist
-    in market_moving_averages (seeded bundles). Unmatched pairs are skipped —
-    never create new MA rows from finalized quotes.
+    Existing bundle → blend. Missing bundle → INSERT only when allow_insert
+    and the quote line has Tatva sub_service_id + pricing_method_id.
+    Inserts only this service_type (do not fan-out Mid/Luxury).
     """
     key = bundle_key(service_type, service_category, sub_service, pricing_method)
     label = f"{key['sub_service']} / {key['pricing_method']}"
+    svc_oid = _as_object_id(service_id)
+    sub_oid = _as_object_id(sub_service_id)
+    pm_oid = _as_object_id(pricing_method_id)
 
     # Frozen base rates: read existing seed, never write averages or sessions.
     if not market_rate_updates_enabled():
@@ -422,6 +428,12 @@ def update_rate_moving_average(
                 f"{key['service_category']} / {label}"
             )
             return 0.0, 0
+        if not sub_oid or not pm_oid:
+            print(
+                f"  ⏭️ Rate avg skip (insert needs Tatva ids): {key['service_type']} / "
+                f"{key['service_category']} / {label}"
+            )
+            return 0.0, 0
         moving_avg = batch_avg
         weight = batch_weight
         print(
@@ -446,6 +458,11 @@ def update_rate_moving_average(
         "last_session_id": session_id,
         "item_key": f"{key['sub_service']}::{key['pricing_method']}",
     }
+    if existing is None:
+        if svc_oid:
+            payload["service_id"] = svc_oid
+        payload["sub_service_id"] = sub_oid
+        payload["pricing_method_id"] = pm_oid
 
     try:
         if existing and existing.get("id"):
@@ -771,6 +788,13 @@ def recommend_rate(
     }
 
 
+def _row_object_id(row, column: str) -> str | None:
+    try:
+        return _as_object_id(row.get(column))
+    except Exception:
+        return None
+
+
 def update_rates_from_dataframe(
     df,
     session_id: str,
@@ -782,7 +806,8 @@ def update_rates_from_dataframe(
     Collect one rate per vendor per bundle from a compare dataframe.
     Returns map of bundle tuple -> (rate_avg, weight) for display lookups.
 
-    Finalize path must pass allow_insert=False so only seeded MA bundles update.
+    Finalize path passes allow_insert=True so a new combo (this tier only)
+    can INSERT when the line has Tatva sub_service_id + pricing_method_id.
     """
     if df is None or len(df) == 0:
         return {}
@@ -793,6 +818,7 @@ def update_rates_from_dataframe(
 
     results: dict[tuple, tuple[float, int]] = {}
     grouped: dict[tuple, dict[str, float]] = {}
+    ids_by_bundle: dict[tuple, dict[str, str | None]] = {}
 
     for _, row in df.iterrows():
         pm = normalize_pricing_method(row.get("pricing_method"))
@@ -809,16 +835,36 @@ def update_rates_from_dataframe(
             continue
         bundle = (st, cat, sub, pm)
         grouped.setdefault(bundle, {})[vendor] = rate
+        ids = ids_by_bundle.setdefault(
+            bundle,
+            {"service_id": None, "sub_service_id": None, "pricing_method_id": None},
+        )
+        if not ids["service_id"]:
+            ids["service_id"] = _row_object_id(row, "service_id")
+        if not ids["sub_service_id"]:
+            ids["sub_service_id"] = _row_object_id(row, "sub_service_id")
+        if not ids["pricing_method_id"]:
+            ids["pricing_method_id"] = _row_object_id(row, "pricing_method_id")
 
     for bundle, vendor_rates in grouped.items():
         rates = list(vendor_rates.values())
         st, cat, sub, pm = bundle
+        oids = ids_by_bundle.get(bundle) or {}
         if fast:
             avg = round(sum(rates) / len(rates), 2) if rates else 0.0
             weight = len(rates)
         else:
             avg, weight = update_rate_moving_average(
-                session_id, st, cat, sub, pm, rates, allow_insert=allow_insert
+                session_id,
+                st,
+                cat,
+                sub,
+                pm,
+                rates,
+                allow_insert=allow_insert,
+                service_id=oids.get("service_id"),
+                sub_service_id=oids.get("sub_service_id"),
+                pricing_method_id=oids.get("pricing_method_id"),
             )
         results[bundle] = (avg, weight)
 
@@ -1001,7 +1047,9 @@ def apply_finalized_quotes_to_market_rates(
     Strict rules:
       - Only quotes with the finalize flag
       - Only quotes on/after MA_FINALIZE_MIN_DATE (default 2026-08-14)
-      - Only update existing seeded MA bundles (never INSERT new pairs)
+      - Existing MA bundle → blend the rate
+      - New combo → INSERT this quote's service_type only, when the line has
+        Tatva sub_service_id + pricing_method_id. Do not fan-out Mid/Luxury.
 
     Compare sessions must not call this for every row; only finalize-flagged payloads.
     """
@@ -1061,9 +1109,8 @@ def apply_finalized_quotes_to_market_rates(
 
         try:
             df = mongodb_quotes_to_dataframe([quote_entry])
-            # Seed-match only: never INSERT unmatched category/sub/PM bundles.
             bundles = update_rates_from_dataframe(
-                df, sid, fast=False, allow_insert=False
+                df, sid, fast=False, allow_insert=True
             )
             matched = {k: v for k, v in bundles.items() if v[1] > 0 or v[0] > 0}
             total_bundles += len(matched)
@@ -1078,7 +1125,7 @@ def apply_finalized_quotes_to_market_rates(
             )
             print(
                 f"  ✅ Finalized quote #{label} → market MA "
-                f"({len(matched)} seeded bundles updated, session={sid}, source={source})"
+                f"({len(matched)} bundles updated/inserted, session={sid}, source={source})"
             )
         except Exception as e:
             msg = f"{label}: {e}"
@@ -1097,7 +1144,7 @@ def apply_finalized_quotes_to_market_rates(
         "bundles_updated": total_bundles,
         "applied": applied,
         "errors": errors,
-        "seed_match_only": True,
+        "seed_match_only": False,
     }
 
 

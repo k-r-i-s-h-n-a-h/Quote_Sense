@@ -105,5 +105,26 @@ write MA. Only finalized-quote apply may update rates, and only when
 `MARKET_RATE_UPDATES_ENABLED` is not frozen.
 
 Do not harvest ids or rewrite MA from a comparison run "to keep catalogs
-fresh". Seed / env UPDATE is the id source. `sync-catalog` is an explicit
-ops endpoint, not part of list/suggest.
+fresh". Seed / env UPDATE is the id source for **existing** rows.
+`sync-catalog` is an explicit ops endpoint, not part of list/suggest.
+
+---
+
+## 7. Finalize may insert a new combo for that tier only
+
+A finalized quote either **blends** an existing MA bundle or **inserts one
+new row** for `service_type` + `service_category` + `sub_service` +
+`pricing_method`.
+
+- Known combo (Wardrobe + Area – Direct Entry sq ft, Essential) → update
+  that row's rate and weight. Do not change the blend formula.
+- New combo (Wardrobe + Area in sq mm, Essential) → INSERT Essential only.
+- Mid and Luxury of that new combo stay **absent** until a vendor finalizes
+  that tier. Do not copy Essential's rate across tiers. Do not insert
+  placeholder null-rate siblings.
+- Insert only when the quote line has Tatva `sub_service_id` and
+  `pricing_method_id`. Label-only junk does not create MA rows. Copy those
+  ids (and `service_id` when present) onto the new row — never from
+  `ensure_live_catalog()`.
+- Compare still does not write MA. `MARKET_RATE_UPDATES_ENABLED=false`
+  still freezes all writes.

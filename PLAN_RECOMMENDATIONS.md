@@ -62,7 +62,7 @@ MA writes only"]
 | R2 resolve | `backend/services/tatva_catalog.py` (`resolve_item_labels`), `main.py` `_resolve_work_item_labels` | Inbound ids → labels so R4 can look up the bundle. Reverse-map via MA columns + `_PM_STALE_ID_ALIASES`. Not used to overwrite outbound ids |
 | R3 list | `market_rate.list_market_rates_by_category`, `GET /api/market-rate/by-category` | All recommendable rows for one service + tier. Ids from MA columns only |
 | R4 suggest | `market_rate.recommend_rate`, `GET\|POST /api/market-rate/suggest` (`/lookup`, `/recommend`) | One bundle. Banner only when entered rate > base |
-| R5 apply | `market_rate.update_rates_from_dataframe`, `POST /api/market-rate/apply-finalized` | Optional MA blend from finalized quotes. Gated by `MARKET_RATE_UPDATES_ENABLED`. Compare never writes MA |
+| R5 apply | `market_rate.update_rates_from_dataframe`, `POST /api/market-rate/apply-finalized` | Finalized quotes blend existing MA rows, or INSERT a new combo for **that tier only** when the line has Tatva `sub_service_id` + `pricing_method_id`. Gated by `MARKET_RATE_UPDATES_ENABLED`. Compare never writes MA |
 
 Entry points: `backend/main.py` (`/api/market-rate/*`). Tests:
 `backend/tests/test_market_rate_helpers.py`,
@@ -102,10 +102,11 @@ Inbound params: `service_id` (main service), `category_id` /
 | Outbound ObjectIds and rates | R1 via R3/R4 copy (`_label_ids`) |
 | Inbound id → label | R2 |
 | `recommend` / banner | R4 |
-| MA rate blend | R5 only |
+| MA rate blend / new-combo insert | R5 only |
 
 R3/R4 must not write R2's live catalog into outbound ids. R5 must not run
-from a compare session.
+from a compare session. R5 inserts only the finalized quote's `service_type`;
+it does not create empty Mid/Luxury sibling rows.
 
 ---
 
@@ -130,6 +131,7 @@ or vendor form bases:
 | Test/prod ids match DEV | R1 — env tables mixed; do not "fix" in code |
 | Null ids on a row that has them in Supabase | R3/R4 — `_label_ids` not copying MA columns |
 | Comparison matrix join changed after a market-rate edit | Wrong product — put the change in [PLAN.md](PLAN.md) S2, not here |
+| Finalized quote did not add a new sq mm row | R5 — insert skipped (missing Tatva ids, freeze flag, or already applied) |
 
 ### Adding a field
 
@@ -144,6 +146,7 @@ rewrite §1–4).
   `tatva_sub_service_ids.json` as the outbound id source.
 - Do not apply comparison `work_catalog` aliases to MA rows.
 - Do not put env ObjectIds into the git seed SQL.
+- Do not insert Mid/Luxury placeholder rows when a new combo arrives on Essential.
 
 ---
 

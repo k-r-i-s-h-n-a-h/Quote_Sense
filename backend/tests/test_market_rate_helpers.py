@@ -23,6 +23,9 @@ from services.market_rate import (
     finalized_quote_session_id,
     _label_ids,
     list_market_rates_by_category,
+    update_rate_moving_average,
+    update_rates_from_dataframe,
+    apply_finalized_quotes_to_market_rates,
 )
 
 LIVE_AREA_SQFT = "6a79ab1cf47d48a866051b3f"
@@ -287,4 +290,254 @@ def test_by_category_items_use_ma_ids_not_catalog(monkeypatch):
     assert item["sub_service_id"] == MA_SUB_SERVICE
     assert item["service_id"] == MA_SERVICE
     assert item["pricing_method_label"] == "Area – Direct Entry (sq ft)"
+
+
+SQMM_PM = "6a79ab1df47d48a866051b99"
+NEW_ROW_ID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+
+
+class _PersistTable:
+    def __init__(self, store):
+        self.store = store
+
+    def update(self, payload):
+        self.store["update"] = payload
+        return self
+
+    def eq(self, *_args, **_kwargs):
+        return self
+
+    def insert(self, payload):
+        self.store["insert"] = payload
+        return self
+
+    def execute(self):
+        return MagicMock(data=[{"id": self.store.get("inserted_id") or "row-1"}])
+
+
+def _patch_ma_persist(monkeypatch, *, existing=None, store=None):
+    store = store if store is not None else {}
+    monkeypatch.setattr(
+        "services.market_rate.fetch_market_rate_row", lambda _key: existing
+    )
+    monkeypatch.setattr("services.market_rate._session_already_applied", lambda *_a: False)
+    monkeypatch.setattr("services.market_rate._record_session", lambda *_a, **_k: None)
+    monkeypatch.delenv("MARKET_RATE_UPDATES_ENABLED", raising=False)
+    fake_client = MagicMock()
+    fake_client.table.return_value = _PersistTable(store)
+    monkeypatch.setattr("services.market_rate.get_supabase_client", lambda: fake_client)
+    return store
+
+
+def test_finalize_existing_bundle_blends_and_does_not_insert(monkeypatch):
+    existing = {
+        "id": "row-1",
+        "rate_moving_average": 1000.0,
+        "moving_average": 1000.0,
+        "weight": 1,
+    }
+    store = _patch_ma_persist(monkeypatch, existing=existing)
+    avg, weight = update_rate_moving_average(
+        "finalize:Q1",
+        "ESSENTIAL",
+        "Residential Interiors",
+        "Wardrobe",
+        "Area – Direct Entry (sq ft)",
+        [1200.0],
+        allow_insert=True,
+        service_id=MA_SERVICE,
+        sub_service_id=MA_SUB_SERVICE,
+        pricing_method_id=LIVE_AREA_SQFT,
+    )
+    assert store.get("insert") is None
+    assert store["update"]["rate_moving_average"] == 1100.0
+    assert "sub_service_id" not in store["update"]
+    assert avg == 1100.0
+    assert weight == 2
+
+
+def test_finalize_new_combo_inserts_this_tier_only_with_ids(monkeypatch):
+    store = _patch_ma_persist(monkeypatch, existing=None)
+    store["inserted_id"] = NEW_ROW_ID
+    avg, weight = update_rate_moving_average(
+        "finalize:Q2",
+        "ESSENTIAL",
+        "Residential Interiors",
+        "Wardrobe",
+        "Area (in sqmm)",
+        [850.0],
+        allow_insert=True,
+        service_id=MA_SERVICE,
+        sub_service_id=MA_SUB_SERVICE,
+        pricing_method_id=SQMM_PM,
+    )
+    inserted = store["insert"]
+    assert store.get("update") is None
+    assert inserted["service_type"] == "ESSENTIAL"
+    assert inserted["pricing_method"] == "Area (in sqmm)"
+    assert inserted["sub_service_id"] == MA_SUB_SERVICE
+    assert inserted["pricing_method_id"] == SQMM_PM
+    assert inserted["service_id"] == MA_SERVICE
+    assert inserted["rate_moving_average"] == 850.0
+    assert inserted["weight"] == 1
+    assert avg == 850.0
+    assert weight == 1
+
+
+def test_finalize_new_combo_without_ids_skips_insert(monkeypatch):
+    store = _patch_ma_persist(monkeypatch, existing=None)
+    avg, weight = update_rate_moving_average(
+        "finalize:Q3",
+        "ESSENTIAL",
+        "Residential Interiors",
+        "Wardrobe",
+        "Area (in sqmm)",
+        [850.0],
+        allow_insert=True,
+    )
+    assert store.get("insert") is None
+    assert store.get("update") is None
+    assert avg == 0.0
+    assert weight == 0
+
+
+def test_finalize_already_applied_does_not_blend_again(monkeypatch):
+    existing = {
+        "id": "row-1",
+        "rate_moving_average": 1000.0,
+        "moving_average": 1000.0,
+        "weight": 2,
+    }
+    store = _patch_ma_persist(monkeypatch, existing=existing)
+    monkeypatch.setattr("services.market_rate._session_already_applied", lambda *_a: True)
+    avg, weight = update_rate_moving_average(
+        "finalize:Q1",
+        "ESSENTIAL",
+        "Residential Interiors",
+        "Wardrobe",
+        "Area – Direct Entry (sq ft)",
+        [2000.0],
+        allow_insert=True,
+        sub_service_id=MA_SUB_SERVICE,
+        pricing_method_id=LIVE_AREA_SQFT,
+    )
+    assert store.get("insert") is None
+    assert store.get("update") is None
+    assert avg == 1000.0
+    assert weight == 2
+
+
+def test_finalize_frozen_skips_write(monkeypatch):
+    existing = {
+        "id": "row-1",
+        "rate_moving_average": 1000.0,
+        "moving_average": 1000.0,
+        "weight": 1,
+    }
+    store = _patch_ma_persist(monkeypatch, existing=existing)
+    monkeypatch.setenv("MARKET_RATE_UPDATES_ENABLED", "false")
+    avg, weight = update_rate_moving_average(
+        "finalize:Q1",
+        "ESSENTIAL",
+        "Residential Interiors",
+        "Wardrobe",
+        "Area – Direct Entry (sq ft)",
+        [2000.0],
+        allow_insert=True,
+        sub_service_id=MA_SUB_SERVICE,
+        pricing_method_id=LIVE_AREA_SQFT,
+    )
+    assert store.get("insert") is None
+    assert store.get("update") is None
+    assert avg == 1000.0
+    assert weight == 1
+
+
+def test_apply_finalized_passes_allow_insert_true(monkeypatch):
+    captured = {}
+
+    monkeypatch.delenv("MARKET_RATE_UPDATES_ENABLED", raising=False)
+    monkeypatch.setattr(
+        "services.market_rate.finalize_quote_meets_min_date", lambda _q: True
+    )
+    monkeypatch.setattr(
+        "services.market_rate.finalize_quote_already_applied_to_ma", lambda _q: False
+    )
+
+    def fake_df(_quotes):
+        import pandas as pd
+
+        return pd.DataFrame(
+            [
+                {
+                    "vendor_name": "Acme",
+                    "service_type": "ESSENTIAL",
+                    "service_category": "Residential Interiors",
+                    "sub_service": "Wardrobe",
+                    "pricing_method": "Area (in sqmm)",
+                    "rate": 850,
+                    "quantity": 1,
+                    "amount": 850,
+                    "service_id": MA_SERVICE,
+                    "sub_service_id": MA_SUB_SERVICE,
+                    "pricing_method_id": SQMM_PM,
+                }
+            ]
+        )
+
+    def fake_update(df, sid, fast=False, allow_insert=False):
+        captured["allow_insert"] = allow_insert
+        captured["sid"] = sid
+        return {("ESSENTIAL", "Residential Interiors", "Wardrobe", "Area (in sqmm)"): (850.0, 1)}
+
+    monkeypatch.setattr(
+        "services.comparator.mongodb_quotes_to_dataframe", fake_df
+    )
+    monkeypatch.setattr(
+        "services.market_rate.update_rates_from_dataframe", fake_update
+    )
+
+    result = apply_finalized_quotes_to_market_rates(
+        [{"isFinalizeQuote": True, "quoteNumber": "Q-NEW"}],
+        source="test",
+    )
+    assert captured["allow_insert"] is True
+    assert result["seed_match_only"] is False
+    assert result["quotes_applied"] == 1
+    assert result["bundles_updated"] == 1
+
+
+def test_update_rates_from_dataframe_threads_ids(monkeypatch):
+    import pandas as pd
+
+    captured = {}
+
+    def fake_update(*args, **kwargs):
+        captured["kwargs"] = kwargs
+        captured["args"] = args
+        return 850.0, 1
+
+    monkeypatch.setattr("services.market_rate.update_rate_moving_average", fake_update)
+    df = pd.DataFrame(
+        [
+            {
+                "vendor_name": "Acme",
+                "service_type": "ESSENTIAL",
+                "service_category": "Residential Interiors",
+                "sub_service": "Wardrobe",
+                "pricing_method": "Area (in sqmm)",
+                "rate": 850,
+                "quantity": 1,
+                "amount": 850,
+                "service_id": MA_SERVICE,
+                "sub_service_id": MA_SUB_SERVICE,
+                "pricing_method_id": SQMM_PM,
+            }
+        ]
+    )
+    update_rates_from_dataframe(df, "finalize:Q2", allow_insert=True)
+    assert captured["kwargs"]["allow_insert"] is True
+    assert captured["kwargs"]["sub_service_id"] == MA_SUB_SERVICE
+    assert captured["kwargs"]["pricing_method_id"] == SQMM_PM
+    assert captured["kwargs"]["service_id"] == MA_SERVICE
 

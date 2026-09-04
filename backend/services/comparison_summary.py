@@ -52,6 +52,23 @@ def _who(vendor: str) -> str:
     return (vendor.split(" (")[0] or vendor).strip() or vendor
 
 
+def _vendor_refs(vendors: list[str]) -> dict[str, str]:
+    """Readable labels; duplicate company names become Vendor Q1 / Vendor Q2."""
+    base = {vendor: _who(vendor) for vendor in vendors}
+    counts: dict[str, int] = {}
+    for name in base.values():
+        key = name.casefold()
+        counts[key] = counts.get(key, 0) + 1
+    return {
+        vendor: (
+            f"{name} Q{index + 1}"
+            if counts.get(name.casefold(), 0) > 1
+            else name
+        )
+        for index, (vendor, name) in enumerate(base.items())
+    }
+
+
 def _qty_unit(pricing_method: str) -> str:
     pm = (pricing_method or "").casefold()
     if "sq ft" in pm or "sqft" in pm or "sq.ft" in pm:
@@ -152,12 +169,19 @@ def _qty_rate_parts(
         mid = (qty_a + qty_b) / 2.0
         qty_gap = bool(mid and abs(qty_a - qty_b) / mid >= 0.10)
         if qty_gap:
-            parts.append(f"{qty_a:g} {unit} vs {qty_b:g} {unit} (billed more area)")
+            more = a if qty_a > qty_b else b
+            parts.append(
+                f"{_who(a)}: {qty_a:g} {unit}; {_who(b)}: {qty_b:g} {unit} "
+                f"({_who(more)} billed more area)"
+            )
     if rate_a > 0 and rate_b > 0:
         rmid = (rate_a + rate_b) / 2.0
         if rmid and abs(rate_a - rate_b) / rmid >= 0.10:
             higher = a if rate_a > rate_b else b
-            rates = f"{_inr(rate_a)}/{unit} vs {_inr(rate_b)}/{unit}"
+            rates = (
+                f"{_who(a)}: {_inr(rate_a)}/{unit}; "
+                f"{_who(b)}: {_inr(rate_b)}/{unit}"
+            )
             if qty_gap:
                 parts.append(rates)
             elif qty_a > 0 and qty_b > 0:
@@ -172,6 +196,7 @@ def row_comparison_summary(row: dict[str, Any], vendors: list[str]) -> str:
     if len(vendors) < 2:
         return ""
 
+    refs = _vendor_refs(vendors)
     coverage = row.get("coverage") or {}
     amounts: dict[str, float] = {}
     for vendor in vendors:
@@ -187,10 +212,10 @@ def row_comparison_summary(row: dict[str, Any], vendors: list[str]) -> str:
         status = str(coverage.get(vendor) or "")
         if status.startswith("incl_in_parent"):
             place = _coverage_place(status, "another space")
-            elsewhere.append(f"{_who(vendor)}'s figure is inside {place}")
+            elsewhere.append(f"{refs[vendor]}'s figure is inside {place}")
         elif status.startswith("incl_in_bundle"):
             place = _coverage_place(status, "a package")
-            elsewhere.append(f"{_who(vendor)}'s figure is inside {place}")
+            elsewhere.append(f"{refs[vendor]}'s figure is inside {place}")
         elif amounts[vendor] > 0 or status == "quoted":
             quoted.append(vendor)
         else:
@@ -200,7 +225,7 @@ def row_comparison_summary(row: dict[str, Any], vendors: list[str]) -> str:
         return "; ".join(elsewhere)
 
     if len(quoted) == 1 and gaps:
-        return f"{_who(gaps[0])} did not quote this line"
+        return f"{refs[gaps[0]]} did not quote this line"
 
     if len(quoted) < 2:
         return ""
@@ -212,9 +237,11 @@ def row_comparison_summary(row: dict[str, Any], vendors: list[str]) -> str:
     rate_a, rate_b = ma["rate"], mb["rate"]
     unit = _qty_unit(ma["pricing_method"] or mb["pricing_method"])
 
-    amount = _amount_clause(amt_a, amt_b, a, b)
-    reasons = _qty_rate_parts(qty_a, qty_b, rate_a, rate_b, unit, a, b)
-    spec = _spec_clause(ma, mb, a, b)
+    amount = _amount_clause(amt_a, amt_b, refs[a], refs[b])
+    reasons = _qty_rate_parts(
+        qty_a, qty_b, rate_a, rate_b, unit, refs[a], refs[b]
+    )
+    spec = _spec_clause(ma, mb, refs[a], refs[b])
     if spec:
         reasons.append(spec)
     if not reasons:
@@ -226,6 +253,7 @@ def _item_count_reason(
     totals: dict[str, float],
     vendors: list[str],
     item_counts: dict[str, int] | None,
+    refs: dict[str, str],
 ) -> str:
     if not item_counts or len(vendors) < 2:
         return ""
@@ -244,7 +272,7 @@ def _item_count_reason(
     other_n = n_b if higher == a else n_a
     text = f"{n_a} items vs {n_b}"
     if higher_n < other_n:
-        text += f" — {_who(higher)} charged more for fewer lines"
+        text += f" — {refs[higher]} charged more for fewer lines"
     return text
 
 
@@ -259,6 +287,7 @@ def space_header_summary(
     package_vs_itemised: bool = False,
 ) -> str:
     """Space-header sentence from totals. Does not change the addition."""
+    refs = _vendor_refs(vendors)
     notes = [n for n in (coverage_notes or []) if n]
     skip_gap = bool(notes)
 
@@ -266,11 +295,14 @@ def space_header_summary(
     gaps = [v for v in vendors if (totals.get(v) or 0) <= 0]
     amount = ""
     if len(quoted) == 1 and gaps and not skip_gap:
-        amount = f"{_who(gaps[0])} did not quote this line"
+        amount = f"{refs[gaps[0]]} did not quote this line"
     elif len(quoted) >= 2:
         a, b = quoted[0], quoted[1]
         amount = _amount_clause(
-            float(totals.get(a) or 0), float(totals.get(b) or 0), a, b
+            float(totals.get(a) or 0),
+            float(totals.get(b) or 0),
+            refs[a],
+            refs[b],
         )
 
     parts: list[str] = []
@@ -282,13 +314,13 @@ def space_header_summary(
             if package_vs_itemised
             else "scopes differ"
         )
-    counts = _item_count_reason(totals, vendors, item_counts)
+    counts = _item_count_reason(totals, vendors, item_counts, refs)
     if counts:
         parts.append(counts)
     if exclusive_labels:
         for vendor in vendors:
             labels = [lab for lab in (exclusive_labels.get(vendor) or []) if lab][:3]
             if labels:
-                parts.append(f"{_who(vendor)} also quoted {', '.join(labels)}")
+                parts.append(f"{refs[vendor]} also quoted {', '.join(labels)}")
     parts.extend(notes)
     return " · ".join(parts)

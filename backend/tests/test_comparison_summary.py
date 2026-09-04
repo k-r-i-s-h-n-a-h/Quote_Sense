@@ -11,6 +11,7 @@ import pandas as pd
 
 from services.comparator import _build_coverage, _build_space_rows
 from services.comparison_summary import row_comparison_summary, space_header_summary
+from services.work_catalog import apply_work_catalog
 
 
 A = "Infosys (Q1)"
@@ -29,8 +30,8 @@ def test_qty_driven_summary():
         },
     }
     text = row_comparison_summary(row, VENDORS)
-    assert "180" in text and "120" in text
-    assert "more area" in text
+    assert "Infosys: 180 sqft; TCS: 120 sqft" in text
+    assert "Infosys billed more area" in text
     assert "Infosys is ₹30,000 higher" in text
 
 
@@ -73,8 +74,8 @@ def test_qty_and_rate_both_named_when_both_differ():
     }
     text = row_comparison_summary(row, VENDORS)
     assert "TCS is ₹17,464 higher" in text
-    assert "12 sqft vs 20 sqft" in text
-    assert "₹850/sqft vs ₹1,250/sqft" in text
+    assert "Infosys: 12 sqft; TCS: 20 sqft" in text
+    assert "Infosys: ₹850/sqft; TCS: ₹1,250/sqft" in text
     assert "laminates" in text and "glass" in text
     assert "louvers" in text
 
@@ -91,7 +92,34 @@ def test_spec_omitted_when_description_empty():
     }
     text = row_comparison_summary(row, VENDORS)
     assert "specified" not in text
-    assert "12 sqft vs 20 sqft" in text
+    assert "Infosys: 12 sqft; TCS: 20 sqft" in text
+
+
+def test_same_company_quotes_are_named_q1_and_q2():
+    q1 = "Tatva Interiors (QUOTE-101)"
+    q2 = "Tatva Interiors (QUOTE-202)"
+    row = {
+        q1: 90000,
+        q2: 60000,
+        "coverage": {q1: "quoted", q2: "quoted"},
+        "measures": {
+            q1: {
+                "quantity": 180,
+                "rate": 500,
+                "pricing_method": "Area (sqft)",
+            },
+            q2: {
+                "quantity": 120,
+                "rate": 500,
+                "pricing_method": "Area (sqft)",
+            },
+        },
+    }
+
+    text = row_comparison_summary(row, [q1, q2])
+    assert "Tatva Interiors Q1 is ₹30,000 higher" in text
+    assert "Tatva Interiors Q1: 180 sqft" in text
+    assert "Tatva Interiors Q2: 120 sqft" in text
 
 
 def test_true_gap_keeps_did_not_quote():
@@ -160,6 +188,68 @@ def test_header_names_exclusive_line():
     )
     assert "Infosys is ₹71,154 higher" in text
     assert "TCS also quoted Vanity unit, Side table" in text
+
+
+def test_dismantling_does_not_inflate_wardrobe_install_quantity_or_rate():
+    rows = [
+        {
+            "vendor_name": A,
+            "sub_service": "Wardrobe",
+            "item_name": "Wardrobe",
+            "description": "Dismantle charges for wardrobe & loft",
+            "quantity": 70,
+            "rate": 100,
+            "amount": 7000,
+        },
+        {
+            "vendor_name": A,
+            "sub_service": "Wardrobe",
+            "item_name": "Wardrobe",
+            "description": "HDHMR wardrobe with laminate shutters",
+            "quantity": 40,
+            "rate": 1550,
+            "amount": 73160,
+        },
+        {
+            "vendor_name": B,
+            "sub_service": "Wardrobe",
+            "item_name": "Wardrobe",
+            "description": "Wardrobe with Century laminate",
+            "quantity": 45.5,
+            "rate": 1600,
+            "amount": 85904,
+        },
+    ]
+    df = apply_work_catalog(pd.DataFrame(rows))
+    df["space_id"] = "bedroom_2"
+    df["space"] = "Ground Floor Bedroom 2"
+    df["space_raw"] = "Ground Floor Bedroom 2"
+    df["service_category"] = "Residential Interiors"
+    df["service_type"] = "essential"
+    df["pricing_method"] = "Area – Direct Entry (sq ft)"
+    df["bundle_family"] = ""
+    df["contained_in"] = ""
+    df["space_confidence"] = 1.0
+    df["__seq"] = range(len(df))
+
+    matrix_rows = _build_space_rows(df, VENDORS, {})
+    assert len(matrix_rows) == 2
+
+    installation = next(
+        row for row in matrix_rows if row["sub_service"] == "Wardrobe"
+    )
+    dismantling = next(
+        row for row in matrix_rows if row["sub_service"] == "Wardrobe — dismantling"
+    )
+
+    assert installation[A] == 73160
+    assert installation[B] == 85904
+    assert installation["measures"][A]["quantity"] == 40
+    assert installation["measures"][A]["rate"] == 1550
+    assert dismantling[A] == 7000
+    assert dismantling[B] == 0
+    assert sum(row[A] for row in matrix_rows) == 80160
+    assert sum(row[B] for row in matrix_rows) == 85904
 
 
 def _nested_df():

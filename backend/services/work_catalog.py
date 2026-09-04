@@ -200,6 +200,60 @@ WORK_LABELS = {
     "tissue_paper_holder": "Tissue paper holder",
 }
 
+# Ancillary intent changes what is being bought even when the catalog title is
+# the same. Keep this deliberately conservative: a plain "Wardrobe" remains
+# fabrication/installation, while an explicit "dismantle wardrobe" line gets a
+# separate key and cannot inflate the wardrobe's billed area or dilute its rate.
+_ANCILLARY_INTENTS: tuple[tuple[str, str, re.Pattern[str]], ...] = (
+    (
+        "dismantling",
+        "dismantling",
+        re.compile(
+            r"\b(?:dismantl(?:e|ed|ing|ement)|demolish(?:ed|ing)?|demolition|"
+            r"strip[\s-]?out|remov(?:e|ing)\s+(?:the\s+)?(?:existing|old)|"
+            r"removal\s+(?:of\s+)?(?:the\s+)?(?:existing|old))\b",
+            re.I,
+        ),
+    ),
+    (
+        "cleaning",
+        "cleaning",
+        re.compile(
+            r"\b(?:cleaning|clean[\s-]?up|debris\s+(?:clearance|removal)|"
+            r"site\s+clearance)\b",
+            re.I,
+        ),
+    ),
+    (
+        "shifting",
+        "shifting",
+        re.compile(
+            r"\b(?:shifting|relocat(?:e|ed|ing|ion)|moving)\b",
+            re.I,
+        ),
+    ),
+)
+
+
+def _with_ancillary_intent(
+    resolved: dict[str, Any], *source_texts: str
+) -> dict[str, Any]:
+    """Split explicit dismantling/cleaning/shifting from the base work row."""
+    text = " ".join(str(value or "") for value in source_texts)
+    for slug, label, pattern in _ANCILLARY_INTENTS:
+        if not pattern.search(text):
+            continue
+        result = dict(resolved)
+        result["work_key"] = f"{resolved['work_key']}::intent:{slug}"
+        base_label = str(resolved.get("work_label") or "").strip()
+        result["work_label"] = (
+            base_label
+            if pattern.search(base_label)
+            else f"{base_label or 'Work'} — {label}"
+        )
+        return result
+    return resolved
+
 
 def _singularize(token: str) -> str:
     """Crude but safe: only strip a trailing plural s."""
@@ -357,22 +411,32 @@ def resolve_work(row: dict[str, Any]) -> dict[str, Any]:
         if from_desc and (primary is None or from_desc[0] != primary[0]):
             key, _source, _conf = from_desc
             slug = key.split(":", 1)[1]
-            return {
-                "work_key": key,
-                "work_label": work_label_for(slug, candidate),
-                "work_confidence": 0.6,
-                "work_source": "description",
-            }
+            return _with_ancillary_intent(
+                {
+                    "work_key": key,
+                    "work_label": work_label_for(slug, candidate),
+                    "work_confidence": 0.6,
+                    "work_source": "description",
+                },
+                sub_service,
+                item_name,
+                description,
+            )
 
     if primary:
         key, source, confidence = primary
         slug = key.split(":", 1)[1]
-        return {
-            "work_key": key,
-            "work_label": work_label_for(slug, sub_service or item_name),
-            "work_confidence": confidence,
-            "work_source": source,
-        }
+        return _with_ancillary_intent(
+            {
+                "work_key": key,
+                "work_label": work_label_for(slug, sub_service or item_name),
+                "work_confidence": confidence,
+                "work_source": source,
+            },
+            sub_service,
+            item_name,
+            description,
+        )
 
     label = sub_service or item_name or "Unspecified"
 
@@ -381,20 +445,30 @@ def resolve_work(row: dict[str, Any]) -> dict[str, Any]:
     # the same work.
     oid = str(row.get("sub_service_id") or "").strip()
     if oid:
-        return {
-            "work_key": f"tatva:{oid}",
-            "work_label": work_label_for("", label),
-            "work_confidence": 0.8,
-            "work_source": "tatva",
-        }
+        return _with_ancillary_intent(
+            {
+                "work_key": f"tatva:{oid}",
+                "work_label": work_label_for("", label),
+                "work_confidence": 0.8,
+                "work_source": "tatva",
+            },
+            sub_service,
+            item_name,
+            description,
+        )
 
     normalized = normalize_work_label(label)
-    return {
-        "work_key": f"norm:{_slugify(normalized or label)}",
-        "work_label": work_label_for("", label),
-        "work_confidence": 0.3,
-        "work_source": "normalized",
-    }
+    return _with_ancillary_intent(
+        {
+            "work_key": f"norm:{_slugify(normalized or label)}",
+            "work_label": work_label_for("", label),
+            "work_confidence": 0.3,
+            "work_source": "normalized",
+        },
+        sub_service,
+        item_name,
+        description,
+    )
 
 
 def _llm_enabled() -> bool:
@@ -509,7 +583,10 @@ def apply_work_catalog(df):
     if vendor_count < 2:
         return df
 
-    unresolved = df[df["work_source"] == "normalized"]
+    unresolved = df[
+        (df["work_source"] == "normalized")
+        & ~df["work_key"].astype(str).str.contains("::intent:", regex=False)
+    ]
     if len(unresolved) < 2:
         return df
 

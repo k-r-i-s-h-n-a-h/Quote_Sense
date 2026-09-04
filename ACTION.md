@@ -205,3 +205,22 @@ until one of the two is removed.
 Do not raise the cap back to three to "use empty matrix columns". Do not
 allow a one-quote compare. `MIN_COMPARE_QUOTES` and `MAX_COMPARE_QUOTES`
 stay 2 (`frontend/lib/compare-limits.ts`, `backend/main.py`).
+
+---
+
+## 10. Compare work intent, not only its catalog title
+
+Two lines called `Wardrobe` are not the same purchase when one is a new
+wardrobe and the other explicitly says dismantling, demolition, cleaning, or
+shifting. Keep those ancillary lines separate from fabrication/installation so
+their quantities and rates are never blended into a false area or unit rate.
+
+Do not move an ancillary amount into another vendor's generic `Civil` row.
+Civil and dismantling may be related, but they are not automatically
+like-for-like. Keep every rupee on the vendor's original line and let the space
+header name the exclusive work.
+
+Comparison Summary quantity and rate clauses must name both vendors. Never rely
+on bare `114 sqft vs 45.5 sqft` ordering after naming only the higher vendor.
+When both quotes have the same company name, call them `Vendor Q1` and
+`Vendor Q2` throughout the summary.

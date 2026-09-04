@@ -477,6 +477,22 @@ function whoOf(vendor: Vendor): string {
   return vendor.split(" (")[0].trim() || vendor;
 }
 
+function vendorRefs(vendors: Vendor[]): Record<Vendor, string> {
+  const bases = vendors.map((vendor) => whoOf(vendor));
+  const counts = new Map<string, number>();
+  for (const name of bases) {
+    const key = name.toLowerCase();
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  return Object.fromEntries(
+    vendors.map((vendor, index) => {
+      const name = bases[index];
+      const duplicate = (counts.get(name.toLowerCase()) || 0) > 1;
+      return [vendor, duplicate ? `${name} Q${index + 1}` : name];
+    })
+  );
+}
+
 function qtyUnit(pricingMethod: string): string {
   const pm = pricingMethod.toLowerCase();
   if (pm.includes("sq ft") || pm.includes("sqft") || pm.includes("sq.ft")) {
@@ -586,14 +602,20 @@ function qtyRateParts(
     const mid = (qtyA + qtyB) / 2;
     qtyGap = Boolean(mid && Math.abs(qtyA - qtyB) / mid >= 0.1);
     if (qtyGap) {
-      parts.push(`${qtyA} ${unit} vs ${qtyB} ${unit} (billed more area)`);
+      const more = qtyA > qtyB ? a : b;
+      parts.push(
+        `${whoOf(a)}: ${qtyA} ${unit}; ${whoOf(b)}: ${qtyB} ${unit} ` +
+          `(${whoOf(more)} billed more area)`
+      );
     }
   }
   if (rateA > 0 && rateB > 0) {
     const rmid = (rateA + rateB) / 2;
     if (rmid && Math.abs(rateA - rateB) / rmid >= 0.1) {
       const higher = rateA > rateB ? a : b;
-      const rates = `${inrDelta(rateA)}/${unit} vs ${inrDelta(rateB)}/${unit}`;
+      const rates =
+        `${whoOf(a)}: ${inrDelta(rateA)}/${unit}; ` +
+        `${whoOf(b)}: ${inrDelta(rateB)}/${unit}`;
       if (qtyGap) {
         parts.push(rates);
       } else if (qtyA > 0 && qtyB > 0) {
@@ -628,6 +650,7 @@ export function rowComparisonSummary(
 ): string {
   if (vendors.length < 2) return "";
 
+  const refs = vendorRefs(vendors);
   const elsewhere: string[] = [];
   const gaps: Vendor[] = [];
   const quoted: Vendor[] = [];
@@ -635,11 +658,11 @@ export function rowComparisonSummary(
     const { status, bundleLabel } = parseCellStatus(row.coverage?.[vendor]);
     if (status === "incl_in_parent") {
       elsewhere.push(
-        `${whoOf(vendor)}'s figure is inside ${bundleLabel || "another space"}`
+        `${refs[vendor]}'s figure is inside ${bundleLabel || "another space"}`
       );
     } else if (status === "incl_in_bundle") {
       elsewhere.push(
-        `${whoOf(vendor)}'s figure is inside ${bundleLabel || "a package"}`
+        `${refs[vendor]}'s figure is inside ${bundleLabel || "a package"}`
       );
     } else if (amountOf(row, vendor) > 0 || status === "quoted") {
       quoted.push(vendor);
@@ -649,7 +672,7 @@ export function rowComparisonSummary(
   }
   if (elsewhere.length) return elsewhere.join("; ");
   if (quoted.length === 1 && gaps.length) {
-    return `${whoOf(gaps[0])} did not quote this line`;
+    return `${refs[gaps[0]]} did not quote this line`;
   }
   if (quoted.length < 2) return "";
 
@@ -668,10 +691,18 @@ export function rowComparisonSummary(
   const amountClause =
     Math.abs(amtA - amtB) < 1
       ? "Same amount"
-      : `${whoOf(amtA > amtB ? a : b)} is ${inrDelta(Math.abs(amtA - amtB))} higher`;
+      : `${refs[amtA > amtB ? a : b]} is ${inrDelta(Math.abs(amtA - amtB))} higher`;
 
-  const reasons = qtyRateParts(qtyA, qtyB, rateA, rateB, unit, a, b);
-  const spec = specClause(ma, mb, a, b);
+  const reasons = qtyRateParts(
+    qtyA,
+    qtyB,
+    rateA,
+    rateB,
+    unit,
+    refs[a],
+    refs[b]
+  );
+  const spec = specClause(ma, mb, refs[a], refs[b]);
   if (spec) reasons.push(spec);
   if (!reasons.length) {
     const shipped = String(row.summary || "").trim();
@@ -689,13 +720,14 @@ export type SpaceHeaderSummaryOpts = {
 function amountDeltaClause(
   totals: Record<Vendor, number>,
   vendors: Vendor[],
-  skipGap: boolean
+  skipGap: boolean,
+  refs: Record<Vendor, string>
 ): string {
   if (vendors.length < 2) return "";
   const quoted = vendors.filter((v) => (Number(totals[v]) || 0) > 0);
   const gaps = vendors.filter((v) => (Number(totals[v]) || 0) <= 0);
   if (quoted.length === 1 && gaps.length) {
-    return skipGap ? "" : `${whoOf(gaps[0])} did not quote this line`;
+    return skipGap ? "" : `${refs[gaps[0]]} did not quote this line`;
   }
   if (quoted.length < 2) return "";
   const a = quoted[0];
@@ -704,13 +736,14 @@ function amountDeltaClause(
   const amtB = Number(totals[b]) || 0;
   if (Math.abs(amtA - amtB) < 1) return "Same amount";
   const higher = amtA > amtB ? a : b;
-  return `${whoOf(higher)} is ${inrDelta(Math.abs(amtA - amtB))} higher`;
+  return `${refs[higher]} is ${inrDelta(Math.abs(amtA - amtB))} higher`;
 }
 
 function itemCountReason(
   totals: Record<Vendor, number>,
   vendors: Vendor[],
-  itemCounts: Record<string, number> | undefined
+  itemCounts: Record<string, number> | undefined,
+  refs: Record<Vendor, string>
 ): string {
   if (!itemCounts || vendors.length < 2) return "";
   const quoted = vendors.filter((v) => (Number(totals[v]) || 0) > 0);
@@ -727,21 +760,22 @@ function itemCountReason(
   const otherN = higher === a ? nB : nA;
   let text = `${nA} items vs ${nB}`;
   if (higherN < otherN) {
-    text += ` — ${whoOf(higher)} charged more for fewer lines`;
+    text += ` — ${refs[higher]} charged more for fewer lines`;
   }
   return text;
 }
 
 function exclusiveReason(
   vendors: Vendor[],
-  exclusiveLabels: Record<string, string[]> | undefined
+  exclusiveLabels: Record<string, string[]> | undefined,
+  refs: Record<Vendor, string>
 ): string[] {
   if (!exclusiveLabels) return [];
   const parts: string[] = [];
   for (const vendor of vendors) {
     const labels = (exclusiveLabels[vendor] || []).filter(Boolean).slice(0, 3);
     if (!labels.length) continue;
-    parts.push(`${whoOf(vendor)} also quoted ${labels.join(", ")}`);
+    parts.push(`${refs[vendor]} also quoted ${labels.join(", ")}`);
   }
   return parts;
 }
@@ -753,23 +787,24 @@ export function spaceHeaderSummary(
   coverageForSpace: CoverageEntry[],
   opts?: SpaceHeaderSummaryOpts
 ): string {
+  const refs = vendorRefs(vendors);
   const parentNotes = coverageForSpace
     .filter((e) => e.status === "incl_in_parent")
     .map(
       (e) =>
-        `${whoOf(e.vendor)}'s figure is inside ${e.parent_space || "another space"}`
+        `${refs[e.vendor] || whoOf(e.vendor)}'s figure is inside ${e.parent_space || "another space"}`
     );
   const bundleNotes = coverageForSpace
     .filter((e) => e.status === "incl_in_bundle")
     .map(
       (e) =>
-        `${whoOf(e.vendor)}'s figure is inside ${e.bundle_label || "a package"}`
+        `${refs[e.vendor] || whoOf(e.vendor)}'s figure is inside ${e.bundle_label || "a package"}`
     );
   const hasBundle = coverageForSpace.some((e) => e.status === "incl_in_bundle");
   const skipGap = parentNotes.length > 0 || bundleNotes.length > 0;
 
   const parts: string[] = [];
-  const amount = amountDeltaClause(totals, vendors, skipGap);
+  const amount = amountDeltaClause(totals, vendors, skipGap, refs);
   if (amount) parts.push(amount);
 
   if (opts?.comparable === false) {
@@ -778,10 +813,10 @@ export function spaceHeaderSummary(
     );
   }
 
-  const counts = itemCountReason(totals, vendors, opts?.itemCounts);
+  const counts = itemCountReason(totals, vendors, opts?.itemCounts, refs);
   if (counts) parts.push(counts);
 
-  parts.push(...exclusiveReason(vendors, opts?.exclusiveLabels));
+  parts.push(...exclusiveReason(vendors, opts?.exclusiveLabels, refs));
   parts.push(...parentNotes);
   if (opts?.comparable !== false) parts.push(...bundleNotes);
 

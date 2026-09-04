@@ -57,8 +57,10 @@ counts (`3 items vs 5 — charged more for fewer lines`), exclusive work names
 (capped at three), and `scopes differ (package vs itemised)` when the space is
 not like-for-like. Work rows (every sub-service) lead with the rupee gap, then
 qty and rate when both quoted those figures, then `specified …` only if the
-vendor wrote a finish or brand in `description`. True N/A and `incl. in …`
-stay as they are. The column does not regroup and does not change totals
+vendor wrote a finish or brand in `description`. Qty/rate clauses name both
+vendors rather than relying on column order; two quotes from the same company
+are called `Vendor Q1` and `Vendor Q2`. True N/A and `incl. in …` stay as they
+are. The column does not regroup and does not change totals
 ([ACTION.md](../../../ACTION.md) §8). Refreshing a compare URL reuses the
 saved `session_id`; qty/rate notes need a matrix that includes `measures`, so
 the page starts a new compare once if that field is missing.

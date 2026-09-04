@@ -61,8 +61,10 @@ Each `SpaceRow` also carries per-vendor `measures` (quantity, rate, pricing
 method, description) and a deterministic `summary` from
 `services/comparison_summary.py`. On every work row the summary is amount,
 then qty, then rate, then a `specified …` clause when description names a
-finish or brand. Empty qty/rate/description stay silent. The summary explains
-a gap; it does not change amounts.
+finish or brand. Quantity and rate clauses name both vendors so their left/right
+order is never implicit. If both columns are quotes from the same company, the
+summary calls them `Vendor Q1` and `Vendor Q2`. Empty qty/rate/description stay
+silent. The summary explains a gap; it does not change amounts.
 
 ## Ordering
 

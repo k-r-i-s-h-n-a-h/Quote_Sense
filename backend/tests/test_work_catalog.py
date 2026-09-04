@@ -84,6 +84,46 @@ def test_description_wins_only_on_contradiction():
     assert wardrobe["work_source"] == "alias"
 
 
+def test_ancillary_intent_keeps_dismantling_out_of_installation_row():
+    installation = resolve_work(
+        {
+            "sub_service": "Wardrobe",
+            "item_name": "Wardrobe",
+            "description": "HDHMR wardrobe with laminate shutters",
+        }
+    )
+    dismantling = resolve_work(
+        {
+            "sub_service": "Wardrobe",
+            "item_name": "Wardrobe",
+            "description": "Dismantle charges for wardrobe & loft",
+        }
+    )
+
+    assert installation["work_key"] == key("Wardrobe")
+    assert dismantling["work_key"] == f"{installation['work_key']}::intent:dismantling"
+    assert dismantling["work_label"] == "Wardrobe — dismantling"
+
+
+def test_same_ancillary_intent_merges_but_other_intents_stay_separate():
+    dismantle = key("Wardrobe", "Dismantle existing wardrobe")
+    demolition = key("Wardrobe", "Demolition of existing wardrobe")
+    cleaning = key("Wardrobe", "Cleaning after wardrobe work")
+    shifting = key("Wardrobe", "Shifting the existing wardrobe")
+
+    assert dismantle == demolition
+    assert dismantle != cleaning
+    assert dismantle != shifting
+    assert cleaning != shifting
+
+
+def test_generic_civil_line_is_not_forced_into_wardrobe_dismantling():
+    wardrobe = key("Wardrobe", "Dismantle charges for wardrobe")
+    civil = key("Civil", "Dismantling and civil alteration charges")
+
+    assert wardrobe != civil
+
+
 def test_seater_unit_does_not_fold_into_crockery_or_bench():
     """TCS labelled a seater as Crockery Wall unit; it is neither crockery nor bench."""
     seater = resolve_work(

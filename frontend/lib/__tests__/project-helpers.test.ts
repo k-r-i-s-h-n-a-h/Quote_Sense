@@ -498,8 +498,8 @@ describe("compare coverage semantics", () => {
       ["A", "B"]
     );
     expect(text).toContain("₹30,000 higher");
-    expect(text).toContain("180 sqft vs 120 sqft");
-    expect(text).toContain("more area");
+    expect(text).toContain("A: 180 sqft; B: 120 sqft");
+    expect(text).toContain("A billed more area");
   });
 
   it("names qty and rate when both differ, plus specified finishes", () => {
@@ -527,8 +527,8 @@ describe("compare coverage semantics", () => {
       ["A", "B"]
     );
     expect(text).toContain("₹17,464 higher");
-    expect(text).toContain("12 sqft vs 20 sqft");
-    expect(text).toContain("₹850/sqft vs ₹1,250/sqft");
+    expect(text).toContain("A: 12 sqft; B: 20 sqft");
+    expect(text).toContain("A: ₹850/sqft; B: ₹1,250/sqft");
     expect(text).toContain("laminates");
     expect(text).toContain("louvers");
   });
@@ -573,7 +573,35 @@ describe("compare coverage semantics", () => {
       },
       ["Infosys (Q1)", "TCS (Q2)"]
     );
-    expect(text).toContain("12 sqft vs 20 sqft");
+    expect(text).toContain("Infosys: 12 sqft; TCS: 20 sqft");
+  });
+
+  it("labels two quotes from the same company as Q1 and Q2", () => {
+    const q1 = "Tatva Interiors (QUOTE-101)";
+    const q2 = "Tatva Interiors (QUOTE-202)";
+    const text = rowComparisonSummary(
+      {
+        coverage: { [q1]: "quoted", [q2]: "quoted" },
+        [q1]: 90000,
+        [q2]: 60000,
+        measures: {
+          [q1]: {
+            quantity: 180,
+            rate: 500,
+            pricing_method: "Area (sqft)",
+          },
+          [q2]: {
+            quantity: 120,
+            rate: 500,
+            pricing_method: "Area (sqft)",
+          },
+        },
+      },
+      [q1, q2]
+    );
+    expect(text).toContain("Tatva Interiors Q1 is ₹30,000 higher");
+    expect(text).toContain("Tatva Interiors Q1: 180 sqft");
+    expect(text).toContain("Tatva Interiors Q2: 120 sqft");
   });
 });
 

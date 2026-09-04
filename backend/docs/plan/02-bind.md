@@ -107,6 +107,29 @@ so the UI can flag it.
 This rule is intentionally narrow. It fires only on contradiction, never to
 "improve" an already-consistent row.
 
+## Ancillary intent split
+
+A catalog title is not enough to decide that two lines are the same purchase.
+When a line explicitly says **dismantling/demolition**, **cleaning**, or
+**shifting/relocation**, S2 appends that intent to its otherwise-normal
+`work_key` and display label:
+
+```text
+Wardrobe                 → alias:wardrobe
+Wardrobe — dismantling   → alias:wardrobe::intent:dismantling
+```
+
+This keeps a `70 sqft @ ₹100` wardrobe-dismantling line out of a `40 sqft @
+₹1,550` new-wardrobe line. S5 can then compare the fabrication quantities and
+rates without summing unlike work. Amounts remain on their original lines and
+space totals remain unchanged.
+
+The matcher is deliberately narrow and verb-driven. A generic `Civil` line is
+not automatically merged with `Wardrobe — dismantling`; it only becomes
+`Civil — dismantling` when its own text explicitly says dismantling. We do not
+reallocate civil, cleaning, or shifting charges to make two quotes look
+comparable.
+
 ## LLM pass
 
 Mirrors the S3 overlay pattern exactly: deterministic result computed first, one
@@ -136,6 +159,7 @@ With the switch off, S2 is pure and deterministic. The test suite runs this way.
 - 1:N folding (both crockery lines share vendor A's key),
 - `Base Unit` and `Wall Unit` stay distinct,
 - description-wins fires on the mirror row and nowhere else,
+- explicit dismantling/cleaning/shifting stays separate from installation,
 - ObjectId beats every heuristic.
 
 ---

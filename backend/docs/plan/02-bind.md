@@ -147,6 +147,28 @@ descriptions for context, and is asked to group them into equivalence classes. I
 may **only** merge labels — it cannot split a deterministic alias or invent a
 taxonomy node.
 
+Each group it returns must carry a `match_tier`, a `confidence` and a one-line
+`rationale`:
+
+```jsonc
+{
+  "members": ["Profile lights", "Strip lights"],
+  "match_tier": "MATCH",          // or POSSIBLE_CROSS_SCOPE_MATCH | BUNDLE_NOT_DECOMPOSABLE | UNASSIGNED
+  "confidence": 0.0,              // 0.0–1.0
+  "rationale": "one-line reason"
+}
+```
+
+A merge happens only when `match_tier == "MATCH"` **and** `confidence >=
+WORK_MERGE_MIN_CONFIDENCE`. Any other tier is an abstention: the labels keep
+their own `norm:` keys and the relevant tier is surfaced downstream instead. A
+low-confidence guess and a considered abstention used to be the same output,
+which is why they are now different fields.
+
+Structural guards still sit on top. The model's confidence cannot merge across
+a floor, a room number or a containment boundary — see [ACTION.md](../../../ACTION.md)
+§1 and §13.
+
 ## Kill switches
 
 | Env var | Default | Effect |

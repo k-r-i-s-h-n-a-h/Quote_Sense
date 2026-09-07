@@ -7,6 +7,16 @@ Font helper: `lib/pdf-unicode-font.ts` (Noto Sans so `₹` prints).
 
 ---
 
+## Precondition: the reconciliation gate
+
+Before anything is drawn, `downloadComparisonPdf` checks
+`reconciliationBlockReason` and throws `PdfReconciliationError` when a vendor's
+rows do not add back up to that vendor's quoted lines. No PDF is produced.
+
+This is the one hard block in the export path. A document is forwarded to people
+who never see the app and cannot re-run the comparison, so an incomplete one has
+a much longer life than a blocked one.
+
 ## Rule
 
 The **detailed** export mirrors the on-screen matrix. It reuses `groupTableData`,
@@ -75,6 +85,10 @@ Everything load-bearing for a decision:
 | GST entry chips / mixed banner | how each quote was typed (excl vs incl GST); amounts stay billed totals |
 | Overlap warnings | a possible double-count the reader should raise with the vendor |
 | Footnote explaining the three cell states | the PDF has no tooltips |
+| `UNASSIGNED` space groups with their confirm note | the vendor did not say which room; the document must not decide for them |
+| Bundled-zone note instead of that zone's line rows | line pairings the pipeline refused to make must not appear to have been made |
+| Possible cross-scope match section | otherwise a scope one vendor did quote reads as one nobody quoted |
+| `combines: …` on a merged row | a relabelled row that traces back to nothing cannot be checked against the quote |
 
 Whole-home export uses `projectRowsForDisplay`, the same filter as the screen, so
 electrical compared in "Same work, different spaces" is not listed again. The

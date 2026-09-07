@@ -122,6 +122,30 @@ compared in a scattered recap are **not painted** here — the recap is the
 comparison; painting them again looks like a second add. `reconcileQuoteTotals`
 still sums the full `projectTier`.
 
+## Abstention tiers and notes
+
+Three tiers do not render as ordinary rows, because for each of them a plain
+number or a plain `N/A` would state something false.
+
+- **`UNASSIGNED`** — the vendor named a room kind without a number. Rendered as
+  its own space group headed `UNASSIGNED — "<the vendor's exact label>"`, with
+  the confirm-before-allocating note above its rows. Never folded into a
+  numbered room, never blanked.
+- **`BUNDLE_NOT_DECOMPOSABLE`** — the vendor priced a multi-trade zone as one
+  scope. `bundleZoneSpaceIds` suppresses that space's line rows; the zone total
+  and the bundle note render instead. Painting the lines would invite the reader
+  to compare pairings the pipeline explicitly refused to make.
+- **`POSSIBLE_CROSS_SCOPE_MATCH`** — its own flagged section below the tiers,
+  both figures side by side with the confirm-with-vendor note. The totals are
+  not merged and the section is not added to anything.
+
+## The export gate
+
+When `reconciliationBlockReason(reconciliation)` returns a reason, both PDF
+buttons are disabled and the reason is shown in a banner naming the vendor and
+the unaccounted lines. The comparison stays fully readable on screen — the
+block is on turning an incomplete comparison into a document.
+
 ## Footnote
 
 Replaced. States the three cell meanings explicitly, and that bundled amounts are

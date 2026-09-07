@@ -227,6 +227,183 @@ def apply_description_covers(rows: list[dict[str, Any]], vendors: list[str]) -> 
         row["summary"] = row_comparison_summary(row, vendors)
 
 
+def _lineage_prefix(
+    row: dict[str, Any], vendors: list[str], refs: dict[str, str]
+) -> str:
+    """"combines: A, B" when one display row merged several of a vendor's lines.
+
+    A silent relabel is what let `Profile lights` + `Strip lights` render as a
+    single `Lighting points` row that traced back to nothing.
+    """
+    combines = row.get("combines")
+    if not isinstance(combines, dict) or not combines:
+        return ""
+    named: list[str] = []
+    for vendor in vendors:
+        labels = [str(v).strip() for v in (combines.get(vendor) or []) if str(v).strip()]
+        if len(labels) < 2:
+            continue
+        who = refs.get(vendor, _who(vendor))
+        joined = ", ".join(labels)
+        named.append(
+            f"combines: {joined}" if len(combines) == 1 else f"{who} combines: {joined}"
+        )
+    return " · ".join(named)
+
+
+def _with_notes(row: dict[str, Any], prefix: str, body: str) -> str:
+    """Assemble the cell sentence: lineage, then the reason, then the flags."""
+    parts = [text for text in (prefix, body) if text]
+    for key in ("space_note", "qty_scope_note"):
+        note = str(row.get(key) or "").strip()
+        if note and note.casefold() != "nan":
+            parts.append(note)
+    if row.get("match_tier") == "BUNDLE_NOT_DECOMPOSABLE":
+        parts.append("bundled zone — compare at zone level only")
+    return " · ".join(parts)
+
+
+def apply_cross_scope_notes(
+    rows: list[dict[str, Any]],
+    candidates: list[dict[str, Any]],
+    vendors: list[str],
+) -> None:
+    """Replace "did not quote this line" on a flagged possible match.
+
+    The row is still not a merge — the rupees stay where the vendor put them —
+    but the sentence must stop asserting an omission that S4b has already
+    found a candidate for.
+    """
+    if not rows or not candidates:
+        return
+
+    refs = _vendor_refs(vendors)
+    by_line: dict[str, dict[str, Any]] = {}
+    for candidate in candidates:
+        for line_id in candidate.get("source_line_ids") or []:
+            by_line[str(line_id)] = candidate
+
+    for row in rows:
+        candidate = next(
+            (
+                by_line[line_id]
+                for line_id in (row.get("source_line_ids") or [])
+                if str(line_id) in by_line
+            ),
+            None,
+        )
+        if candidate is None:
+            continue
+        quoting = [v for v in vendors if float(row.get(v) or 0) > 0]
+        gaps = [
+            v
+            for v in vendors
+            if v not in quoting and (candidate.get("vendors") or {}).get(v)
+        ]
+        if len(quoting) != 1 or not gaps:
+            continue
+        row["match_tier"] = "POSSIBLE_CROSS_SCOPE_MATCH"
+        other = gaps[0]
+        where = str((candidate["vendors"][other] or {}).get("space") or "").strip()
+        place = f"'s {where}" if where else ""
+        row["cross_scope_note"] = (
+            f"Possible match with {refs[other]}{place} — confirm with vendor. "
+            "Not counted twice."
+        )
+        row["summary"] = _with_notes(
+            row, _lineage_prefix(row, vendors, refs), row["cross_scope_note"]
+        )
+
+
+# Two different source lines must never render under an identical label in the
+# same quote. `Spot lights` and a merged `Profile lights + Strip lights` row
+# both resolve to the work label `Lighting points`; without a disambiguator the
+# reader sees the same name twice and cannot tell which is which.
+def disambiguate_display_labels(
+    rows: list[dict[str, Any]], vendors: list[str]
+) -> None:
+    """Append a space (or description) disambiguator to colliding labels.
+
+    Mutates rows in place. Runs after `apply_description_covers` because it
+    needs `source_line_ids` to know the rows are genuinely different lines.
+    """
+    if not rows:
+        return
+
+    by_label: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        label = str(row.get("sub_service") or "").strip()
+        if not label:
+            continue
+        by_label.setdefault(label.casefold(), []).append(row)
+
+    for group in by_label.values():
+        if len(group) < 2:
+            continue
+        # Only a collision inside one quote is confusing; the same label in two
+        # quotes is exactly what the matrix is for.
+        colliding: list[dict[str, Any]] = []
+        for vendor in vendors:
+            quoting = [
+                row for row in group if (row.get("line_ids") or {}).get(vendor)
+            ]
+            if len(quoting) > 1:
+                colliding = quoting
+                break
+        if not colliding:
+            continue
+
+        # `Wall decor` in the foyer and `Wall decor` in the living room is one
+        # work in two rooms, and the space heading already tells them apart.
+        # Two cases do mislead: the same label twice inside one space, and a
+        # merged row whose new heading now clashes with an unrelated line
+        # (`Profile lights` + `Strip lights` -> `Lighting points`, next to a
+        # `Spot lights` row that also resolved to `Lighting points`).
+        same_space = len({str(row.get("space_id") or "") for row in colliding}) < len(
+            colliding
+        )
+        merged = any(row.get("combined_from") for row in colliding)
+        if not same_space and not merged:
+            continue
+
+        # Rename only the rows of the quote that collides. The other vendor's
+        # row keeps the plain label: nothing is ambiguous inside its quote.
+        used: set[str] = set()
+        for row in colliding:
+            for candidate in _disambiguators(row):
+                if candidate and candidate.casefold() not in used:
+                    used.add(candidate.casefold())
+                    row["sub_service"] = (
+                        f"{row.get('sub_service')} ({candidate})"
+                    )
+                    row["item_name"] = row["sub_service"]
+                    row["work_item"] = row["sub_service"]
+                    break
+
+
+def _disambiguators(row: dict[str, Any]) -> list[str]:
+    """Candidate suffixes, most meaningful first."""
+    out: list[str] = []
+    space = str(row.get("space") or "").strip()
+    if space and space.casefold() not in str(row.get("sub_service") or "").casefold():
+        out.append(space)
+    measures = row.get("measures") or {}
+    if isinstance(measures, dict):
+        for measure in measures.values():
+            labels = (measure or {}).get("labels") or []
+            for label in labels:
+                text = _plain_text(str(label))[:32].strip()
+                if text and text.casefold() != str(row.get("sub_service") or "").casefold():
+                    out.append(text)
+                    break
+            if out and len(out) > 1:
+                break
+    ids = [str(v) for v in (row.get("source_line_ids") or []) if str(v)]
+    if ids:
+        out.append(ids[0].split(":")[-1])
+    return out
+
+
 def _who(vendor: str) -> str:
     return (vendor.split(" (")[0] or vendor).strip() or vendor
 
@@ -274,7 +451,13 @@ def _measure(row: dict[str, Any], vendor: str) -> dict[str, Any]:
     measures = row.get("measures") or {}
     raw = measures.get(vendor) if isinstance(measures, dict) else None
     if not isinstance(raw, dict):
-        return {"quantity": 0.0, "rate": 0.0, "pricing_method": "", "description": ""}
+        return {
+            "quantity": 0.0,
+            "rate": 0.0,
+            "pricing_method": "",
+            "pricing_method_id": "",
+            "description": "",
+        }
     try:
         qty = float(raw.get("quantity") or 0)
     except (TypeError, ValueError):
@@ -287,8 +470,55 @@ def _measure(row: dict[str, Any], vendor: str) -> dict[str, Any]:
         "quantity": qty,
         "rate": rate,
         "pricing_method": str(raw.get("pricing_method") or ""),
+        "pricing_method_id": str(raw.get("pricing_method_id") or ""),
         "description": str(raw.get("description") or ""),
     }
+
+
+def pricing_methods_differ(ma: dict[str, Any], mb: dict[str, Any]) -> bool:
+    """True when the two sides did not price this item the same way.
+
+    IDs first: `pricing_method_id` is the catalog fact. The label is only the
+    fallback for a lane that never supplied ids. When neither side states a
+    method we assume nothing and let the quantity clauses run as before.
+    """
+    id_a = str(ma.get("pricing_method_id") or "").strip()
+    id_b = str(mb.get("pricing_method_id") or "").strip()
+    if id_a and id_b:
+        return id_a != id_b
+    label_a = str(ma.get("pricing_method") or "").strip().casefold()
+    label_b = str(mb.get("pricing_method") or "").strip().casefold()
+    if label_a and label_b:
+        return label_a != label_b
+    return False
+
+
+def _method_name(measure: dict[str, Any]) -> str:
+    return str(measure.get("pricing_method") or "").strip() or "an unstated method"
+
+
+def pricing_method_clause(
+    ma: dict[str, Any],
+    mb: dict[str, Any],
+    a: str,
+    b: str,
+) -> str:
+    """Replacement for quantity language when the pricing methods differ.
+
+    "1 units vs 8 units" implied one vendor quoted eight shutters when it had
+    in fact priced 8 sq ft. A quantity is only comparable inside one pricing
+    method, so we name the methods and compare rates only.
+    """
+    rate_a = float(ma.get("rate") or 0)
+    rate_b = float(mb.get("rate") or 0)
+    text = (
+        f"{a} and {b} use different pricing methods "
+        f"({_method_name(ma)} vs {_method_name(mb)}) for this item — "
+        "not directly comparable by quantity"
+    )
+    if rate_a > 0 and rate_b > 0:
+        text += f". Rate difference only: {_inr(rate_a)} vs {_inr(rate_b)}"
+    return text
 
 
 def _spec_tokens(description: str) -> list[str]:
@@ -384,6 +614,7 @@ def row_comparison_summary(row: dict[str, Any], vendors: list[str]) -> str:
         except (TypeError, ValueError):
             amounts[vendor] = 0.0
 
+    prefix = _lineage_prefix(row, vendors, refs)
     elsewhere: list[str] = []
     gaps: list[str] = []
     quoted: list[str] = []
@@ -401,7 +632,7 @@ def row_comparison_summary(row: dict[str, Any], vendors: list[str]) -> str:
             gaps.append(vendor)
 
     if elsewhere:
-        return "; ".join(elsewhere)
+        return _with_notes(row, prefix, "; ".join(elsewhere))
 
     if len(quoted) == 1 and gaps:
         named = row.get("named_in") if isinstance(row.get("named_in"), dict) else {}
@@ -424,16 +655,20 @@ def row_comparison_summary(row: dict[str, Any], vendors: list[str]) -> str:
                 cover_amt = float(cover.get("amount") or 0)
             except (TypeError, ValueError):
                 cover_amt = 0.0
-            return (
+            return _with_notes(
+                row,
+                prefix,
                 f"{refs[gaps[0]]} did not itemise this line; their "
                 f"{cover['label']} ({_inr(cover_amt)}{place}) names {intent} "
                 f"in the description.{extra} Not a like-for-like rate against "
-                f"this {_inr(item_amt)} line."
+                f"this {_inr(item_amt)} line.",
             )
-        return f"{refs[gaps[0]]} did not quote this line"
+        return _with_notes(
+            row, prefix, f"{refs[gaps[0]]} did not quote this line"
+        )
 
     if len(quoted) < 2:
-        return ""
+        return _with_notes(row, prefix, "")
 
     a, b = quoted[0], quoted[1]
     amt_a, amt_b = amounts[a], amounts[b]
@@ -443,15 +678,20 @@ def row_comparison_summary(row: dict[str, Any], vendors: list[str]) -> str:
     unit = _qty_unit(ma["pricing_method"] or mb["pricing_method"])
 
     amount = _amount_clause(amt_a, amt_b, refs[a], refs[b])
-    reasons = _qty_rate_parts(
-        qty_a, qty_b, rate_a, rate_b, unit, refs[a], refs[b]
-    )
+    if pricing_methods_differ(ma, mb):
+        # No quantity language at all in this branch: a sq-ft figure and a
+        # per-unit figure are not two quantities of the same thing.
+        reasons = [pricing_method_clause(ma, mb, refs[a], refs[b])]
+    else:
+        reasons = _qty_rate_parts(
+            qty_a, qty_b, rate_a, rate_b, unit, refs[a], refs[b]
+        )
     spec = _spec_clause(ma, mb, refs[a], refs[b])
     if spec:
         reasons.append(spec)
     if not reasons:
-        return amount
-    return f"{amount} — " + " · ".join(reasons)
+        return _with_notes(row, prefix, amount)
+    return _with_notes(row, prefix, f"{amount} — " + " · ".join(reasons))
 
 
 def _item_count_reason(

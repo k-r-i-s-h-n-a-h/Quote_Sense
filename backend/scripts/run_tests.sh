@@ -11,3 +11,6 @@ fi
 "$PY" -m pip install -q pytest pytest-cov httpx
 "$PY" -m pytest tests/ -q --cov=services --cov=main --cov-report=term-missing --cov-report=xml
 echo "Wrote coverage.xml"
+
+# A comparison that loses a vendor's money must never reach a client.
+"$PY" scripts/check_reconciliation.py

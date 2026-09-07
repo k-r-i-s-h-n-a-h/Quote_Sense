@@ -21,6 +21,10 @@ import {
   recapPlacementNote,
   recapPlacementNotes,
   reconcileQuoteTotals,
+  reconciliationBlockReason,
+  bundleZoneSpaceIds,
+  notesForSpace,
+  rowComparisonSummary,
   spaceRowsOf,
   vendorsShareCompany,
   withInferredPlacement,
@@ -61,20 +65,22 @@ describe("golden MatrixV1 payload", () => {
   it("renders the previously-split rows as single comparisons", () => {
     const groups = groupTableData(spaceRowsOf(matrix));
     const spaces = groups.flatMap((c) => c.spaces);
-    const find = (space: string, label: string) =>
+    // Keyed on space_id, not the display label: the label is the vendor's own
+    // wording and may be restyled, the id is the contract.
+    const find = (spaceId: string, label: string) =>
       spaces
-        .find((s) => s.space === space)
+        .find((s) => s.spaceId === spaceId)
         ?.subs.filter((sub) => sub.sub.toLowerCase() === label.toLowerCase()) ??
       [];
 
-    for (const [space, label, a, b] of [
-      ["Master-Bedroom", "Side table", 14160, 9440],
-      ["Kitchen", "Rolling shutter", 27258, 17700],
-      ["Living", "False ceiling", 61950, 49560],
-      ["Dining", "Crockery units", 38940, 38940],
+    for (const [spaceId, label, a, b] of [
+      ["mbr", "Side table", 14160, 9440],
+      ["kitchen", "Rolling shutter", 27258, 17700],
+      ["living", "False ceiling", 61950, 49560],
+      ["dining", "Crockery units", 38940, 38940],
     ] as [string, string, number, number][]) {
-      const subs = find(space, label);
-      expect(subs, `${label} in ${space}`).toHaveLength(1);
+      const subs = find(spaceId, label);
+      expect(subs, `${label} in ${spaceId}`).toHaveLength(1);
       const totals = sumSubServiceRow(subs[0].rows, [A, B]);
       expect(totals[A]).toBe(a);
       expect(totals[B]).toBe(b);
@@ -94,7 +100,7 @@ describe("golden MatrixV1 payload", () => {
 
   it("counts quoted work rows per vendor on a space group", () => {
     const groups = groupTableData(spaceRowsOf(matrix));
-    const kitchen = groups.flatMap((c) => c.spaces).find((s) => s.space === "Kitchen")!;
+    const kitchen = groups.flatMap((c) => c.spaces).find((s) => s.spaceId === "kitchen")!;
     const counts = quotedWorkCounts(kitchen, [A, B]);
     expect(counts[A]).toBeGreaterThan(0);
     expect(counts[B]).toBeGreaterThan(0);
@@ -104,8 +110,8 @@ describe("golden MatrixV1 payload", () => {
     const index = coverageIndex(coverageOf(matrix));
     const groups = groupTableData(spaceRowsOf(matrix));
     const spaces = groups.flatMap((c) => c.spaces);
-    const kitchen = spaces.find((s) => s.space === "Kitchen")!;
-    const foyer = spaces.find((s) => s.space === "Foyer")!;
+    const kitchen = spaces.find((s) => s.spaceId === "kitchen")!;
+    const foyer = spaces.find((s) => s.spaceId === "foyer")!;
     expect(isSpaceComparable(index, kitchen.spaceId, [A, B])).toBe(false);
     expect(isSpaceComparable(index, foyer.spaceId, [A, B])).toBe(true);
   });
@@ -372,5 +378,115 @@ describe("GST entry flags", () => {
     expect(banner).toContain("#Q3BS200 was entered excluding GST");
     expect(banner).toContain("#QLIX48D was entered including GST");
     expect(banner).toContain("Amounts below include GST");
+  });
+});
+
+describe("client-safety guards on the shipped payload", () => {
+  it("carries lineage on every rendered row", () => {
+    for (const row of [...spaceRowsOf(matrix), ...projectRowsOf(matrix)]) {
+      expect(row.source_line_ids, row.sub_service).toBeTruthy();
+      expect(row.source_line_ids?.length, row.sub_service).toBeGreaterThan(0);
+    }
+  });
+
+  it("lets the export through when reconciliation is green", () => {
+    expect(matrix.reconciliation?.ok).toBe(true);
+    expect(reconciliationBlockReason(matrix)).toBe("");
+  });
+
+  it("blocks the export and names the vendor when money is unaccounted", () => {
+    const reason = reconciliationBlockReason({
+      reconciliation: {
+        ok: false,
+        tolerance_inr: 1,
+        vendors: {
+          [A]: {
+            ok: false,
+            source_total: 100000,
+            rows_total: 70854,
+            delta: 29146,
+            unaccounted_line_ids: ["a_12"],
+            unaccounted: [
+              { line_id: "a_12", label: "Soft closing hinges", amount: 29146 },
+            ],
+          },
+        },
+      },
+    });
+    expect(reason).toContain(A);
+    expect(reason).toContain("Soft closing hinges");
+  });
+
+  it("suppresses line rendering only inside a bundled zone", () => {
+    const suppressed = bundleZoneSpaceIds([
+      {
+        space_id: "common",
+        space: "Common",
+        match_tier: "BUNDLE_NOT_DECOMPOSABLE" as const,
+        note: "priced as a single bundled scope",
+        suppress_line_matching: true,
+      },
+    ]);
+    expect(suppressed.has("common")).toBe(true);
+    for (const row of spaceRowsOf(matrix)) {
+      expect(suppressed.has(String(row.space_id))).toBe(false);
+    }
+  });
+
+  it("shows the confirm-with-vendor note against an unassigned space", () => {
+    const notes = [
+      {
+        space_id: "unassigned:ground floor bedroom",
+        space: 'UNASSIGNED — "Ground floor bedroom"',
+        match_tier: "UNASSIGNED" as const,
+        note: "Vendor did not specify which bedroom — confirm before allocating.",
+        suppress_line_matching: false,
+      },
+    ];
+    expect(notesForSpace(notes, "unassigned:ground floor bedroom")).toHaveLength(1);
+    expect(notesForSpace(notes, "bedroom1")).toHaveLength(0);
+  });
+
+  it("refuses quantity language across different pricing methods", () => {
+    const row: SpaceRow = {
+      ...spaceRowsOf(matrix)[0],
+      sub_service: "Rolling shutter",
+      [A]: 27258,
+      [B]: 17700,
+      measures: {
+        [A]: {
+          quantity: 1,
+          rate: 27258,
+          pricing_method: "Per Unit / Each",
+          pricing_method_id: "pm_unit",
+        },
+        [B]: {
+          quantity: 8,
+          rate: 2212,
+          pricing_method: "Area – Direct Entry (sq ft)",
+          pricing_method_id: "pm_area",
+        },
+      },
+      coverage: {},
+      summary: "",
+    } as SpaceRow;
+    const summary = rowComparisonSummary(row, [A, B]);
+    expect(summary).toContain("different pricing methods");
+    expect(summary).toContain("Rate difference only");
+    expect(summary).not.toContain("8 units");
+  });
+
+  it("keeps quantity language when both sides price the same way", () => {
+    const row = spaceRowsOf(matrix).find(
+      (candidate) =>
+        amountOf(candidate, A) > 0 &&
+        amountOf(candidate, B) > 0 &&
+        candidate.measures?.[A]?.pricing_method_id ===
+          candidate.measures?.[B]?.pricing_method_id
+    );
+    expect(row, "the golden payload should still compare like with like").toBeTruthy();
+    expect(rowComparisonSummary(row as SpaceRow, [A, B])).not.toContain(
+      "different pricing methods"
+    );
   });
 });

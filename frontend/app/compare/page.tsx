@@ -15,12 +15,18 @@ import PdfExportButtons, {
 } from "../../components/compare/PdfExportButtons";
 import CompareChat from "../../components/compare/CompareChat";
 import { buildVendorLabels } from "../../lib/format";
-import { downloadComparisonPdf } from "../../lib/download-comparison-pdf";
+import {
+  downloadComparisonPdf,
+  PdfReconciliationError,
+} from "../../lib/download-comparison-pdf";
 import { readCachedProjectQuotePayloads } from "../../lib/compare-payload-cache";
 import type {
   BundleRow,
   CoverageEntry,
+  CrossScopeRow,
   MatrixV1,
+  Reconciliation,
+  SpaceNote,
   SpaceRow,
 } from "../../lib/compare-types";
 import { getCompareLane, showPdfUpload } from "../../lib/compare-lane";
@@ -118,6 +124,11 @@ function QuoteSenseContent() {
   const [projectTier, setProjectTier] = useState<SpaceRow[]>([]);
   const [spaceTier, setSpaceTier] = useState<SpaceRow[]>([]);
   const [coverage, setCoverage] = useState<CoverageEntry[]>([]);
+  const [crossScope, setCrossScope] = useState<CrossScopeRow[]>([]);
+  const [spaceNotes, setSpaceNotes] = useState<SpaceNote[]>([]);
+  const [reconciliation, setReconciliation] = useState<Reconciliation | undefined>(
+    undefined
+  );
 
   // Chat State Variables
   const [sessionId, setSessionId] = useState("");
@@ -224,6 +235,9 @@ function QuoteSenseContent() {
     if (Array.isArray(data.bundleTier)) setBundleTier(data.bundleTier);
     if (Array.isArray(data.projectTier)) setProjectTier(data.projectTier);
     if (Array.isArray(data.coverage)) setCoverage(data.coverage);
+    if (Array.isArray(data.crossScope)) setCrossScope(data.crossScope);
+    if (Array.isArray(data.spaceNotes)) setSpaceNotes(data.spaceNotes);
+    if (data.reconciliation) setReconciliation(data.reconciliation);
   };
 
   const matrixLacksMeasures = (data: Record<string, unknown> | null | undefined) => {
@@ -379,6 +393,9 @@ function QuoteSenseContent() {
     setBundleTier([]);
     setProjectTier([]);
     setCoverage([]);
+    setCrossScope([]);
+    setSpaceNotes([]);
+    setReconciliation(undefined);
       setVendors([]);
       setVendorMeta({});
       partialAppliedRef.current = false;
@@ -490,6 +507,9 @@ function QuoteSenseContent() {
     setBundleTier([]);
     setProjectTier([]);
     setCoverage([]);
+    setCrossScope([]);
+    setSpaceNotes([]);
+    setReconciliation(undefined);
     setVendors([]);   
     setVendorMeta({});
     setSessionId("");
@@ -511,22 +531,36 @@ function QuoteSenseContent() {
 
   const handleDownloadPdf = async (detail: PdfDetailLevel = "full") => {
     if (tableData.length === 0 || vendors.length === 0) return;
-    await downloadComparisonPdf(
-      tableData,
-      vendors,
-      vendorLabels,
-      vendorMeta,
-      {
-        bundleTier,
-        projectTier,
-        coverage,
-      },
-      {
-        projectTitle: projectMeta.title,
-        projectCode: projectMeta.code,
-        detail,
+    try {
+      await downloadComparisonPdf(
+        tableData,
+        vendors,
+        vendorLabels,
+        vendorMeta,
+        {
+          bundleTier,
+          projectTier,
+          coverage,
+          crossScope,
+          spaceNotes,
+          reconciliation,
+        },
+        {
+          projectTitle: projectMeta.title,
+          projectCode: projectMeta.code,
+          detail,
+        }
+      );
+    } catch (err) {
+      // The gate refuses to write a file whose rows do not add up to the
+      // quotes. The matrix already shows the reason and disables the buttons,
+      // so this path only fires if the two ever disagree.
+      if (err instanceof PdfReconciliationError) {
+        console.error("PDF export blocked by the reconciliation gate:", err.message);
+        return;
       }
-    );
+      throw err;
+    }
   };
 
   const handleProgressTick = (data: {
@@ -611,6 +645,9 @@ function QuoteSenseContent() {
     setBundleTier([]);
     setProjectTier([]);
     setCoverage([]);
+    setCrossScope([]);
+    setSpaceNotes([]);
+    setReconciliation(undefined);
     setVendors([]);
     setVendorMeta({});
     setChatHistory([]);
@@ -950,6 +987,9 @@ function QuoteSenseContent() {
             bundleTier={bundleTier}
             projectTier={projectTier}
             coverage={coverage}
+            crossScope={crossScope}
+            spaceNotes={spaceNotes}
+            reconciliation={reconciliation}
             projectTitle={projectMeta.title}
             projectCode={projectMeta.code}
           />

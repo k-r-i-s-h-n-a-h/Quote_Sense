@@ -133,6 +133,32 @@ cluster rather than being guessed into one of them.
 The old code defaulted the floor to `gf`, which is how the matrix came to be
 headed `GF-Bedroom1` for two quotes that never mention a floor.
 
+### An unnumbered room is not room 1
+
+Numbering is the same kind of assumption as a floor, and the same rule applies:
+it has to be stated. When a vendor writes `Ground floor bedroom` and that quote
+has two numbered ground-floor bedrooms, nearest-name matching used to fold the
+whole line into `gf_bedroom1` and leave Bedroom 2 with nothing — an allocation
+the vendor never made.
+
+So a bare room kind is only assigned to a numbered room when the assignment is
+deterministic: the vendor's own number, or an unambiguous catalog alias. Failing
+that, `unnumbered_remap` routes the line to
+`unassigned:<the vendor's exact label>` and sets `space_ambiguous` with a
+`space_note` telling the reader to confirm before allocating. Fuzzy similarity
+is never enough on its own — a plausible guess about someone's money reads as
+fact in the output.
+
+The rule only binds room kinds that are actually numbered in this quote
+(`_NUMBERABLE_KINDS`, capped at `_MAX_ROOM_INSTANCES`). A single unnumbered
+bedroom in a quote with exactly one bedroom is not ambiguous and still merges.
+
+`multi_instance_quantity_note` adds a softer signal on top: when a per-room
+line's quantity exceeds the number of instances of that room, the row carries
+`qty_scope_note` ("quantity suggests multi-room scope"). That is a note for a
+human, never a reassignment — `qty 4` on a chhajja line in a two-bedroom quote
+is evidence, not an allocation.
+
 ## Naming: the heading belongs to the vendors
 
 `space_id` is the grouping key; `space` is only the heading. They are decided

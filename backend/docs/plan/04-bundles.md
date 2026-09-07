@@ -145,6 +145,57 @@ The alternative — pro-rata allocating the lumpsum across rooms — was conside
 and rejected. It produces a per-room figure the vendor never quoted, and once
 that number is in a table someone will treat it as real.
 
+### Bundled zones: a whole space priced as one scope
+
+The section above is about one bundled *line*. A vendor can also bundle a whole
+*zone*: INT360's `Common` space carried plumbing, electrical, grill, window and
+false ceiling as five generic lines, while the other quote scoped the same work
+per room in detail. Line-matching those against each other can only produce
+invented pairings — `Plumbing` (whole house) against a bathroom's plumbing
+labour is not a comparison.
+
+`bundle_zone_map` marks a space `BUNDLE_NOT_DECOMPOSABLE` when all of:
+
+- the space label is generic (`Common`, `Miscellaneous`, `Others`, …) rather
+  than a room,
+- its lines span ≥ `BUNDLE_ZONE_MIN_CATEGORIES` distinct trades from the fixed
+  `TRADE_CATEGORIES` list, and
+- it holds ≥ `BUNDLE_ZONE_MIN_LINES` lines.
+
+The trade list is fixed on purpose. Deriving categories from the vendor's words
+would let a detailed quote look "multi-trade" and suppress comparisons that are
+perfectly valid — a bedroom legitimately holds carpentry, electrical and civil
+work, and must never be treated as a bundled zone. Requiring a generic label is
+what keeps real rooms out.
+
+Effect: `bundle_zone_rows` emits one zone-level row per bundled zone, and the
+matching `SpaceNote` carries `suppress_line_matching = true`, so the UI and the
+PDF print the zone total and the note instead of its line rows. The rupees are
+untouched — only the pairing is refused.
+
+### Cross-scope possible matches (S4b)
+
+`services/cross_scope.py` handles the opposite failure. One vendor put a whole
+washroom fit-out inside `Walkin Closet Area 1st Floor`; the other quoted the
+same work as `First Floor Bathroom`. The containment guard is right to keep
+those spaces apart — but with disjoint `space_id`s, no space-tier row can ever
+pair them, so both printed as unrelated N/A blocks, which told the client
+"nobody else quoted this". That was false.
+
+`cross_scope_candidates` classifies lines into `FUNCTIONAL_GROUPS` (bathroom
+fit-out, wardrobe/storage, and so on) and emits a `POSSIBLE_CROSS_SCOPE_MATCH`
+when, for one group, the two vendors' spaces are entirely disjoint and both
+sides exceed `CROSS_SCOPE_MIN_INR`. If any space already holds both vendors,
+nothing is flagged: the space tier is comparing that work honestly.
+
+Abstain and flag, in both directions:
+
+- the totals are **never** merged, so no tier total moves and reconciliation is
+  unaffected;
+- the affected rows stop saying "did not quote this line" and instead name the
+  other vendor's space with a confirm-with-vendor note
+  (`apply_cross_scope_notes`).
+
 ---
 
 ## Kill switches

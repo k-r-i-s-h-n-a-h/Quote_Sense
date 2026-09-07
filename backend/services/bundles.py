@@ -101,6 +101,181 @@ _ITEM_TOKENS = {
 _INCLUDES_RE = re.compile(r"^(includes?|including)\s+", re.I)
 
 
+# --- bundle zones (BUNDLE_NOT_DECOMPOSABLE) --------------------------------
+#
+# A vendor sometimes parks several trades in one catch-all zone ("Common":
+# plumbing + electrical + grill + window + false ceiling + termite treatment,
+# one figure each, no room named). The other vendor scopes the same work per
+# room in fine detail. Line-matching those two produces invented pairings, so
+# the zone is compared at space level only and says so.
+#
+# Fixed trade list. Order matters only for reporting; a line belongs to at most
+# one category.
+TRADE_CATEGORIES: tuple[tuple[str, "re.Pattern[str]"], ...] = (
+    ("plumbing", re.compile(r"\bplumb|sanitary|cp fitting|basin|cummode|commode|flush tank|faucet|geyser|water\s*line", re.I)),
+    ("electrical", re.compile(r"\belectric|wiring|light|switch|adaptor|adapter|point creation|db\b", re.I)),
+    ("carpentry", re.compile(r"\bwardrobe|loft|unit\b|cabinet|shutter|panel|door|partition|bed\b|table|storage|carpent", re.I)),
+    ("civil", re.compile(r"\bcivil|masonry|brick|plaster|chhajja|concrete|tile|tiling|flooring|waterproof|dismantl|demolit", re.I)),
+    ("painting", re.compile(r"\bpaint|emulsion|primer|putty", re.I)),
+    ("ceiling", re.compile(r"\bfalse\s*cei?l+ing|gyproc|pop\b", re.I)),
+    ("glazing", re.compile(r"\bwindow|glazing|glass|grill|mesh", re.I)),
+    ("pest_control", re.compile(r"\btermite|pest|anti[\s-]?borer", re.I)),
+    ("housekeeping", re.compile(r"\bdeep clean|cleaning|debris|floor protection|housekeep", re.I)),
+)
+
+# Catch-all zone names. A real room ("Kitchen", "Bedroom 1") is never a bundle
+# zone, however many trades it contains — a bedroom legitimately holds
+# carpentry, electrical, and civil work, and flagging it would suppress the
+# comparison customers actually need.
+_GENERIC_ZONE_RE = re.compile(
+    r"\b(common|commons|general|generals|others?|misc|miscellaneous|balance|"
+    r"remaining|package|combined|overall|whole\s*home|whole\s*house|"
+    r"full\s*home|full\s*house)\b",
+    re.I,
+)
+
+# Below this a "zone" is just a couple of stray lines, not a bundled scope.
+BUNDLE_ZONE_MIN_LINES = 3
+BUNDLE_ZONE_MIN_CATEGORIES = 2
+
+TRADE_LABELS = {
+    "plumbing": "plumbing",
+    "electrical": "electrical",
+    "carpentry": "carpentry",
+    "civil": "civil work",
+    "painting": "painting",
+    "ceiling": "false ceiling",
+    "glazing": "windows & grills",
+    "pest_control": "pest control",
+    "housekeeping": "cleaning",
+}
+
+
+def trade_category_of(row: dict[str, Any]) -> str:
+    """Coarse trade for a line, or "" when none of the patterns match."""
+    blob = " ".join(
+        str(row.get(col, "") or "")
+        for col in ("sub_service", "item_name", "work_label")
+    )
+    for category, pattern in TRADE_CATEGORIES:
+        if pattern.search(blob):
+            return category
+    return ""
+
+
+def _is_generic_zone(label: str) -> bool:
+    return bool(_GENERIC_ZONE_RE.search(str(label or "")))
+
+
+def bundle_zone_map(df) -> dict[tuple[str, str], list[str]]:
+    """(vendor, space_id) -> trade categories, for catch-all zones only.
+
+    Requires all three: a catch-all zone name, at least
+    `BUNDLE_ZONE_MIN_LINES` lines, and at least
+    `BUNDLE_ZONE_MIN_CATEGORIES` structurally distinct trades.
+    """
+    if df is None or len(df) == 0:
+        return {}
+    if "space_id" not in df.columns or "vendor_name" not in df.columns:
+        return {}
+
+    grouped: dict[tuple[str, str], dict[str, Any]] = {}
+    for _, row in df.iterrows():
+        space_id = str(row.get("space_id") or "")
+        if not space_id or space_id == "project_level":
+            continue
+        names = [row.get("space"), row.get("space_raw")]
+        if not any(_is_generic_zone(str(name or "")) for name in names):
+            continue
+        key = (str(row.get("vendor_name") or ""), space_id)
+        entry = grouped.setdefault(key, {"lines": 0, "categories": []})
+        entry["lines"] += 1
+        category = trade_category_of(row)
+        if category and category not in entry["categories"]:
+            entry["categories"].append(category)
+
+    return {
+        key: entry["categories"]
+        for key, entry in grouped.items()
+        if entry["lines"] >= BUNDLE_ZONE_MIN_LINES
+        and len(entry["categories"]) >= BUNDLE_ZONE_MIN_CATEGORIES
+    }
+
+
+def apply_bundle_zones(df):
+    """Add `trade_category` and `bundle_zone` columns."""
+    if df is None or len(df) == 0:
+        return df
+    df["trade_category"] = [trade_category_of(row) for _, row in df.iterrows()]
+    zones = bundle_zone_map(df)
+    df["bundle_zone"] = [
+        (str(row.get("vendor_name") or ""), str(row.get("space_id") or "")) in zones
+        for _, row in df.iterrows()
+    ]
+    return df
+
+
+def bundle_zone_note(vendor: str, categories: list[str]) -> str:
+    who = _vendor_short(vendor)
+    named = [TRADE_LABELS.get(c, c.replace("_", " ")) for c in categories]
+    if len(named) > 1:
+        trades = ", ".join(named[:-1]) + f" and {named[-1]}"
+    else:
+        trades = named[0] if named else "several trades"
+    return (
+        f"{who} priced this as a single bundled scope covering {trades} — not "
+        "broken out by room or item, so it can't be compared line-by-line."
+    )
+
+
+def bundle_zone_rows(df, vendors: list[str]) -> list[dict[str, Any]]:
+    """One space-level-only entry per catch-all zone.
+
+    Rupees stay on the vendor's own lines in the space tier — this row is a
+    rendering instruction ("show the total, suppress the line matching"), not
+    a second copy of the money.
+    """
+    zones = bundle_zone_map(df)
+    if not zones:
+        return []
+
+    rows: list[dict[str, Any]] = []
+    for (vendor, space_id), categories in zones.items():
+        slice_ = df[
+            (df["vendor_name"] == vendor) & (df["space_id"].astype(str) == space_id)
+        ]
+        if len(slice_) == 0:
+            continue
+        amount = float(
+            slice_["amount"].fillna(0).sum() if "amount" in slice_.columns else 0.0
+        )
+        rows.append(
+            {
+                "match_tier": "BUNDLE_NOT_DECOMPOSABLE",
+                "space_id": space_id,
+                "space": str(slice_["space"].iloc[0] or space_id),
+                "vendor": vendor,
+                "categories": categories,
+                "line_count": int(len(slice_)),
+                "amount": round(amount),
+                "confidence": 1.0,
+                "rationale": (
+                    f"{len(categories)} distinct trades in one catch-all zone"
+                ),
+                "note": bundle_zone_note(vendor, categories),
+                "source_line_ids": [
+                    str(v)
+                    for v in (
+                        slice_["line_id"].tolist() if "line_id" in slice_.columns else []
+                    )
+                    if str(v)
+                ],
+            }
+        )
+    rows.sort(key=lambda r: (r["space_id"], r["vendor"]))
+    return rows
+
+
 def family_of(row: dict[str, Any]) -> str:
     """Coarse family for a line, or "" when it belongs to none."""
     key = str(row.get("work_key") or "")
@@ -348,7 +523,24 @@ def _comparison_row_for_subset(subset, vendors: list[str], family: str, has_bund
         }
     )
 
+    # Lineage per vendor. The reconciliation gate reads `line_ids`, and only
+    # counts a bundle row's rupees when that vendor's basis is "bundle" — an
+    # itemised figure is already counted in the space or project tier.
+    line_ids: dict[str, list[str]] = {}
+    for vendor in vendors:
+        vrows = subset[subset["vendor_name"] == vendor]
+        if basis.get(vendor) == "bundle":
+            vrows = vrows[vrows["scope"] == "bundle"]
+        line_ids[vendor] = [
+            str(v)
+            for v in (vrows["line_id"].tolist() if "line_id" in vrows.columns else [])
+            if str(v)
+        ]
+
     row_dict: dict[str, Any] = {
+        "match_tier": "MATCH",
+        "line_ids": line_ids,
+        "source_line_ids": [lid for ids in line_ids.values() for lid in ids],
         "bundle_id": (
             str(bundle_rows.iloc[0]["bundle_id"])
             if len(bundle_rows) > 0
@@ -377,7 +569,8 @@ TAKEAWAY_MIN_GAP_ABS = 15_000
 TAKEAWAY_MIN_GAP_PCT = 0.25
 
 
-def _inr_indian(n: float) -> str:
+def inr_indian(n: float) -> str:
+    """Rupees in Indian digit grouping. Client-facing notes use this."""
     n = int(round(n))
     sign = "-" if n < 0 else ""
     n = abs(n)
@@ -443,9 +636,9 @@ def bundle_takeaway(row: dict[str, Any], vendors: list[str]) -> dict[str, str] |
 
     if package > listed:
         text = (
-            f"{pkg_name} priced {label} as one package of {_inr_indian(package)}. "
+            f"{pkg_name} priced {label} as one package of {inr_indian(package)}. "
             f"{listed_name} listed the same kind of work in {lines_phrase} totalling "
-            f"{_inr_indian(listed)}. {pkg_name} is about {_inr_indian(gap)} higher. "
+            f"{inr_indian(listed)}. {pkg_name} is about {inr_indian(gap)} higher. "
             f"That can mean a fuller kit — or a dear package. Ask {pkg_name} what "
             f"the package includes{overlap_ask}. Ask {listed_name} whether those "
             f"{lines_phrase} cover the same set."
@@ -453,9 +646,9 @@ def bundle_takeaway(row: dict[str, Any], vendors: list[str]) -> dict[str, str] |
         return {"kind": "package_higher", "text": text}
 
     text = (
-        f"{pkg_name} priced {label} as one package of {_inr_indian(package)}. "
-        f"{listed_name}'s listed lines add up to {_inr_indian(listed)}, which is "
-        f"about {_inr_indian(gap)} more. The package looks cheaper — it may also "
+        f"{pkg_name} priced {label} as one package of {inr_indian(package)}. "
+        f"{listed_name}'s listed lines add up to {inr_indian(listed)}, which is "
+        f"about {inr_indian(gap)} more. The package looks cheaper — it may also "
         f"cover less. Ask {pkg_name} for a written list of what is inside the "
         f"package, and match it to {listed_name}'s line items before treating this "
         f"as a saving."

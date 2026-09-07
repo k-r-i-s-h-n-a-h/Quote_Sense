@@ -240,3 +240,91 @@ it may also name other jobs (cleaning, bench seating, whole-home civil).
 
 S6 must read those descriptions. If `named_in` is set, never write that the
 vendor did not quote the work.
+
+---
+
+## 12. Compare from a PM project opens that project
+
+When a user clicks Compare Quotes on a TatvaOps PM project, QuoteSense must
+open **that project's hub** (`/project/{code or id}`) so they can pick two
+quotes there.
+
+Do not drop them on the My projects list and make them find the same project
+again. A `session_id` still goes to `/compare`. A Compare click with no
+project ref still goes to the list. Do not auto-run a comparison until they
+select two same-tier quotes.
+
+---
+
+## 13. Say nothing rather than something false
+
+From an audit of a real two-vendor comparison, line by line, against both
+source quotes. Every rule below is a sentence the document actually printed
+that was not true. The pipeline is allowed to abstain; it is not allowed to
+assert.
+
+### 13.1 Every rendered row traces back to source lines
+
+Each comparison row carries `source_line_ids`, and `combined_from` when it
+merged several lines from one vendor. **No source line may end up in no row.**
+A line item worth Rs 29,146 disappeared from a comparison and nothing in the
+output could reveal it.
+
+### 13.2 A comparison that loses money is not a document
+
+Per vendor, the rows must add back up to that vendor's own quoted lines (GST,
+discount and TatvaOps service charges excluded and documented as out of
+scope). When they do not, **the PDF is blocked** and the unaccounted lines are
+named. Do not soften this into a warning banner over a downloadable file.
+
+### 13.3 A merged row must name what it merged
+
+When one display row covers several of a vendor's lines, the summary says
+`combines: Profile lights, Strip lights`. Never silently relabel. And within
+one quote, two different source lines must never print under the same label —
+append the space or a short description suffix instead.
+
+### 13.4 An unnumbered room is not room 1
+
+Assigning a vendor's `Ground floor bedroom` to Bedroom 1 requires the vendor's
+own number or an explicit catalog alias. Name similarity is not enough. With
+no deterministic signal the line goes to `UNASSIGNED — "<the vendor's exact
+label>"` with a confirm-before-allocating note. Do not guess it into a room,
+and do not blank it. Rs 59,000 was attributed to one bedroom while the other
+got nothing, on nothing more than a name being close.
+
+### 13.5 Related work in a different container is flagged, not dropped
+
+When both vendors quoted the same functional scope but in structurally
+different containers (embedded in a room vs a standalone space), emit
+`POSSIBLE_CROSS_SCOPE_MATCH`: both figures side by side, confirm with vendor,
+**totals never merged**. A washroom fit-out inside one vendor's walk-in closet
+read as "the other vendor quoted nothing", which was false — they had quoted
+it as their own bathroom space.
+
+### 13.6 A bundled zone is compared at zone level only
+
+When one vendor prices a generic zone spanning two or more distinct trades,
+that space is `BUNDLE_NOT_DECOMPOSABLE`: zone total plus the note saying why,
+and **no line-level pairings into or out of it**. Do not line-match a
+whole-house `Plumbing` figure against another quote's per-room plumbing.
+
+A real room is never a bundled zone — bedrooms hold several trades
+legitimately. The generic-label requirement is what keeps them out; do not
+drop it to catch more zones.
+
+### 13.7 Different pricing methods are not a quantity difference
+
+Before any sentence comparing quantities, check `pricing_method_id` on both
+sides. When they differ, name both methods, say it is not comparable by
+quantity, and compare the rates only. `1 units vs 8 units` for a shutter one
+vendor priced per unit and the other per sq ft implied one of them quoted
+eight shutters.
+
+### 13.8 Abstention tiers do not loosen the structural guards
+
+`match_tier` adds ways to say "unknown"; containment, floor and numbered-room
+identity remain **hard overrides** on model confidence (§1). Matching still
+happens on `service_id` / `sub_service_id` / `pricing_method_id` first; label
+similarity is a fallback and is never the primary signal for placing a line in
+a room.

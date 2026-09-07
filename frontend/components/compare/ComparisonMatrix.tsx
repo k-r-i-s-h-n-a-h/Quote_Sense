@@ -18,11 +18,14 @@ import {
 import {
   amountOf,
   bundlePriceNote,
+  bundleZoneSpaceIds,
+  notesForSpace,
   parseCellStatus,
   partitionBundleRows,
   projectRowsForDisplay,
   recapPlacementNote,
   recapPlacementNotes,
+  reconciliationBlockReason,
   rowComparisonSummary,
   spaceHeaderSummary,
   vendorsShareCompany,
@@ -32,6 +35,9 @@ import {
   gstModeOf,
   type BundleRow,
   type CoverageEntry,
+  type CrossScopeRow,
+  type Reconciliation,
+  type SpaceNote,
   type SpaceRow,
 } from "@/lib/compare-types";
 import { vendorColor } from "@/lib/vendor-colors";
@@ -50,6 +56,9 @@ type Props = {
   bundleTier?: BundleRow[];
   projectTier?: SpaceRow[];
   coverage?: CoverageEntry[];
+  crossScope?: CrossScopeRow[];
+  spaceNotes?: SpaceNote[];
+  reconciliation?: Reconciliation;
   projectTitle?: string;
   projectCode?: string;
 };
@@ -129,6 +138,9 @@ export default function ComparisonMatrix({
   bundleTier = [],
   projectTier,
   coverage = [],
+  crossScope = [],
+  spaceNotes = [],
+  reconciliation,
   projectTitle,
   projectCode,
 }: Props) {
@@ -169,6 +181,17 @@ export default function ComparisonMatrix({
     [projectForDisplay]
   );
   const coverIdx = useMemo(() => coverageIndex(coverage), [coverage]);
+  const zoneSpaceIds = useMemo(
+    () => bundleZoneSpaceIds(spaceNotes),
+    [spaceNotes]
+  );
+  // A comparison that does not add up to the quotes is not exportable. The
+  // reason is shown rather than hidden, because the fix is a re-run, not a
+  // retry of the download.
+  const exportBlocked = useMemo(
+    () => reconciliationBlockReason({ reconciliation }),
+    [reconciliation]
+  );
   const allSpaceIds = useMemo(() => {
     const ids: string[] = [];
     for (const cat of grouped) {
@@ -483,7 +506,20 @@ export default function ComparisonMatrix({
             </td>
           </tr>
 
-          {open
+          {notesForSpace(spaceNotes, spaceGroup.spaceId).map((note) => (
+            <tr key={`${spaceGroup.spaceId}-${note.note}`}>
+              <td
+                colSpan={colCount}
+                className="px-6 py-2 border-l-4 border-sky-300 bg-sky-50/80"
+              >
+                <p className="text-[12px] text-sky-950 leading-relaxed max-w-4xl">
+                  {note.note}
+                </p>
+              </td>
+            </tr>
+          ))}
+
+          {open && !zoneSpaceIds.has(spaceGroup.spaceId)
             ? spaceGroup.subs.map((sub) => {
             const merged = mergeWorkRow(sub.rows, vendors);
             const pricing = String(merged.pricing_method || "");
@@ -568,9 +604,18 @@ export default function ComparisonMatrix({
             </div>
           </div>
           {onDownloadPdf ? (
-            <PdfExportButtons onExport={onDownloadPdf} />
+            <PdfExportButtons
+              onExport={onDownloadPdf}
+              disabled={Boolean(exportBlocked)}
+            />
           ) : null}
         </div>
+        {exportBlocked ? (
+          <p className="text-[11px] leading-snug text-rose-900 bg-rose-50 border border-rose-200 rounded-md px-2.5 py-1.5 max-w-3xl">
+            PDF export is blocked: {exportBlocked} Re-run the comparison — do
+            not send this to a client.
+          </p>
+        ) : null}
         {gstBanner ? (
           <p className="text-[11px] leading-snug text-sky-900 bg-sky-50 border border-sky-200 rounded-md px-2.5 py-1.5 max-w-3xl">
             {gstBanner}
@@ -671,6 +716,60 @@ export default function ComparisonMatrix({
                 {renderSpaces(cat.spaces)}
               </React.Fragment>
             ))}
+
+            {crossScope.length > 0 && (
+              <>
+                {renderSectionHeader(
+                  "Possible match — confirm with vendor",
+                  "Related work each vendor placed in a different part of its quote. Shown side by side; the totals are not added together, and neither vendor is missing this work.",
+                  "sky"
+                )}
+                {crossScope.map((entry, ei) => (
+                  <React.Fragment key={entry.group || ei}>
+                    <tr className="bg-white">
+                      <td className="py-3 pl-6 pr-4 border-l-4 border-sky-300">
+                        <div className="text-sm font-semibold text-stone-800 leading-tight">
+                          {entry.label || entry.group}
+                        </div>
+                        {entry.rationale ? (
+                          <div className="text-[11px] text-stone-500 mt-0.5">
+                            {entry.rationale}
+                          </div>
+                        ) : null}
+                      </td>
+                      {vendors.map((vendor, vIdx) => {
+                        const info = entry.vendors?.[vendor];
+                        const value = Number(info?.amount) || 0;
+                        return (
+                          <td
+                            key={vIdx}
+                            className="px-4 py-3 text-center tabular-nums align-middle"
+                          >
+                            {value > 0 ? (
+                              <>
+                                <div className="text-sm font-bold text-stone-900">
+                                  {formatInrFull(value)}
+                                </div>
+                                <div className="text-[10px] text-stone-500 mt-0.5 normal-case">
+                                  {info?.space}
+                                </div>
+                              </>
+                            ) : (
+                              <span className="text-[11px] text-stone-500 italic">
+                                not in this quote
+                              </span>
+                            )}
+                          </td>
+                        );
+                      })}
+                      <td className="px-3 py-3 text-left align-middle text-[11px] leading-snug text-stone-600">
+                        {entry.note || ""}
+                      </td>
+                    </tr>
+                  </React.Fragment>
+                ))}
+              </>
+            )}
 
             {lumpSums.length > 0 && (
               <>

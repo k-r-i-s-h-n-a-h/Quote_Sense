@@ -23,8 +23,25 @@ export type VendorMeasures = {
   quantity?: number;
   rate?: number;
   pricing_method?: string;
+  /** Catalog id. Decides whether a quantity sentence is meaningful at all. */
+  pricing_method_id?: string;
   description?: string;
+  /** Lineage: the source line ids behind this vendor's figure. */
+  line_ids?: string[];
+  /** The vendor's own titles for those lines. */
+  labels?: string[];
 };
+
+/**
+ * How a row was arrived at. `MATCH` is the only tier that compares two
+ * figures like for like; the rest are deliberate abstentions that must render
+ * with their note rather than as a bare N/A.
+ */
+export type MatchTier =
+  | "MATCH"
+  | "POSSIBLE_CROSS_SCOPE_MATCH"
+  | "BUNDLE_NOT_DECOMPOSABLE"
+  | "UNASSIGNED";
 
 /** How a vendor's figure in a bundle row was arrived at. */
 export type PriceBasis = "bundle" | "itemized" | "none";
@@ -65,6 +82,21 @@ export interface SpaceRow {
   >;
   /** S4 family, e.g. "lighting" — used to hide Whole-home recap duplicates. */
   bundle_family?: string;
+  /** Lineage: every source line behind this row, across vendors. */
+  source_line_ids?: string[];
+  /** Lineage per vendor. */
+  line_ids?: Record<Vendor, string[]>;
+  /** Set when one display row merged several lines from the same vendor. */
+  combined_from?: string[];
+  /** Vendor -> the merged lines' own titles, for the "combines:" note. */
+  combines?: Record<Vendor, string[]>;
+  match_tier?: MatchTier;
+  /** Confirm-with-vendor note for an UNASSIGNED space. */
+  space_note?: string;
+  /** "quantity suggests multi-room scope" flag. */
+  qty_scope_note?: string;
+  /** Set when S4b found this row a possible match in another vendor's space. */
+  cross_scope_note?: string;
   work_confidence?: number;
   space_confidence?: number;
   /** Vendor names are dynamic column keys, hence the index signature. */
@@ -100,6 +132,75 @@ export interface CoverageEntry {
   comparable: boolean;
 }
 
+/** A functional match the pipeline refused to auto-club. Never merged. */
+export interface CrossScopeRow {
+  match_tier?: "POSSIBLE_CROSS_SCOPE_MATCH";
+  group?: string;
+  label?: string;
+  confidence?: number;
+  rationale?: string;
+  note?: string;
+  source_line_ids?: string[];
+  vendors?: Record<
+    Vendor,
+    {
+      space?: string;
+      space_id?: string;
+      spaces?: string[];
+      amount?: number;
+      line_count?: number;
+      container?: "standalone" | "embedded";
+    }
+  >;
+}
+
+/** A vendor zone that bundles several trades and cannot be matched by line. */
+export interface BundleZoneRow {
+  match_tier?: "BUNDLE_NOT_DECOMPOSABLE";
+  space_id: string;
+  space: string;
+  vendor: Vendor;
+  categories?: string[];
+  line_count?: number;
+  amount?: number;
+  note?: string;
+  source_line_ids?: string[];
+}
+
+export interface SpaceNote {
+  match_tier?: MatchTier;
+  space_id: string;
+  space: string;
+  vendor?: Vendor;
+  note: string;
+  /** True when the space may only be compared at space level. */
+  suppress_line_matching?: boolean;
+}
+
+export interface ReconciliationVendor {
+  source_total?: number;
+  rows_total?: number;
+  delta?: number;
+  row_count?: number;
+  line_count?: number;
+  ok?: boolean;
+  unaccounted_line_ids?: string[];
+  unaccounted?: {
+    line_id?: string;
+    label?: string;
+    space?: string;
+    amount?: number;
+  }[];
+  unexpected_line_ids?: string[];
+}
+
+export interface Reconciliation {
+  ok?: boolean;
+  tolerance_inr?: number;
+  out_of_scope_note?: string;
+  vendors?: Record<Vendor, ReconciliationVendor>;
+}
+
 export interface MatrixV1 {
   contract_version?: string;
   vendors?: Vendor[];
@@ -109,6 +210,10 @@ export interface MatrixV1 {
   bundleTier?: BundleRow[];
   projectTier?: SpaceRow[];
   coverage?: CoverageEntry[];
+  crossScope?: CrossScopeRow[];
+  bundleZones?: BundleZoneRow[];
+  spaceNotes?: SpaceNote[];
+  reconciliation?: Reconciliation;
   /** Legacy flat shape, equal to spaceTier + projectTier. */
   tableData?: SpaceRow[];
   report?: string;
@@ -148,6 +253,59 @@ export function bundleRowsOf(matrix: MatrixV1): BundleRow[] {
 
 export function coverageOf(matrix: MatrixV1): CoverageEntry[] {
   return matrix.coverage ?? [];
+}
+
+/**
+ * Why the export is blocked, or "" when it may proceed.
+ *
+ * A red gate means at least one vendor line never reached a row, so the
+ * artefact would understate that quote. An older payload carries no
+ * `reconciliation` at all and is allowed through unchanged.
+ */
+export function reconciliationBlockReason(matrix: {
+  reconciliation?: Reconciliation;
+}): string {
+  const report = matrix.reconciliation;
+  if (!report || report.ok !== false) return "";
+  const bits: string[] = [];
+  for (const [vendor, entry] of Object.entries(report.vendors ?? {})) {
+    if (entry?.ok !== false) continue;
+    // Keep the quote number: two quotes in one comparison can share a company,
+    // and a blocked export has to name which quote is short.
+    const who = vendor.trim() || vendor;
+    const missing = entry.unaccounted ?? [];
+    if (missing.length) {
+      const names = missing
+        .slice(0, 3)
+        .map((item) => `${item.label || item.line_id} (${inrDelta(item.amount ?? 0)})`)
+        .join(", ");
+      bits.push(`${who}: ${missing.length} line(s) unaccounted — ${names}`);
+    } else {
+      bits.push(
+        `${who}: row total is ${inrDelta(entry.delta ?? 0)} off the quoted lines`
+      );
+    }
+  }
+  return bits.length
+    ? `Comparison does not reconcile with the quotes. ${bits.join("; ")}.`
+    : "Comparison does not reconcile with the quotes.";
+}
+
+/** Space ids that may only be compared at space level. */
+export function bundleZoneSpaceIds(notes: SpaceNote[] = []): Set<string> {
+  return new Set(
+    notes
+      .filter((note) => note.suppress_line_matching)
+      .map((note) => String(note.space_id))
+  );
+}
+
+/** Notes for one space, in render order. */
+export function notesForSpace(
+  notes: SpaceNote[] = [],
+  spaceId: string
+): SpaceNote[] {
+  return notes.filter((note) => String(note.space_id) === String(spaceId));
 }
 
 /** True when at least one vendor priced this family as a single lumpsum. */
@@ -598,6 +756,52 @@ function specClause(
   return bits.join("; ");
 }
 
+/**
+ * True when the two sides did not price this item the same way.
+ *
+ * IDs first: `pricing_method_id` is the catalog fact and the label is only a
+ * fallback for a lane that never supplied ids.
+ */
+export function pricingMethodsDiffer(
+  ma: VendorMeasures,
+  mb: VendorMeasures
+): boolean {
+  const idA = String(ma.pricing_method_id || "").trim();
+  const idB = String(mb.pricing_method_id || "").trim();
+  if (idA && idB) return idA !== idB;
+  const labelA = String(ma.pricing_method || "").trim().toLowerCase();
+  const labelB = String(mb.pricing_method || "").trim().toLowerCase();
+  if (labelA && labelB) return labelA !== labelB;
+  return false;
+}
+
+/**
+ * Replacement for quantity language when the pricing methods differ.
+ *
+ * "1 units vs 8 units" implied one vendor had quoted eight rolling shutters
+ * when it had priced 8 sq ft. A quantity only means something inside one
+ * pricing method, so we name both methods and compare rates only.
+ */
+export function pricingMethodClause(
+  ma: VendorMeasures,
+  mb: VendorMeasures,
+  a: string,
+  b: string
+): string {
+  const nameOf = (m: VendorMeasures) =>
+    String(m.pricing_method || "").trim() || "an unstated method";
+  const rateA = Number(ma.rate) || 0;
+  const rateB = Number(mb.rate) || 0;
+  let text =
+    `${a} and ${b} use different pricing methods ` +
+    `(${nameOf(ma)} vs ${nameOf(mb)}) for this item — ` +
+    "not directly comparable by quantity";
+  if (rateA > 0 && rateB > 0) {
+    text += `. Rate difference only: ${inrDelta(rateA)} vs ${inrDelta(rateB)}`;
+  }
+  return text;
+}
+
 function qtyRateParts(
   qtyA: number,
   qtyB: number,
@@ -681,13 +885,28 @@ export function rowComparisonSummary(
       gaps.push(vendor);
     }
   }
-  if (elsewhere.length) return elsewhere.join("; ");
+  const prefix = lineagePrefix(row, vendors, refs);
+  const withNotes = (body: string) => {
+    const parts = [prefix, body].filter(Boolean);
+    for (const note of [row.space_note, row.qty_scope_note]) {
+      const text = String(note || "").trim();
+      if (text) parts.push(text);
+    }
+    if (row.match_tier === "BUNDLE_NOT_DECOMPOSABLE") {
+      parts.push("bundled zone — compare at zone level only");
+    }
+    return parts.join(" · ");
+  };
+
+  if (elsewhere.length) return withNotes(elsewhere.join("; "));
+  const crossScopeNote = String(row.cross_scope_note || "").trim();
+  if (crossScopeNote && quoted.length === 1) return withNotes(crossScopeNote);
   if (quoted.length === 1 && gaps.length) {
     const shipped = String(row.summary || "").trim();
     if (shipped) return shipped;
-    return `${refs[gaps[0]]} did not quote this line`;
+    return withNotes(`${refs[gaps[0]]} did not quote this line`);
   }
-  if (quoted.length < 2) return "";
+  if (quoted.length < 2) return withNotes("");
 
   const a = quoted[0];
   const b = quoted[1];
@@ -706,22 +925,39 @@ export function rowComparisonSummary(
       ? "Same amount"
       : `${refs[amtA > amtB ? a : b]} is ${inrDelta(Math.abs(amtA - amtB))} higher`;
 
-  const reasons = qtyRateParts(
-    qtyA,
-    qtyB,
-    rateA,
-    rateB,
-    unit,
-    refs[a],
-    refs[b]
-  );
+  const reasons = pricingMethodsDiffer(ma, mb)
+    ? [pricingMethodClause(ma, mb, refs[a], refs[b])]
+    : qtyRateParts(qtyA, qtyB, rateA, rateB, unit, refs[a], refs[b]);
   const spec = specClause(ma, mb, refs[a], refs[b]);
   if (spec) reasons.push(spec);
   if (!reasons.length) {
     const shipped = String(row.summary || "").trim();
-    return shipped || amountClause;
+    return shipped || withNotes(amountClause);
   }
-  return `${amountClause} — ${reasons.join(" · ")}`;
+  return withNotes(`${amountClause} — ${reasons.join(" · ")}`);
+}
+
+/** "combines: A, B" when one display row merged several of a vendor's lines. */
+function lineagePrefix(
+  row: SpaceRow,
+  vendors: Vendor[],
+  refs: Record<Vendor, string>
+): string {
+  const combines = row.combines;
+  if (!combines) return "";
+  const keys = Object.keys(combines);
+  const named: string[] = [];
+  for (const vendor of vendors) {
+    const labels = (combines[vendor] || []).map((v) => String(v).trim()).filter(Boolean);
+    if (labels.length < 2) continue;
+    const joined = labels.join(", ");
+    named.push(
+      keys.length === 1
+        ? `combines: ${joined}`
+        : `${refs[vendor] || whoOf(vendor)} combines: ${joined}`
+    );
+  }
+  return named.join(" · ");
 }
 
 export type SpaceHeaderSummaryOpts = {

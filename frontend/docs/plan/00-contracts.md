@@ -25,6 +25,11 @@ or it will state something false.
 export type Vendor = string;                  // matrix column key
 export type CoverageStatus = "quoted" | "incl_in_bundle" | "incl_in_parent" | "not_quoted";
 export type PriceBasis = "bundle" | "itemized" | "none";
+export type MatchTier =
+  | "MATCH"
+  | "POSSIBLE_CROSS_SCOPE_MATCH"
+  | "BUNDLE_NOT_DECOMPOSABLE"
+  | "UNASSIGNED";
 
 export interface SpaceRow {
   category: string;
@@ -36,9 +41,17 @@ export interface SpaceRow {
   pricing_method?: string;
   breakdown?: { vendor: string; item: string; amount: number }[];
   contained_in?: string;
-  measures?: Record<Vendor, { quantity?: number; rate?: number; pricing_method?: string; description?: string }>;
+  measures?: Record<Vendor, { quantity?: number; rate?: number; pricing_method?: string; pricing_method_id?: string; description?: string }>;
   named_in?: Record<Vendor, { label?: string; amount?: number; space?: string; intent?: string; also_names?: string[] }>;
   summary?: string;
+  source_line_ids?: string[];                 // lineage, always populated
+  line_ids?: Record<Vendor, string[]>;
+  combined_from?: string[];                   // several lines of one vendor merged
+  combines?: Record<Vendor, string[]>;
+  match_tier?: MatchTier;
+  space_note?: string;                        // UNASSIGNED: confirm before allocating
+  qty_scope_note?: string;
+  cross_scope_note?: string;
   [vendor: string]: unknown;                  // per-vendor amounts
 }
 
@@ -65,6 +78,29 @@ export interface CoverageEntry {
   parent_space?: string;
 }
 
+export interface CrossScopeRow {
+  group: string;
+  label: string;
+  match_tier?: "POSSIBLE_CROSS_SCOPE_MATCH";
+  vendors: Record<Vendor, { space_id: string; space: string; spaces?: string[]; amount: number; line_count?: number; container?: "standalone" | "embedded" }>;
+  note: string;
+  source_line_ids?: string[];
+}
+
+export interface SpaceNote {
+  space_id: string;
+  space: string;
+  match_tier?: MatchTier;
+  note: string;
+  suppress_line_matching?: boolean;           // bundled zone: hide its line rows
+}
+
+export interface Reconciliation {
+  ok?: boolean;
+  tolerance_inr?: number;
+  vendors?: Record<Vendor, ReconciliationVendor>;
+}
+
 export interface MatrixV1 {
   contract_version?: "MatrixV1";
   vendors: Vendor[];
@@ -74,11 +110,31 @@ export interface MatrixV1 {
   bundleTier?: BundleRow[];
   projectTier?: SpaceRow[];
   coverage?: CoverageEntry[];
+  crossScope?: CrossScopeRow[];
+  bundleZones?: BundleZoneRow[];
+  spaceNotes?: SpaceNote[];
+  reconciliation?: Reconciliation;
   tableData?: SpaceRow[];                     // legacy flat shape
   report?: string;
   session_id?: string;
 }
 ```
+
+## The gate the UI must respect
+
+`reconciliationBlockReason(matrix)` returns `""` when the comparison adds back
+up, and otherwise a sentence naming the vendor and the unaccounted lines. When
+it returns a reason the matrix disables both PDF buttons and shows it; if
+`downloadComparisonPdf` is called anyway it throws `PdfReconciliationError`.
+
+The rule is worth stating plainly: **a comparison that has lost a vendor's
+money must not become a document.** A blocked export is recoverable; a
+confident-looking PDF that silently omits Rs 29,146 is not.
+
+`bundleZoneSpaceIds(spaceNotes)` gives the space ids whose line rows must not be
+rendered, and `notesForSpace(spaceNotes, spaceId)` gives the caveats to print
+above a space group. Both the matrix and the PDF read the same two helpers, so
+the screen and the document cannot disagree.
 
 The index signature on the row types is unavoidable: vendor names are dynamic
 column keys, not a fixed schema. It is narrowed by always reading amounts through

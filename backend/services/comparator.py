@@ -38,14 +38,32 @@ from services.market_rate import (
     normalize_service_type,
 )
 from services.bundles import (
+    apply_bundle_zones,
     apply_bundles,
     bundle_comparison_rows,
+    bundle_zone_rows,
     bundled_families_by_vendor,
     bundled_space_ids,
 )
-from services.space_clusters import apply_space_clusters, containment_parent
+from services.cross_scope import cross_scope_candidates
+from services.lineage import (
+    LINE_ID_COLUMN,
+    ensure_line_ids,
+    reconcile_vendor_totals,
+    reconciliation_message,
+)
+from services.space_clusters import (
+    apply_space_clusters,
+    containment_parent,
+    is_unassigned,
+)
 from services.work_catalog import apply_work_catalog
-from services.comparison_summary import apply_description_covers, row_comparison_summary
+from services.comparison_summary import (
+    apply_cross_scope_notes,
+    apply_description_covers,
+    disambiguate_display_labels,
+    row_comparison_summary,
+)
 
 DEBUG_LOG_PATH = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "../../.cursor/debug-b7c34a.log")
@@ -159,7 +177,15 @@ def fetch_data(session_id):
     # Keep the original company name, then build the unique vendor key used everywhere.
     df['company'] = df['vendor_name']
     df['vendor_name'] = df['vendor_name'] + " (" + df['source_filename'] + ")"
-    
+
+    # The row's own primary key is the most durable lineage anchor this lane
+    # has: it survives re-ordering and re-runs.
+    id_column = 'id_item' if 'id_item' in df.columns else 'id'
+    if id_column in df.columns:
+        df[LINE_ID_COLUMN] = (
+            "qi:" + df[id_column].astype(str)
+        )
+
     return df
 
     return df
@@ -219,7 +245,15 @@ def _build_fallback_report(chart_data, bundle_tier=None):
 
 
 def _build_recommendation_prompt(
-    space_tier, bundle_tier, project_tier, coverage, vendors, chart_data
+    space_tier,
+    bundle_tier,
+    project_tier,
+    coverage,
+    vendors,
+    chart_data,
+    cross_scope=None,
+    bundle_zones=None,
+    space_notes=None,
 ):
     """Project the tiered matrix into a prompt that states what a zero means.
 
@@ -287,6 +321,35 @@ def _build_recommendation_prompt(
     not_comparable = sorted({
         entry["space"] for entry in coverage if not entry.get("comparable", True)
     })
+    possible_matches = [
+        {
+            "work": entry.get("label"),
+            "note": entry.get("note"),
+            "figures": {
+                vendor: {
+                    "space": info.get("space"),
+                    "amount": info.get("amount"),
+                }
+                for vendor, info in (entry.get("vendors") or {}).items()
+            },
+        }
+        for entry in (cross_scope or [])
+    ]
+    bundled_zones = [
+        {
+            "space": entry.get("space"),
+            "vendor": entry.get("vendor"),
+            "covers": entry.get("categories"),
+            "amount": entry.get("amount"),
+            "note": entry.get("note"),
+        }
+        for entry in (bundle_zones or [])
+    ]
+    unassigned = [
+        {"space": entry.get("space"), "note": entry.get("note")}
+        for entry in (space_notes or [])
+        if entry.get("match_tier") == "UNASSIGNED"
+    ]
 
     return f"""
         You are 'QuoteSense', an expert procurement analyst for TatvaOps.
@@ -320,6 +383,15 @@ def _build_recommendation_prompt(
           vendor, not a proven error.
         - SPACES NOT DIRECTLY COMPARABLE have a bundle overlapping them, so their
           room totals are not like-for-like.
+        - POSSIBLE MATCHES are related work each vendor put in a different
+          container (a washroom inside a closet vs a standalone bathroom). The
+          totals are deliberately NOT merged. Say they may correspond and must
+          be confirmed with the vendor. NEVER say either vendor omitted it.
+        - BUNDLED ZONES are one vendor's catch-all zone spanning several trades.
+          Compare it at zone level only. NEVER pair its generic lines against
+          the other vendor's per-room lines.
+        - UNASSIGNED SPACES are labels the vendor never pinned to a numbered
+          room. Do not attribute them to a specific room.
 
         BY SPACE:
         {by_space}
@@ -331,6 +403,16 @@ def _build_recommendation_prompt(
         {project}
 
         SPACES NOT DIRECTLY COMPARABLE: {not_comparable}
+
+        POSSIBLE MATCHES (confirm with vendor, never merged):
+        {possible_matches}
+
+        BUNDLED ZONES (zone-level comparison only):
+        {bundled_zones}
+
+        UNASSIGNED SPACES:
+        {unassigned}
+
         Overall Totals: {chart_data}
 
         Write the analysis as SHORT, POINT-WISE bullets — NOT a paragraph.
@@ -352,7 +434,8 @@ def _build_recommendation_prompt(
           if no takeaway is present. Never write this for a recap where both
           sides are itemised.
         - **Scope Difference:** other bundled-scope or not_quoted gaps, kept distinct
-          from the package-vs-itemised takeaway.
+          from the package-vs-itemised takeaway. If a POSSIBLE MATCH or BUNDLED
+          ZONE explains the gap, say so instead of calling it a missing scope.
         - **Watch Out:** any possible_double_count, or omit this bullet if there is none.
         - **Recommendation:** a clear, practical suggestion on which to pick or what to confirm with vendors.
         """
@@ -395,12 +478,23 @@ def _generate_recommendation(summary_prompt, chart_data, bundle_tier=None):
         ex.shutdown(wait=False)
 
 
+_EMPTY_MEASURE = {
+    "quantity": 0.0,
+    "rate": 0.0,
+    "pricing_method": "",
+    "pricing_method_id": "",
+    "description": "",
+    "line_ids": [],
+    "labels": [],
+}
+
+
 def _vendor_measures(line_slice, vendor: str) -> dict:
     if "vendor_name" not in line_slice.columns:
-        return {"quantity": 0.0, "rate": 0.0, "pricing_method": "", "description": ""}
+        return dict(_EMPTY_MEASURE)
     slice_ = line_slice[line_slice["vendor_name"] == vendor]
     if len(slice_) == 0:
-        return {"quantity": 0.0, "rate": 0.0, "pricing_method": "", "description": ""}
+        return dict(_EMPTY_MEASURE)
     qty = 0.0
     if "quantity" in slice_.columns:
         qty = float(pd.to_numeric(slice_["quantity"], errors="coerce").fillna(0).sum())
@@ -433,11 +527,37 @@ def _vendor_measures(line_slice, vendor: str) -> dict:
             seen.add(key)
             parts.append(text)
         desc = " · ".join(parts)[:280]
+    # Pricing method id, not just the label: the id is what decides whether a
+    # quantity sentence is meaningful at all (S5 pricing-method guard).
+    method_id = ""
+    if "pricing_method_id" in slice_.columns:
+        ids = [str(v).strip() for v in slice_["pricing_method_id"].tolist() if str(v).strip()]
+        if ids and len(set(ids)) == 1:
+            method_id = ids[0]
+    line_ids = []
+    if LINE_ID_COLUMN in slice_.columns:
+        line_ids = [str(v) for v in slice_[LINE_ID_COLUMN].tolist() if str(v)]
+    labels = []
+    for column in ("item_label", "item_name", "sub_service"):
+        if column not in slice_.columns:
+            continue
+        labels = [
+            text
+            for text in dict.fromkeys(
+                str(v).strip() for v in slice_[column].tolist()
+            )
+            if text
+        ]
+        if labels:
+            break
     return {
         "quantity": round(qty, 4),
         "rate": round(rate, 2),
         "pricing_method": method,
+        "pricing_method_id": method_id,
         "description": desc,
+        "line_ids": line_ids,
+        "labels": labels,
     }
 
 
@@ -550,6 +670,62 @@ def _build_space_rows(subset, vendors, bundled_families=None):
         row_dict["contained_in"] = parent_id
         measures = {vendor: _vendor_measures(line_slice, vendor) for vendor in vendors}
         row_dict["measures"] = measures
+
+        # Lineage. Every rupee in this row must be traceable to the vendor
+        # lines it came from, and `combined_from` says out loud when one
+        # display row merged several of one vendor's lines.
+        row_dict["line_ids"] = {
+            vendor: list(measures[vendor].get("line_ids") or []) for vendor in vendors
+        }
+        row_dict["source_line_ids"] = [
+            line_id
+            for vendor in vendors
+            for line_id in row_dict["line_ids"][vendor]
+        ]
+        combined_from: list[str] = []
+        combines: dict[str, list[str]] = {}
+        for vendor in vendors:
+            ids = row_dict["line_ids"][vendor]
+            if len(ids) < 2:
+                continue
+            combined_from.extend(ids)
+            # Name the merged lines only when they were called something other
+            # than the row's own heading — "combines: Profile lights, Strip
+            # lights" under a row headed "Lighting points".
+            named = [
+                text
+                for text in (measures[vendor].get("labels") or [])
+                if text.casefold() != str(label).casefold()
+            ]
+            if len(named) >= 2:
+                combines[vendor] = named[:4]
+        if combined_from:
+            row_dict["combined_from"] = combined_from
+        if combines:
+            row_dict["combines"] = combines
+
+        in_bundle_zone = bool(
+            "bundle_zone" in line_slice.columns
+            and line_slice["bundle_zone"].fillna(False).astype(bool).any()
+        )
+        row_dict["match_tier"] = "MATCH"
+        if is_unassigned(str(space_id)):
+            row_dict["match_tier"] = "UNASSIGNED"
+        elif in_bundle_zone:
+            row_dict["match_tier"] = "BUNDLE_NOT_DECOMPOSABLE"
+        space_note = _modal("space_note")
+        if space_note and space_note.casefold() not in ("nan", "none", "false"):
+            row_dict["space_note"] = space_note
+        qty_notes = sorted(
+            {
+                str(v).strip()
+                for v in line_slice.get("qty_scope_note", pd.Series(dtype=str)).tolist()
+                if str(v).strip() and str(v).strip().casefold() != "nan"
+            }
+        )
+        if qty_notes:
+            row_dict["qty_scope_note"] = qty_notes[0]
+
         cell_coverage = {}
         for vendor in vendors:
             amount = float(amounts[vendor]) if vendor in amounts.index else 0.0
@@ -671,6 +847,42 @@ def _build_coverage(df, vendors):
     return entries
 
 
+def _build_space_notes(rows, bundle_zones):
+    """One note per space that must not be read as a plain like-for-like row.
+
+    Two kinds: an `UNASSIGNED` space label the vendor never pinned to a room,
+    and a `BUNDLE_NOT_DECOMPOSABLE` catch-all zone. Both are rendering
+    instructions; neither moves or re-sums a rupee.
+    """
+    notes = []
+    seen: set[str] = set()
+    for row in rows:
+        space_id = str(row.get("space_id") or "")
+        if row.get("match_tier") != "UNASSIGNED" or space_id in seen:
+            continue
+        seen.add(space_id)
+        note = str(row.get("space_note") or "")
+        if not note:
+            continue
+        notes.append({
+            "match_tier": "UNASSIGNED",
+            "space_id": space_id,
+            "space": str(row.get("space") or space_id),
+            "note": note,
+            "suppress_line_matching": False,
+        })
+    for zone in bundle_zones:
+        notes.append({
+            "match_tier": "BUNDLE_NOT_DECOMPOSABLE",
+            "space_id": zone["space_id"],
+            "space": zone["space"],
+            "vendor": zone["vendor"],
+            "note": zone["note"],
+            "suppress_line_matching": True,
+        })
+    return notes
+
+
 def run_comparison(session_id, on_matrix_ready=None, df=None, fast_moving_avg=True):
     """Build the space-first comparison matrix, then generate the recommendation.
 
@@ -745,10 +957,12 @@ def run_comparison(session_id, on_matrix_ready=None, df=None, fast_moving_avg=Tr
 
         # Stage order is fixed and documented in backend/docs/plan/. Each stage
         # only adds fields, so a failure in one is isolated from the others.
+        df = ensure_line_ids(df)                # S1  — line_id lineage anchor
         df = _bind_catalog_ids_from_cache(df)   # S2a — Tatva ObjectIds
         df = apply_work_catalog(df)             # S2b — work_key
         df = apply_space_clusters(df)           # S3  — space_id
         df = apply_bundles(df)                  # S4  — scope
+        df = apply_bundle_zones(df)             # S4b — catch-all zones
 
         def _item_label(r):
             if not _is_blank(r['item_name']):
@@ -776,10 +990,26 @@ def run_comparison(session_id, on_matrix_ready=None, df=None, fast_moving_avg=Tr
             df[df['scope'] == 'project'], vendors, bundled_families
         )
         apply_description_covers(space_tier + project_tier, vendors)
+        disambiguate_display_labels(space_tier + project_tier, vendors)
         bundle_tier = bundle_comparison_rows(df, vendors)
         coverage = _build_coverage(df, vendors)
+        cross_scope = cross_scope_candidates(df, vendors)
+        bundle_zones = bundle_zone_rows(df, vendors)
+        space_notes = _build_space_notes(space_tier + project_tier, bundle_zones)
+        apply_cross_scope_notes(space_tier + project_tier, cross_scope, vendors)
 
         table_data = space_tier + project_tier
+
+        # The gate. A non-zero delta means a vendor line never reached a row,
+        # so the artefact would quietly understate that quote — never ship it.
+        reconciliation = reconcile_vendor_totals(
+            df, vendors, space_tier, project_tier, bundle_tier
+        )
+        if not reconciliation["ok"]:
+            print(
+                "⛔ Reconciliation gate failed — PDF export is blocked. "
+                + reconciliation_message(reconciliation)
+            )
 
         print(
             f"📊 Built matrix: {len(space_tier)} space rows, {len(bundle_tier)} bundle rows, "
@@ -795,6 +1025,10 @@ def run_comparison(session_id, on_matrix_ready=None, df=None, fast_moving_avg=Tr
             "bundleTier": bundle_tier,
             "projectTier": project_tier,
             "coverage": coverage,
+            "crossScope": cross_scope,
+            "bundleZones": bundle_zones,
+            "spaceNotes": space_notes,
+            "reconciliation": reconciliation,
             "tableData": table_data,
             "vendors": vendors,
             "vendorMeta": vendor_meta,
@@ -810,7 +1044,15 @@ def run_comparison(session_id, on_matrix_ready=None, df=None, fast_moving_avg=Tr
         print("🧠 Generating Expert Recommendation with Tatva Intelligence...")
 
         summary_prompt = _build_recommendation_prompt(
-            space_tier, bundle_tier, project_tier, coverage, vendors, chart_data
+            space_tier,
+            bundle_tier,
+            project_tier,
+            coverage,
+            vendors,
+            chart_data,
+            cross_scope=cross_scope,
+            bundle_zones=bundle_zones,
+            space_notes=space_notes,
         )
         ai_report = _generate_recommendation(summary_prompt, chart_data, bundle_tier)
 
@@ -942,6 +1184,7 @@ def mongodb_quotes_to_dataframe(quotes_list: list):
         register_from_work_item = None
 
     rows = []
+    line_counters: dict[str, int] = {}
     for quote_entry in quotes_list:
         quote_data = _unwrap_quote_payload(quote_entry)
         vendor_detail = quote_data.get("vendorDetail") or {}
@@ -988,7 +1231,16 @@ def mongodb_quotes_to_dataframe(quotes_list: list):
                     pm_ref = work_item.get("pricingMethod") or {}
                     pricing_method = _nested_name(pm_ref, "Unit")
                     qty, rate = _qty_rate_from_pricing(pricing_list)
+                    work_oid = _nested_oid(work_item)
+                    line_counters[vendor_key] = line_counters.get(vendor_key, 0) + 1
                     rows.append({
+                        # Lineage anchor. Tatva's own workItem _id when the
+                        # payload has one, else a positional id per quote.
+                        "line_id": (
+                            f"{source_filename}:{work_oid}"
+                            if work_oid
+                            else f"{source_filename}:L{line_counters[vendor_key]:03d}"
+                        ),
                         "vendor_name": vendor_key,
                         "company": company,
                         "source_filename": source_filename,
@@ -1015,7 +1267,7 @@ def mongodb_quotes_to_dataframe(quotes_list: list):
 
     if not rows:
         raise ValueError("No line items found in quote payloads.")
-    df = pd.DataFrame(rows)
+    df = ensure_line_ids(pd.DataFrame(rows))
     return _bind_catalog_ids_from_cache(df)
     
 def handle_chat_query(session_id, user_message):

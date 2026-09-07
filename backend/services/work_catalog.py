@@ -133,6 +133,11 @@ WORK_ALIASES = {
     "spot lights": "lighting_points",
     "decorative lights": "lighting_points",
     "profile lights": "lighting_points",
+    # One vendor writes the catalog title itself. Without this alias it reached
+    # rung 6 as `norm:lighting_point` and never met another vendor's
+    # `alias:lighting_points`, so one lighting row printed twice as N/A.
+    "lighting points": "lighting_points",
+    "lighting point": "lighting_points",
     "electrical point creations": "electrical_points",
     "electrical point": "electrical_points",
     "adaptors": "adaptors",
@@ -485,14 +490,30 @@ def _llm_enabled() -> bool:
     return bool(api_key) and not api_key.lower().startswith("your_")
 
 
+# The clubbing model must say which tier it is proposing, not just "these two
+# go together". Only MATCH clubs anything; the other tiers are abstentions that
+# a later stage renders as a flagged question.
+MATCH_TIERS = (
+    "MATCH",
+    "POSSIBLE_CROSS_SCOPE_MATCH",
+    "BUNDLE_NOT_DECOMPOSABLE",
+    "UNASSIGNED",
+)
+
+# Below this a MATCH is treated as an abstention. The deterministic key stands.
+WORK_MERGE_MIN_CONFIDENCE = 0.6
+
+
 def _try_gemini_merge(
     leftovers: dict[str, list[str]]
 ) -> dict[str, str]:
     """Group unresolved labels into equivalence classes.
 
     `leftovers` maps a vendor label to sample descriptions. Returns a mapping of
-    label -> shared slug for labels the model considers the same work. Any
-    failure returns {} so the deterministic result stands.
+    label -> shared slug for labels the model returned as a confident `MATCH`.
+    Any other tier, a low confidence, or any failure leaves the deterministic
+    key in place — abstaining is always the safe direction here, because a
+    wrong club silently sums two different works.
     """
     if len(leftovers) < 2 or not _llm_enabled():
         return {}
@@ -527,9 +548,22 @@ def _try_gemini_merge(
         "NEVER group a base unit with a wall unit, or a wardrobe with a bed. "
         "Different materials or different furniture are different work.\n"
         "Grouping a lighting item with a hardware item is always wrong.\n"
-        "Only return groups with two or more members; skip singletons.\n\n"
+        "Only return groups with two or more members; skip singletons.\n"
+        "Every group MUST carry a match_tier:\n"
+        "  MATCH — same work, different wording. Only this tier is clubbed.\n"
+        "  POSSIBLE_CROSS_SCOPE_MATCH — related work that sits in structurally "
+        "different containers (embedded in a room vs its own space, bundled vs "
+        "itemised). Do NOT club these; they are flagged for the vendor.\n"
+        "  BUNDLE_NOT_DECOMPOSABLE — one label is a catch-all covering several "
+        "trades and cannot be matched line by line.\n"
+        "  UNASSIGNED — you cannot tell which room or instance it belongs to.\n"
+        "Also return confidence (0.0-1.0) and a one-line rationale. If you are "
+        "below 0.6 confident, say so — an abstention is better than a wrong "
+        "club.\n\n"
         f"Labels:\n{json.dumps(payload, ensure_ascii=False)}\n\n"
-        'Return JSON: {"groups": [{"canonical": "short name", "members": ["...", "..."]}]}'
+        'Return JSON: {"groups": [{"canonical": "short name", '
+        '"match_tier": "MATCH", "confidence": 0.0, "rationale": "one line", '
+        '"members": ["...", "..."]}]}'
     )
 
     try:
@@ -568,6 +602,20 @@ def _try_gemini_merge(
             # A single-member group cannot merge anything; ignore it rather than
             # letting the model relabel a lone item.
             if len(members) < 2:
+                continue
+            tier = str(group.get("match_tier") or "MATCH").strip().upper()
+            if tier not in MATCH_TIERS:
+                tier = "MATCH"
+            try:
+                confidence = float(group.get("confidence", 1.0))
+            except (TypeError, ValueError):
+                confidence = 1.0
+            if tier != "MATCH" or confidence < WORK_MERGE_MIN_CONFIDENCE:
+                print(
+                    f"ℹ️ Work club abstained ({tier}, {confidence:.2f}): "
+                    f"{', '.join(members[:3])} — "
+                    f"{str(group.get('rationale') or 'no rationale')}"
+                )
                 continue
             canonical = str(group.get("canonical") or members[0]).strip()
             slug = _slugify(normalize_work_label(canonical) or canonical)

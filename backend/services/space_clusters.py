@@ -50,6 +50,12 @@ Kind = Literal["space", "not_a_space", "project_level"]
 PROJECT_LEVEL_ID = "project_level"
 PROJECT_LEVEL_LABEL = "Project-level"
 
+# A vendor label that names a room *kind* the quote numbers more than once
+# ("Ground floor bedroom" when the quote has Bedroom 1 and Bedroom 2) is
+# genuinely ambiguous. It gets its own bucket and a confirm-with-vendor note
+# instead of being guessed into one of the numbered rooms.
+UNASSIGNED_PREFIX = "unassigned:"
+
 # Labels that are project-wide services rather than rooms. Kept small: the
 # is-this-a-room predicate below generalises, so this only holds things that are
 # neither a room nor a catalogued work item.
@@ -102,6 +108,9 @@ _CLUSTER_LABELS = {
     "kids_bathroom": "Kids Bathroom",
     "mbr_bathroom": "Master Bathroom",
     "kids_bedroom": "Kids Bedroom",
+    "bedroom": "Bedroom",
+    "gf_bedroom": "GF Bedroom",
+    "1f_bedroom": "1F Bedroom",
     "bedroom1": "Bedroom 1",
     "bedroom2": "Bedroom 2",
     "gf_bedroom1": "GF Bedroom 1",
@@ -316,10 +325,20 @@ def _room_token(text: str) -> str | None:
 
     if "bedroom" in n or re.search(r"\bbr\b", n):
         # "second" is a floor word, not bedroom 2 — "Bedroom 2" / "BR 2" still
-        # match the digit.
-        num = "2" if re.search(r"\b(2|two)\b", n) else "1"
+        # match the digit. A bedroom the vendor did NOT number stays
+        # unnumbered here: guessing 1 is what put a shared ₹59,000 of civil
+        # work into Bedroom 1 and left Bedroom 2 empty. `_resolve_unnumbered`
+        # decides later, when the whole quote's numbering is known.
         prefix = _floor_prefix(n)
-        return f"{prefix}bedroom{num}"
+        for pattern, num in (
+            (r"\b(1|one|i)\b", "1"),
+            (r"\b(2|two|ii)\b", "2"),
+            (r"\b(3|three|iii)\b", "3"),
+            (r"\b(4|four|iv)\b", "4"),
+        ):
+            if re.search(pattern, n):
+                return f"{prefix}bedroom{num}"
+        return f"{prefix}bedroom"
 
     for pattern, token in _ROOM_ABBREVIATIONS:
         if re.search(pattern, n):
@@ -493,7 +512,93 @@ def _is_anchor(space_id: str) -> bool:
 
 
 _FLOOR_PREFIXES = ("gf_", "1f_", "2f_", "3f_", "4f_")
-_BEDROOMISH = ("bedroom1", "bedroom2", "kids_bedroom", "mbr")
+_BEDROOMISH = ("bedroom1", "bedroom2", "bedroom", "kids_bedroom", "mbr")
+
+# Room kinds a quote can number more than once. An unnumbered label for one of
+# these is only assignable when the numbering is unambiguous.
+_NUMBERABLE_KINDS = ("bedroom",)
+_MAX_ROOM_INSTANCES = 6
+
+
+def _numbered_siblings(base: str, prefix: str, present: set[str]) -> list[str]:
+    return [
+        f"{prefix}{base}{index}"
+        for index in range(1, _MAX_ROOM_INSTANCES + 1)
+        if f"{prefix}{base}{index}" in present
+    ]
+
+
+def unnumbered_remap(space_ids: list[str]) -> dict[str, str]:
+    """Unnumbered room id -> numbered sibling, or `""` when ambiguous.
+
+    `""` is not "no opinion": it means the vendor's label cannot be attached to
+    any one numbered room deterministically, so the caller must route it to an
+    `UNASSIGNED` bucket rather than pick. Fuzzy nearest-name matching is
+    exactly what produced the misattribution this guard replaces.
+    """
+    present = {str(sid) for sid in space_ids}
+    out: dict[str, str] = {}
+    for base in _NUMBERABLE_KINDS:
+        for prefix in ("",) + _FLOOR_PREFIXES:
+            unnumbered = f"{prefix}{base}"
+            if unnumbered not in present:
+                continue
+            siblings = _numbered_siblings(base, prefix, present)
+            if len(siblings) == 1:
+                # One numbered room of this kind on this floor: the vendor's
+                # unnumbered label can only mean that one.
+                out[unnumbered] = siblings[0]
+            elif len(siblings) >= 2:
+                out[unnumbered] = ""
+    return out
+
+
+def unassigned_id(space_raw: str) -> str:
+    return f"{UNASSIGNED_PREFIX}{_core(space_raw) or 'space'}"
+
+
+def is_unassigned(space_id: str) -> bool:
+    return str(space_id or "").startswith(UNASSIGNED_PREFIX)
+
+
+def unassigned_note(space_label: str, space_id: str = "") -> str:
+    """Confirm-with-vendor note for an ambiguous space label."""
+    kind = "room"
+    hay = f"{space_label} {space_id}".casefold()
+    if "bedroom" in hay or re.search(r"\bbr\b", hay):
+        kind = "bedroom"
+    elif _BATHROOM_RE.search(hay):
+        kind = "bathroom"
+    return (
+        f"Vendor did not specify which {kind} — confirm before allocating."
+    )
+
+
+_WHOLE_UNIT_METHOD_RE = re.compile(r"per unit|each|unit|number|nos|fixed", re.I)
+
+
+def multi_instance_quantity_note(
+    quantity: float,
+    pricing_method: str,
+    instance_count: int,
+) -> str:
+    """Note when a per-room line's quantity looks like it spans several rooms.
+
+    A flag, never a block: "Concrete chhajja removal, qty 4 considered" in a
+    quote with two numbered bedrooms is a question for the vendor, not a
+    provable multi-room scope.
+    """
+    try:
+        qty = float(quantity or 0)
+    except (TypeError, ValueError):
+        return ""
+    if qty < 2 or abs(qty - round(qty)) > 1e-6:
+        return ""
+    if not _WHOLE_UNIT_METHOD_RE.search(str(pricing_method or "")):
+        return ""
+    if instance_count <= 0 or qty <= instance_count:
+        return ""
+    return "quantity suggests multi-room scope — confirm with vendor"
 _BATHROOM_SPECIFIC = (
     "common_washroom",
     "mbr_bathroom",
@@ -672,6 +777,23 @@ def cluster_spaces_heuristic(space_raws: list[str]) -> dict[str, dict[str, Any]]
             merged.setdefault(remap.get(cluster_id, cluster_id), []).extend(members)
         buckets = merged
 
+    ambiguous = unnumbered_remap(list(buckets.keys()))
+    if ambiguous:
+        resolved: dict[str, list[str]] = {}
+        for cluster_id, members in buckets.items():
+            if cluster_id not in ambiguous:
+                resolved.setdefault(cluster_id, []).extend(members)
+                continue
+            target = ambiguous[cluster_id]
+            if target:
+                resolved.setdefault(target, []).extend(members)
+                continue
+            # Ambiguous: one bucket per vendor wording, so the row can be
+            # rendered with the label the vendor actually wrote.
+            for member in members:
+                resolved.setdefault(unassigned_id(member), []).append(member)
+        buckets = resolved
+
     for cluster_id, members in buckets.items():
         unique_members = list(dict.fromkeys(members))
         kind: Kind = "not_a_space" if cluster_id == PROJECT_LEVEL_ID else "space"
@@ -755,6 +877,13 @@ def _try_gemini_overlay(
         "Kids Bedroom vs Bedroom 2 is a proposal only — if you cannot tell they "
         "are the same room, leave them apart.\n"
         "NEVER merge Kitchen with Bedroom, or Common Washroom with Walk-in closet.\n"
+        "NUMBERED ROOMS: never attach an unnumbered label ('Ground floor "
+        "bedroom') to a numbered room ('Bedroom 1') unless the vendor's own "
+        "numbering says so. If you cannot tell which one it is, return that "
+        'label as its own cluster with kind="unassigned" — it will be shown '
+        "with a confirm-with-vendor note rather than guessed into a room.\n"
+        "CATCH-ALL ZONES: a zone named Common / General / Others that holds "
+        "several trades at once is not a room. Leave it as its own cluster.\n"
         "Use the item names and notes to place a label that is an ITEM rather than a "
         "room: a label whose notes mention MBR belongs to the master bedroom.\n"
         "If a label is an item with no room anywhere in its context (Transportation, "
@@ -806,8 +935,24 @@ def _try_gemini_overlay(
             if not members:
                 continue
             kind = cluster.get("kind") or "space"
-            if kind not in ("space", "not_a_space", "project_level"):
+            if kind not in ("space", "not_a_space", "project_level", "unassigned"):
                 kind = "space"
+
+            if kind == "unassigned":
+                # The model abstained. Give each label its own bucket keyed on
+                # the vendor's exact wording so nothing is guessed into a room.
+                for member in members:
+                    if _is_anchor(str(contexts[member].get("group") or "")):
+                        continue
+                    overlay[member] = {
+                        "cluster_id": unassigned_id(member),
+                        "canonical": _title_space(member),
+                        "aliases": [member],
+                        "members": [member],
+                        "kind": "space",
+                        "source": "llm",
+                    }
+                continue
 
             if kind != "space":
                 for member in members:
@@ -908,7 +1053,61 @@ def apply_space_clusters(df, *, raw_col: str = "space_raw", out_col: str = "spac
     _run_space_overlay(df, raw_col=raw_col, out_col=out_col)
     _finalize_space_labels(df, raw_col=raw_col, out_col=out_col)
     _apply_containment(df)
+    _apply_ambiguity_notes(df, out_col=out_col)
     return df
+
+
+def _numbered_instance_counts(space_ids: list[str]) -> dict[str, int]:
+    """Room kind -> how many numbered instances the comparison confirmed.
+
+    Counted across both quotes: the rooms belong to the project, so "two
+    bedrooms" is a fact about the home, not about one vendor's wording.
+    """
+    counts: dict[str, set[str]] = {}
+    for raw in space_ids:
+        sid = str(raw or "")
+        for base in _NUMBERABLE_KINDS:
+            match = re.match(rf"^(?:{'|'.join(_FLOOR_PREFIXES)})?{base}(\d)$", sid)
+            if match:
+                counts.setdefault(base, set()).add(sid)
+    return {base: len(ids) for base, ids in counts.items()}
+
+
+def _apply_ambiguity_notes(df, *, out_col: str) -> None:
+    """Add `space_ambiguous`, `space_note`, and `qty_scope_note` columns.
+
+    Both are notes, not allocations. Neither moves a rupee.
+    """
+    space_ids = [str(v) for v in df["space_id"].tolist()]
+    instances = _numbered_instance_counts(space_ids)
+
+    ambiguous_flags: list[bool] = []
+    space_notes: list[str] = []
+    qty_notes: list[str] = []
+    for index, (_, row) in enumerate(df.iterrows()):
+        sid = space_ids[index]
+        unassigned = is_unassigned(sid)
+        ambiguous_flags.append(unassigned)
+        space_notes.append(
+            unassigned_note(str(row.get(out_col) or ""), sid) if unassigned else ""
+        )
+        kind = next(
+            (base for base in _NUMBERABLE_KINDS if base in sid.casefold()),
+            "",
+        )
+        qty_notes.append(
+            multi_instance_quantity_note(
+                row.get("quantity"),
+                str(row.get("pricing_method") or ""),
+                instances.get(kind, 0),
+            )
+            if kind
+            else ""
+        )
+
+    df["space_ambiguous"] = ambiguous_flags
+    df["space_note"] = space_notes
+    df["qty_scope_note"] = qty_notes
 
 
 def _run_space_overlay(df, *, raw_col: str, out_col: str) -> None:
@@ -1007,6 +1206,20 @@ def _finalize_space_labels(df, *, raw_col: str, out_col: str) -> None:
     remap = _merge_floor_variants([str(v) for v in df["space_id"].tolist()])
     if remap:
         df["space_id"] = [remap.get(str(v), str(v)) for v in df["space_id"].tolist()]
+
+    ambiguous = unnumbered_remap([str(v) for v in df["space_id"].tolist()])
+    if ambiguous:
+        resolved_ids: list[str] = []
+        for space_id, label in zip(
+            df["space_id"].tolist(), df[raw_col].fillna("").tolist()
+        ):
+            sid = str(space_id)
+            if sid not in ambiguous:
+                resolved_ids.append(sid)
+                continue
+            target = ambiguous[sid]
+            resolved_ids.append(target or unassigned_id(str(label)))
+        df["space_id"] = resolved_ids
 
     members: dict[str, list[str]] = {}
     for space_id, label in zip(df["space_id"].tolist(), df[raw_col].fillna("").tolist()):

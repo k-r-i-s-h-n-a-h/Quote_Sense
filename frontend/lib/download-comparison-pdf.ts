@@ -12,11 +12,14 @@ import {
 import {
   amountOf,
   bundlePriceNote,
+  bundleZoneSpaceIds,
+  notesForSpace,
   parseCellStatus,
   partitionBundleRows,
   projectRowsForDisplay,
   recapPlacementNote,
   recapPlacementNotes,
+  reconciliationBlockReason,
   vendorsShareCompany,
   withInferredPlacement,
   gstCompareBanner,
@@ -26,6 +29,9 @@ import {
   spaceHeaderSummary,
   type BundleRow,
   type CoverageEntry,
+  type CrossScopeRow,
+  type Reconciliation,
+  type SpaceNote,
   type SpaceRow,
 } from "./compare-types";
 import { formatInrFull, type VendorLabel, type VendorMeta } from "./format";
@@ -38,7 +44,23 @@ export type PdfTiers = {
   bundleTier?: BundleRow[];
   projectTier?: SpaceRow[];
   coverage?: CoverageEntry[];
+  crossScope?: CrossScopeRow[];
+  spaceNotes?: SpaceNote[];
+  reconciliation?: Reconciliation;
 };
+
+/**
+ * Thrown instead of writing a file when the reconciliation gate is red.
+ *
+ * A comparison whose rows do not add up to the quotes must never reach a
+ * client: the missing lines make one vendor look cheaper than it quoted.
+ */
+export class PdfReconciliationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PdfReconciliationError";
+  }
+}
 
 export type PdfDetailLevel = "spaces" | "full";
 
@@ -378,6 +400,11 @@ export async function downloadComparisonPdf(
   tiers: PdfTiers = {},
   options: PdfExportOptions = {}
 ): Promise<void> {
+  // The gate runs before anything is drawn: a blocked export must produce no
+  // file at all, not a file with a warning on it.
+  const blocked = reconciliationBlockReason(tiers);
+  if (blocked) throw new PdfReconciliationError(blocked);
+
   const layout = pdfLayout(vendors.length);
   const detail: PdfDetailLevel = options.detail === "spaces" ? "spaces" : "full";
   const spacesOnly = detail === "spaces";
@@ -418,6 +445,9 @@ export async function downloadComparisonPdf(
 
   const bundleTier = tiers.bundleTier ?? [];
   const projectTier = tiers.projectTier ?? [];
+  const spaceNotes = tiers.spaceNotes ?? [];
+  const crossScope = tiers.crossScope ?? [];
+  const zoneSpaceIds = bundleZoneSpaceIds(spaceNotes);
   const projectForDisplay = projectRowsForDisplay(projectTier, bundleTier);
   const coverIdx = coverageIndex(tiers.coverage ?? []);
   const spaceRows = projectTier.length
@@ -535,7 +565,16 @@ export async function downloadComparisonPdf(
         },
       ]);
 
-      if (!spacesOnly) {
+      for (const note of notesForSpace(spaceNotes, spaceGroup.spaceId)) {
+        body.push(
+          noteRow(note.note, colSpan, font, layout, SKY_FILL, SKY_NOTE)
+        );
+      }
+
+      // A catch-all zone is compared at space level only. Printing its generic
+      // lines against the other vendor's per-room detail invents pairings.
+      const zoneOnly = zoneSpaceIds.has(spaceGroup.spaceId);
+      if (!spacesOnly && !zoneOnly) {
         for (const sub of spaceGroup.subs) {
           const merged = mergeWorkRow(sub.rows, vendors);
           const first = sub.rows[0] ?? ({} as SpaceRow);
@@ -565,6 +604,58 @@ export async function downloadComparisonPdf(
             },
           ]);
         }
+      }
+    }
+  }
+
+  if (crossScope.length > 0) {
+    body.push(
+      sectionCell(
+        "POSSIBLE MATCH — CONFIRM WITH VENDOR",
+        "Related work each vendor placed in a different part of its quote. Shown side by side; the totals are NOT added together and neither vendor is missing this work.",
+        colSpan,
+        font,
+        layout,
+        SKY_FILL,
+        SKY_TEXT
+      )
+    );
+    for (const entry of crossScope) {
+      body.push([
+        {
+          content: entry.label || entry.group || "Possible match",
+          styles: {
+            font,
+            fontSize: layout.body,
+            fontStyle: "bold",
+            cellPadding: { top: pad + 0.4, bottom: pad, left: 8, right: pad },
+            textColor: INK,
+          },
+        },
+        ...vendors.map((vendor) => {
+          const info = entry.vendors?.[vendor];
+          const value = Number(info?.amount) || 0;
+          if (!info || value <= 0) return centeredCell("not in this quote");
+          return centeredCell(
+            [formatPdfAmount(value, unicode), info.space || ""]
+              .filter(Boolean)
+              .join("\n")
+          );
+        }),
+        {
+          content: entry.rationale || "",
+          styles: {
+            font,
+            fontSize: layout.note,
+            halign: "left",
+            textColor: MUTED,
+          },
+        },
+      ]);
+      if (entry.note) {
+        body.push(
+          noteRow(entry.note, colSpan, font, layout, SKY_FILL, SKY_NOTE)
+        );
       }
     }
   }
@@ -796,6 +887,7 @@ export async function downloadComparisonPdf(
         '"N/A" = that vendor did not quote this work.  "incl. in …" = price is already inside that vendor\'s package or parent space.',
         "Comparison summary explains a quantity or rate gap; it does not change the rupees.",
         "Lump sum packages are separate from space totals. Same work, different spaces is comparison only.",
+        "\"Possible match\" pairs are shown for confirmation only — they are never added together. A bundled zone is compared at zone level, not line by line.",
         '"Entered excl. GST" / "Entered incl. GST" is how the vendor typed the quote. Figures shown include GST so columns can be compared.',
       ].join("\n"),
       colSpan,

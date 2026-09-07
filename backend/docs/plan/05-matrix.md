@@ -74,6 +74,56 @@ intent and a family token matches (`tiling`, `furniture`), the gap row gets
 `did not quote this line`. Coverage stays `not_quoted` and the cell stays
 `N/A`. Amounts do not move.
 
+## Lineage: every row traces back to source lines
+
+Each row carries `source_line_ids` (all contributing `line_id`s) and `line_ids`
+(the same, per vendor). `combined_from` and `combines` are set only when one row
+merged several lines from the *same* vendor.
+
+This exists because a line went missing and nobody could tell. `Soft closing
+hinges` (Rs 29,146) never reached the comparison, and two other lines were
+merged and relabelled `Lighting points`, so the printed row traced back to
+nothing a reader could check. Lineage makes both conditions detectable rather
+than a matter of noticing.
+
+Two consequences for the summary sentence, both in `comparison_summary.py`:
+
+- a merged row must say so — `combines: Profile lights, Strip lights` — because
+  a silent relabel is indistinguishable from a wrong match;
+- `disambiguate_display_labels` appends a disambiguator when two different
+  source lines in the **same quote** would print under one label (`Lighting
+  points (Living Room)` vs `Lighting points (Ground Floor Bedroom 1)`). It fires
+  only on a collision within one space, or on a merged row; two vendors sharing
+  a label on the same row is the whole point of the matrix and is left alone.
+
+## The reconciliation gate
+
+`services/lineage.reconcile_vendor_totals` sums each vendor's rows across all
+three tiers and diffs against that vendor's own quoted lines, excluding GST,
+discount and TatvaOps service-charge lines (`OUT_OF_SCOPE_PATTERN`). Anything
+over `RECONCILE_TOLERANCE_INR` sets `reconciliation.ok = false` and lists the
+unaccounted `line_id`s with their labels and amounts.
+
+A red gate **blocks the client PDF** — in the UI the export button is disabled
+with the reason, and `downloadComparisonPdf` refuses with
+`PdfReconciliationError`. A comparison that has lost a vendor's money is worse
+than no comparison, because the number it shows looks complete.
+
+Lines with a zero amount cannot hide money, so they are reported but do not
+block. `scripts/check_reconciliation.py` runs the same gate in CI.
+
+## Pricing methods gate quantity language
+
+`Rolling shutter` read `EXCESS: 1 units; INT360: 8 units` — one priced per unit,
+the other by area. The sentence implied INT360 quoted eight shutters.
+
+So before any clause that compares quantities, `pricing_methods_differ` checks
+`pricing_method_id` on both sides (falling back to the method name when a quote
+has no id). When they differ, `pricing_method_clause` replaces the quantity
+language: it names both methods, says the item is not comparable by quantity,
+and gives the two rates. Quantity-diff wording is only used when both sides
+share a pricing method.
+
 ## Ordering
 
 Preserved from the original implementation: rows keep first-appearance order via

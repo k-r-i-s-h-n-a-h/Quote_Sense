@@ -155,6 +155,7 @@ See also: [`COMPARISON_DATA_LIFECYCLE.md`](./COMPARISON_DATA_LIFECYCLE.md).
 ```
 Login
  → /  (ProjectDashboard — list from Tatva via BFF)
+ → PM Compare Quotes on a project must open /project/{publicCode} (not the list)
  → /project/{publicCode}  (ProjectHub — select 2 same-tier quotes)
  → /compare?projectId=…&quotes=id1,id2
  → resolveQuotesForCompare (cache / BFF)

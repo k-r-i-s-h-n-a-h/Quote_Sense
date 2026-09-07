@@ -19,7 +19,7 @@ function cleanReturnTo(raw: string): string {
   const path = queryStart < 0 ? raw : raw.slice(0, queryStart) || "/";
 
   if (path.startsWith("/project/")) {
-    return "/";
+    return path;
   }
 
   if (queryStart >= 0) {

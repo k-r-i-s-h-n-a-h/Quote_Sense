@@ -190,7 +190,9 @@ function mergeProfileWithJwt(profile: TatvaUser, token: string): TatvaUser {
 }
 
 function buildSsoRedirectUrl(params: URLSearchParams): string {
-  return buildPmRedirectPath(params);
+  const pathname =
+    typeof window !== "undefined" ? window.location.pathname : "";
+  return buildPmRedirectPath(params, pathname);
 }
 
 /** Collect SSO params from the current URL or nested inside login returnTo. */
@@ -277,16 +279,15 @@ async function bootstrapFromRedirectParams(): Promise<BootstrapResult | null> {
 function applyBootstrapRedirect(redirectTo: string) {
   if (typeof window === "undefined") return;
 
-  const path = window.location.pathname;
-
-  if (path === "/login" || path.startsWith("/project/")) {
-    window.location.replace(redirectTo);
+  const destPath = redirectTo.split("?")[0] || "/";
+  if (
+    window.location.pathname === destPath &&
+    !window.location.search
+  ) {
     return;
   }
 
-  if (`${path}${window.location.search}` !== redirectTo) {
-    window.history.replaceState({}, "", redirectTo);
-  }
+  window.location.replace(redirectTo);
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {

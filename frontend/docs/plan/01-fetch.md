@@ -14,6 +14,14 @@ Get a `MatrixV1` payload to the compare page.
 
 ---
 
+## PM Compare entry
+
+`buildPmRedirectPath` / `extractPmProjectRef` (`lib/project-resolve.ts`) read
+`projectId`, `project_id`, `project`, `projectCode`, a mongo/`0F42C9`-style
+`id`, or `/project/:code`. After SSO that path is the project hub. `session_id`
+still opens `/compare`. The home page forwards the same project query. Login
+`returnTo` must keep `/project/…`.
+
 ## Lanes
 
 | Lane | Trigger | Path |

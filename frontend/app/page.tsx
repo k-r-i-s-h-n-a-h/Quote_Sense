@@ -4,6 +4,7 @@ import React, { Suspense, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth";
+import { extractPmProjectRef } from "@/lib/project-resolve";
 
 const ProjectDashboard = dynamic(
   () => import("@/components/dashboard/ProjectDashboard"),
@@ -39,6 +40,13 @@ function HomeContent() {
     const sessionId = searchParams?.get("session_id");
     if (sessionId) {
       router.replace(`/compare?session_id=${encodeURIComponent(sessionId)}`);
+      return;
+    }
+    const projectRef = extractPmProjectRef(
+      new URLSearchParams(searchParams?.toString() ?? "")
+    );
+    if (projectRef) {
+      router.replace(`/project/${encodeURIComponent(projectRef)}`);
     }
   }, [searchParams, router]);
 
@@ -51,7 +59,10 @@ function HomeContent() {
   }
 
   const sessionId = searchParams?.get("session_id");
-  if (sessionId) {
+  const inboundProject = extractPmProjectRef(
+    new URLSearchParams(searchParams?.toString() ?? "")
+  );
+  if (sessionId || inboundProject) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="w-8 h-8 border-2 border-slate-200 border-t-[#c04a00] rounded-full animate-spin" />

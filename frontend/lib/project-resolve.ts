@@ -109,12 +109,55 @@ export async function resolveProjectRef(
   return null;
 }
 
-/** Build PM SSO redirect target — projects list, or compare when session_id is present. */
-export function buildPmRedirectPath(params: URLSearchParams): string {
+const SHORT_PROJECT_CODE_RE = /^[0-9A-Fa-f]{5,8}$/;
+
+/** Project ref on a PM Compare redirect (query or `/project/:code`). */
+export function extractPmProjectRef(
+  params: URLSearchParams,
+  pathname = ""
+): string {
+  for (const key of [
+    "projectId",
+    "project_id",
+    "project",
+    "projectCode",
+    "project_code",
+  ] as const) {
+    const value = (params.get(key) || "").trim();
+    if (value) return value;
+  }
+
+  const id = (params.get("id") || "").trim();
+  if (id && (isMongoObjectId(id) || SHORT_PROJECT_CODE_RE.test(id))) {
+    return id;
+  }
+
+  const pathMatch = pathname.match(/^\/project\/([^/?#]+)/);
+  if (pathMatch?.[1]) {
+    try {
+      return decodeURIComponent(pathMatch[1]).trim();
+    } catch {
+      return pathMatch[1].trim();
+    }
+  }
+
+  return "";
+}
+
+/** Build PM SSO redirect — that project hub, a compare session, or the list. */
+export function buildPmRedirectPath(
+  params: URLSearchParams,
+  pathname = ""
+): string {
   const sessionId = params.get("session_id");
 
   if (sessionId) {
     return `/compare?session_id=${encodeURIComponent(sessionId)}`;
+  }
+
+  const projectRef = extractPmProjectRef(params, pathname);
+  if (projectRef) {
+    return `/project/${encodeURIComponent(projectRef)}`;
   }
 
   return "/";

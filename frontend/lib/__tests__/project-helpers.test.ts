@@ -21,6 +21,7 @@ import {
 } from "../project-types";
 import type { TatvaUser } from "../tatva-api";
 import { isAccessTokenExpired } from "../auth";
+import { buildPmRedirectPath, extractPmProjectRef } from "../project-resolve";
 import {
   getUserDisplayName,
   getUserInitial,
@@ -62,6 +63,39 @@ describe("cached auth token", () => {
   it("keeps a live JWT and lets the profile endpoint validate opaque tokens", () => {
     expect(isAccessTokenExpired(jwtWithExpiry(101), 100)).toBe(false);
     expect(isAccessTokenExpired("opaque-token", 100)).toBe(false);
+  });
+});
+
+describe("PM compare redirect", () => {
+  it("opens the project hub from PM query ids", () => {
+    const params = new URLSearchParams(
+      "jwt_auth=tok&user_id=u1&id=6a830faf66a7ab459734f911"
+    );
+    expect(extractPmProjectRef(params)).toBe("6a830faf66a7ab459734f911");
+    expect(buildPmRedirectPath(params)).toBe(
+      "/project/6a830faf66a7ab459734f911"
+    );
+  });
+
+  it("opens the project hub from a public code", () => {
+    const params = new URLSearchParams("projectId=0F42C9");
+    expect(buildPmRedirectPath(params)).toBe("/project/0F42C9");
+  });
+
+  it("keeps a user already on /project/:code", () => {
+    expect(
+      buildPmRedirectPath(new URLSearchParams("jwt_auth=tok"), "/project/0F42C9")
+    ).toBe("/project/0F42C9");
+  });
+
+  it("still sends session_id to compare", () => {
+    expect(
+      buildPmRedirectPath(new URLSearchParams("session_id=abc"))
+    ).toBe("/compare?session_id=abc");
+  });
+
+  it("falls back to the projects list when no project is present", () => {
+    expect(buildPmRedirectPath(new URLSearchParams("user_id=u1"))).toBe("/");
   });
 });
 

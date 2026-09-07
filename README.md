@@ -232,7 +232,7 @@ cd frontend && ./run_dev.sh         # http://localhost:3000
 ### Auth
 
 1. `/login` or `/register` → WhatsApp OTP via BFF → tokens in `localStorage`.
-2. Or PM SSO: landing with `jwt_auth`/`token` + `user_id` → profile bootstrap → redirect (`buildPmRedirectPath`).
+2. Or PM SSO: landing with `jwt_auth`/`token` + `user_id` → profile bootstrap → redirect (`buildPmRedirectPath`). Compare from a PM project must include that project's code or id so the user lands on `/project/:code`, not the list.
 3. Protected routes (`/`, `/project/*`, `/compare`) redirect to `/login?returnTo=…`.
 4. Missing display name → `WelcomeNameModal`.
 

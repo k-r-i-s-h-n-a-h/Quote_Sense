@@ -576,6 +576,21 @@ describe("compare coverage semantics", () => {
     expect(text).toContain("Infosys: 12 sqft; TCS: 20 sqft");
   });
 
+  it("prefers S5 description-cover summary over did not quote", () => {
+    const text = rowComparisonSummary(
+      {
+        coverage: { A: "quoted", B: "not_quoted" },
+        A: 3776,
+        B: 0,
+        summary:
+          "B did not itemise this line; their Civil services (₹9,912) names dismantling in the description.",
+      },
+      ["A", "B"]
+    );
+    expect(text).toContain("Civil services");
+    expect(text).not.toBe("B did not quote this line");
+  });
+
   it("labels two quotes from the same company as Q1 and Q2", () => {
     const q1 = "Tatva Interiors (QUOTE-101)";
     const q2 = "Tatva Interiors (QUOTE-202)";

@@ -45,7 +45,7 @@ from services.bundles import (
 )
 from services.space_clusters import apply_space_clusters, containment_parent
 from services.work_catalog import apply_work_catalog
-from services.comparison_summary import row_comparison_summary
+from services.comparison_summary import apply_description_covers, row_comparison_summary
 
 DEBUG_LOG_PATH = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "../../.cursor/debug-b7c34a.log")
@@ -231,12 +231,28 @@ def _build_recommendation_prompt(
     def _amounts(row):
         return {v: int(row.get(v, 0) or 0) for v in vendors}
 
+    def _desc_snip(row):
+        measures = row.get("measures") or {}
+        out = {}
+        for vendor in vendors:
+            raw = measures.get(vendor) if isinstance(measures, dict) else None
+            text = ""
+            if isinstance(raw, dict):
+                text = str(raw.get("description") or "").strip()
+            text = " ".join(text.split())
+            if text:
+                out[vendor] = text[:220]
+        return out
+
     by_space = [
         {
             "space": row.get("space"),
             "work": row.get("sub_service"),
             "pricing_method": row.get("pricing_method"),
             "coverage": row.get("coverage") or {},
+            "descriptions": _desc_snip(row),
+            "named_in": row.get("named_in") or {},
+            "summary": row.get("summary") or "",
             **_amounts(row),
         }
         # Drop all-zero rows: they carry no signal and inflate the prompt.
@@ -258,7 +274,13 @@ def _build_recommendation_prompt(
         for row in bundle_tier
     ]
     project = [
-        {"work": row.get("sub_service"), **_amounts(row)}
+        {
+            "work": row.get("sub_service"),
+            "descriptions": _desc_snip(row),
+            "named_in": row.get("named_in") or {},
+            "summary": row.get("summary") or "",
+            **_amounts(row),
+        }
         for row in project_tier
         if any(_amounts(row).values())
     ]
@@ -277,7 +299,16 @@ def _build_recommendation_prompt(
             "incl_in_bundle:X" = that vendor's price for this work is inside its
                                  bundle X. It is NOT a missing item. NEVER say
                                  this vendor did not quote it.
-            "not_quoted"      = a genuine gap in that vendor's scope.
+            "not_quoted"      = a genuine gap in that vendor's scope, UNLESS
+                                 "named_in" is set for that vendor.
+        - descriptions are the vendor's own wording. Read them. If one quote
+          itemises dismantling/cleaning/shifting and the other names those
+          verbs in a Civil / Other-services description, that is NOT an
+          omission. Say the work was named on that lumpsum. Do not treat the
+          lumpsum as a like-for-like rate against the itemised ancillary line.
+          Do not move or add rupees.
+        - "named_in" means S5 already found that description cover. Copy that
+          meaning. NEVER say the vendor did not quote the work.
         - BUNDLED SCOPES rows compare a single lumpsum against the other vendor's
           itemised lines for the same family. The "basis" map says how each figure
           was arrived at: "bundle" is one lump price, "itemized" is the sum of
@@ -744,6 +775,7 @@ def run_comparison(session_id, on_matrix_ready=None, df=None, fast_moving_avg=Tr
         project_tier = _build_space_rows(
             df[df['scope'] == 'project'], vendors, bundled_families
         )
+        apply_description_covers(space_tier + project_tier, vendors)
         bundle_tier = bundle_comparison_rows(df, vendors)
         coverage = _build_coverage(df, vendors)
 

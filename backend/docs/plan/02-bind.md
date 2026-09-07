@@ -130,6 +130,12 @@ not automatically merged with `Wardrobe — dismantling`; it only becomes
 reallocate civil, cleaning, or shifting charges to make two quotes look
 comparable.
 
+When a Civil / Other-services (or `includes …`) description names those
+ancillary verbs **and** a family word from the itemised line (`tiling`,
+`furniture`), S5 records `named_in` so Comparison Summary can point at that
+lumpsum. That is a cover note, not a merge. The S2 leftover LLM must not
+group a multi-job Civil description with any one of those jobs.
+
 ## LLM pass
 
 Mirrors the S3 overlay pattern exactly: deterministic result computed first, one
@@ -160,6 +166,8 @@ With the switch off, S2 is pure and deterministic. The test suite runs this way.
 - `Base Unit` and `Wall Unit` stay distinct,
 - description-wins fires on the mirror row and nowhere else,
 - explicit dismantling/cleaning/shifting stays separate from installation,
+- a Civil lumpsum that names tiling dismantle stays a different `work_key`
+  from `Tiling — dismantling`,
 - ObjectId beats every heuristic.
 
 ---

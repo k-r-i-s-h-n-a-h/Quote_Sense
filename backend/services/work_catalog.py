@@ -235,6 +235,12 @@ _ANCILLARY_INTENTS: tuple[tuple[str, str, re.Pattern[str]], ...] = (
 )
 
 
+def ancillary_intents_in(*source_texts: str) -> list[str]:
+    """Every explicit ancillary intent in the text, in matcher order."""
+    text = " ".join(str(value or "") for value in source_texts)
+    return [slug for slug, _label, pattern in _ANCILLARY_INTENTS if pattern.search(text)]
+
+
 def _with_ancillary_intent(
     resolved: dict[str, Any], *source_texts: str
 ) -> dict[str, Any]:
@@ -510,6 +516,14 @@ def _try_gemini_merge(
         "SAME work quoted by different vendors.\n"
         "DEFAULT: each label is its own group. Only group labels when they are the "
         "same work with different wording.\n"
+        "Read each label's context descriptions carefully. Verbs and scope in the "
+        "description decide the work: dismantling/demolition, cleaning, shifting, "
+        "and new installation are different purchases even when the catalog title "
+        "is the same (Wardrobe vs Wardrobe dismantle).\n"
+        "NEVER group a Civil / Other-services lumpsum with a named install or "
+        "ancillary line. A description that lists several jobs (tiling dismantle, "
+        "cleaning, bench seating) is a cover note, not a synonym for any one of "
+        "those jobs.\n"
         "NEVER group a base unit with a wall unit, or a wardrobe with a bed. "
         "Different materials or different furniture are different work.\n"
         "Grouping a lighting item with a hardware item is always wrong.\n"

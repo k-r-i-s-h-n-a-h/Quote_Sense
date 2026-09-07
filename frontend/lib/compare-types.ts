@@ -52,6 +52,17 @@ export interface SpaceRow {
   measures?: Record<Vendor, VendorMeasures>;
   /** Deterministic row-wise why-this-gap sentence from S5. */
   summary?: string;
+  /** Other vendor named this ancillary work in a Civil/other description. */
+  named_in?: Record<
+    Vendor,
+    {
+      label?: string;
+      amount?: number;
+      space?: string;
+      intent?: string;
+      also_names?: string[];
+    }
+  >;
   /** S4 family, e.g. "lighting" — used to hide Whole-home recap duplicates. */
   bundle_family?: string;
   work_confidence?: number;
@@ -672,6 +683,8 @@ export function rowComparisonSummary(
   }
   if (elsewhere.length) return elsewhere.join("; ");
   if (quoted.length === 1 && gaps.length) {
+    const shipped = String(row.summary || "").trim();
+    if (shipped) return shipped;
     return `${refs[gaps[0]]} did not quote this line`;
   }
   if (quoted.length < 2) return "";

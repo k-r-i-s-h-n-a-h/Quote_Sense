@@ -66,6 +66,14 @@ order is never implicit. If both columns are quotes from the same company, the
 summary calls them `Vendor Q1` and `Vendor Q2`. Empty qty/rate/description stay
 silent. The summary explains a gap; it does not change amounts.
 
+After both tiers are built, `apply_description_covers` scans quoted lines whose
+description is a Civil / Other-services lumpsum or an `includes …` list that
+names dismantling, cleaning, or shifting. If the other vendor itemised that
+intent and a family token matches (`tiling`, `furniture`), the gap row gets
+`named_in` and the summary says the work was named on that lumpsum — not
+`did not quote this line`. Coverage stays `not_quoted` and the cell stays
+`N/A`. Amounts do not move.
+
 ## Ordering
 
 Preserved from the original implementation: rows keep first-appearance order via

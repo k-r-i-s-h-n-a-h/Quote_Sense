@@ -10,7 +10,11 @@ os.environ["GEMINI_WORK_LLM"] = "0"
 import pandas as pd
 
 from services.comparator import _build_coverage, _build_space_rows
-from services.comparison_summary import row_comparison_summary, space_header_summary
+from services.comparison_summary import (
+    apply_description_covers,
+    row_comparison_summary,
+    space_header_summary,
+)
 from services.work_catalog import apply_work_catalog
 
 
@@ -120,6 +124,58 @@ def test_same_company_quotes_are_named_q1_and_q2():
     assert "Tatva Interiors Q1 is ₹30,000 higher" in text
     assert "Tatva Interiors Q1: 180 sqft" in text
     assert "Tatva Interiors Q2: 120 sqft" in text
+
+
+def test_description_cover_names_civil_lumpsum_instead_of_omission():
+    q1 = "INFOSYS LIMITED (QDGHERX)"
+    q2 = "INFOSYS LIMITED (QF82HJG)"
+    tiling = {
+        "sub_service": "Tiling — dismantling",
+        "work_key": "alias:tiling::intent:dismantling",
+        "space": "Modular Kitchen",
+        q1: 3776,
+        q2: 0,
+        "coverage": {q1: "quoted", q2: "not_quoted"},
+        "measures": {
+            q1: {
+                "quantity": 80,
+                "rate": 40,
+                "pricing_method": "Area – Direct Entry (sq ft)",
+                "description": "Tiling dismantle for Modular Kitchen.",
+            },
+            q2: {"quantity": 0, "rate": 0, "pricing_method": "", "description": ""},
+        },
+    }
+    civil = {
+        "sub_service": "Civil services",
+        "work_key": "norm:civil::intent:dismantling",
+        "space": "Other services",
+        q1: 0,
+        q2: 9912,
+        "coverage": {q1: "not_quoted", q2: "quoted"},
+        "measures": {
+            q1: {"quantity": 0, "rate": 0, "pricing_method": "", "description": ""},
+            q2: {
+                "quantity": 120,
+                "rate": 70,
+                "pricing_method": "Area – Direct Entry (sq ft)",
+                "description": (
+                    "Includes tiling dismantle, Deep cleaning after custom "
+                    "furniture service and Fixing cost for Bench seating used in roof."
+                ),
+            },
+        },
+    }
+    apply_description_covers([tiling, civil], [q1, q2])
+    assert tiling["named_in"][q2]["label"] == "Civil services"
+    text = tiling["summary"]
+    assert "did not itemise" in text
+    assert "Civil services" in text
+    assert "dismantling" in text
+    assert "cleaning" in text
+    assert "did not quote this line" not in text
+    assert tiling[q1] == 3776 and tiling[q2] == 0
+    assert civil[q2] == 9912
 
 
 def test_true_gap_keeps_did_not_quote():

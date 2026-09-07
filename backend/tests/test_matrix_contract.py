@@ -297,6 +297,7 @@ def test_prompt_does_not_claim_zero_means_not_quoted():
 
     prompt = captured["prompt"]
     assert "did not quote that work" not in prompt
+    assert "named_in" in prompt
     assert "incl_in_bundle" in prompt
     assert "possible_double_count" in prompt
     assert "NOT DIRECTLY COMPARABLE" in prompt

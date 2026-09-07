@@ -51,6 +51,12 @@ The prompt states the coverage semantics explicitly and instructs the model that
 to compare a lumpsum against an itemised sum without naming it as a scope
 difference.
 
+Each space/project row now also carries a short `descriptions` map, `named_in`,
+and the S5 `summary`. The model must read those descriptions. If one vendor
+itemised dismantling/cleaning and the other named those verbs on a Civil
+lumpsum, that is a description cover — not an omission, and not a like-for-like
+rate.
+
 Bundle rows are the most decision-relevant content in the whole comparison — a
 Rs 63,000 gap between one vendor's hardware lumpsum and another's itemised
 accessories is exactly what a procurement decision turns on — so they are given
@@ -90,7 +96,7 @@ confirming — so a timeout still talks money rather than repeating the old
 ## Tests
 
 - the prompt contains no "N/A means did not quote" claim,
-- coverage status and `basis` reach the prompt text,
+- coverage status, `basis`, and `named_in` / descriptions reach the prompt text,
 - a mocked timeout still returns a report,
 - the fallback mentions bundles when bundles exist and stays quiet when they do
   not.

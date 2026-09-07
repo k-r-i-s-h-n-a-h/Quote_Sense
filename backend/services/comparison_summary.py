@@ -10,6 +10,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from services.work_catalog import ancillary_intents_in
+
 # Phrases the vendor must have written. Not a work list (ACTION.md §2).
 _SPEC_TERMS: tuple[tuple[str, str], ...] = (
     ("hi-gloss", "hi-gloss"),
@@ -46,6 +48,183 @@ _SPEC_TERMS: tuple[tuple[str, str], ...] = (
     ("mdf", "MDF"),
     ("pu finish", "PU finish"),
 )
+
+
+_CIVIL_LUMP_RE = re.compile(
+    r"\b(?:civil|other services|miscellaneous|misc\.?)\b", re.I
+)
+_INCLUDES_RE = re.compile(r"\binclud(?:e|es|ing)\b", re.I)
+_FAMILY_STOP = frozenset(
+    {
+        "after",
+        "also",
+        "and",
+        "area",
+        "charge",
+        "charges",
+        "civil",
+        "cost",
+        "costs",
+        "deep",
+        "existing",
+        "for",
+        "from",
+        "full",
+        "home",
+        "includes",
+        "including",
+        "item",
+        "labour",
+        "line",
+        "other",
+        "over",
+        "room",
+        "service",
+        "services",
+        "that",
+        "the",
+        "this",
+        "unit",
+        "units",
+        "used",
+        "with",
+        "work",
+        "works",
+        "dismantle",
+        "dismantling",
+        "demolish",
+        "demolition",
+        "cleaning",
+        "cleanup",
+        "shifting",
+        "relocate",
+        "relocation",
+        "removal",
+        "remove",
+        "moving",
+    }
+)
+
+
+def _plain_text(value: str) -> str:
+    text = re.sub(r"<[^>]+>", " ", value or "")
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _intent_from_work_key(work_key: str) -> str:
+    key = str(work_key or "")
+    if "::intent:" not in key:
+        return ""
+    return key.rsplit("::intent:", 1)[-1].strip()
+
+
+def _family_tokens(*texts: str) -> set[str]:
+    blob = _plain_text(" ".join(str(t or "") for t in texts)).casefold()
+    blob = re.sub(r"[^a-z0-9]+", " ", blob)
+    return {
+        token
+        for token in blob.split()
+        if len(token) >= 4 and token not in _FAMILY_STOP
+    }
+
+
+def _is_cover_lump(label: str, description: str, intents: list[str]) -> bool:
+    if not intents:
+        return False
+    if len(intents) >= 2:
+        return True
+    hay = f"{label} {description}"
+    return bool(_CIVIL_LUMP_RE.search(hay) or _INCLUDES_RE.search(description))
+
+
+def apply_description_covers(rows: list[dict[str, Any]], vendors: list[str]) -> None:
+    """Link itemised ancillary gaps to another vendor's covering description.
+
+    Mutates rows in place. Does not change amounts or coverage status.
+    """
+    if len(vendors) < 2 or not rows:
+        return
+
+    covers: list[dict[str, Any]] = []
+    for row in rows:
+        for vendor in vendors:
+            try:
+                amount = float(row.get(vendor) or 0)
+            except (TypeError, ValueError):
+                amount = 0.0
+            if amount <= 0:
+                continue
+            measure = _measure(row, vendor)
+            desc = _plain_text(str(measure.get("description") or ""))
+            intents = ancillary_intents_in(desc)
+            label = str(row.get("sub_service") or "")
+            if not _is_cover_lump(label, desc, intents):
+                continue
+            covers.append(
+                {
+                    "vendor": vendor,
+                    "label": label or "Civil services",
+                    "amount": amount,
+                    "space": str(row.get("space") or "").strip(),
+                    "intents": intents,
+                    "tokens": _family_tokens(label, desc),
+                }
+            )
+
+    if not covers:
+        return
+
+    for row in rows:
+        named: dict[str, dict[str, Any]] = {}
+        intent = _intent_from_work_key(str(row.get("work_key") or ""))
+        if not intent:
+            intent = (ancillary_intents_in(str(row.get("sub_service") or "")) or [""])[0]
+        if not intent:
+            continue
+        quoted_desc = ""
+        for vendor in vendors:
+            try:
+                amount = float(row.get(vendor) or 0)
+            except (TypeError, ValueError):
+                amount = 0.0
+            if amount > 0:
+                quoted_desc = _plain_text(
+                    str(_measure(row, vendor).get("description") or "")
+                )
+                break
+        item_tokens = _family_tokens(str(row.get("sub_service") or ""), quoted_desc)
+        for vendor in vendors:
+            status = str((row.get("coverage") or {}).get(vendor) or "")
+            try:
+                amount = float(row.get(vendor) or 0)
+            except (TypeError, ValueError):
+                amount = 0.0
+            if amount > 0 or status.startswith("incl_in_"):
+                continue
+            if status and status != "not_quoted":
+                continue
+            for cover in covers:
+                if cover["vendor"] != vendor:
+                    continue
+                if intent not in cover["intents"]:
+                    continue
+                if item_tokens and not (item_tokens & cover["tokens"]):
+                    continue
+                if not item_tokens and not _CIVIL_LUMP_RE.search(cover["label"]):
+                    continue
+                also = [slug for slug in cover["intents"] if slug != intent]
+                named[vendor] = {
+                    "label": cover["label"],
+                    "amount": cover["amount"],
+                    "space": cover["space"],
+                    "intent": intent,
+                    "also_names": also,
+                }
+                break
+        if not named:
+            continue
+        row["named_in"] = named
+        row["summary"] = row_comparison_summary(row, vendors)
 
 
 def _who(vendor: str) -> str:
@@ -225,6 +404,32 @@ def row_comparison_summary(row: dict[str, Any], vendors: list[str]) -> str:
         return "; ".join(elsewhere)
 
     if len(quoted) == 1 and gaps:
+        named = row.get("named_in") if isinstance(row.get("named_in"), dict) else {}
+        cover = named.get(gaps[0]) if isinstance(named, dict) else None
+        if isinstance(cover, dict) and cover.get("label"):
+            space = str(cover.get("space") or "").strip()
+            place = f", {space}" if space else ""
+            intent = str(cover.get("intent") or "this work")
+            also = [
+                slug for slug in (cover.get("also_names") or []) if slug
+            ]
+            extra = (
+                f" That lumpsum also names {', '.join(also)}." if also else ""
+            )
+            try:
+                item_amt = float(amounts[quoted[0]] or 0)
+            except (TypeError, ValueError):
+                item_amt = 0.0
+            try:
+                cover_amt = float(cover.get("amount") or 0)
+            except (TypeError, ValueError):
+                cover_amt = 0.0
+            return (
+                f"{refs[gaps[0]]} did not itemise this line; their "
+                f"{cover['label']} ({_inr(cover_amt)}{place}) names {intent} "
+                f"in the description.{extra} Not a like-for-like rate against "
+                f"this {_inr(item_amt)} line."
+            )
         return f"{refs[gaps[0]]} did not quote this line"
 
     if len(quoted) < 2:

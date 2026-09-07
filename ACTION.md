@@ -224,3 +224,19 @@ Comparison Summary quantity and rate clauses must name both vendors. Never rely
 on bare `114 sqft vs 45.5 sqft` ordering after naming only the higher vendor.
 When both quotes have the same company name, call them `Vendor Q1` and
 `Vendor Q2` throughout the summary.
+
+---
+
+## 11. Description can name work the other vendor itemised
+
+When one vendor itemises dismantling, cleaning, or shifting and the other
+writes those verbs in a Civil / Other-services (or similar) description, the
+Comparison Summary must say the work was **named there**. Do not treat that as
+a true omission.
+
+Do not merge those rows. Do not move the ancillary amount into the Civil
+lumpsum. The lumpsum is not a like-for-like rate against the itemised line —
+it may also name other jobs (cleaning, bench seating, whole-home civil).
+
+S6 must read those descriptions. If `named_in` is set, never write that the
+vendor did not quote the work.

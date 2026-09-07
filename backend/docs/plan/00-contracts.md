@@ -133,6 +133,7 @@ Allocating a lumpsum across rooms would invent numbers the vendor never quoted.
 | `bundle_family` | str | S4 family, or `""`. Lets the UI hide Whole-home rows a scattered recap already compares. |
 | `contained_in` | str | Parent `space_id` when this room is nested (walk-in → mbr). Empty if none. Not a merge. |
 | `measures` | dict | `{ "<vendor>": { quantity, rate, pricing_method, description } }` from the payload. Quantity/rate stay 0 when the vendor left them blank. Description is verbatim, not a work list. |
+| `named_in` | dict | Optional. `{ "<vendor>": { label, amount, space, intent, also_names } }` when that vendor named this ancillary work in a Civil/other description. Not a coverage status. |
 | `summary` | str | Deterministic Comparison Summary sentence. Empty when there is nothing to say. |
 | `<vendor name>` | int | One key per vendor; rupees, `0` when absent. |
 

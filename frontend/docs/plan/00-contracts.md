@@ -37,6 +37,7 @@ export interface SpaceRow {
   breakdown?: { vendor: string; item: string; amount: number }[];
   contained_in?: string;
   measures?: Record<Vendor, { quantity?: number; rate?: number; pricing_method?: string; description?: string }>;
+  named_in?: Record<Vendor, { label?: string; amount?: number; space?: string; intent?: string; also_names?: string[] }>;
   summary?: string;
   [vendor: string]: unknown;                  // per-vendor amounts
 }

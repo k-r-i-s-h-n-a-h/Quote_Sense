@@ -15,6 +15,7 @@ os.environ["GEMINI_WORK_LLM"] = "0"
 import pandas as pd
 
 from services.work_catalog import (
+    ancillary_intents_in,
     apply_work_catalog,
     is_known_work_label,
     normalize_work_label,
@@ -122,6 +123,19 @@ def test_generic_civil_line_is_not_forced_into_wardrobe_dismantling():
     civil = key("Civil", "Dismantling and civil alteration charges")
 
     assert wardrobe != civil
+
+
+def test_civil_multi_job_description_lists_every_intent_without_sharing_tiling_key():
+    desc = (
+        "Includes tiling dismantle, Deep cleaning after custom furniture "
+        "service and Fixing cost for Bench seating used in roof."
+    )
+    assert ancillary_intents_in(desc) == ["dismantling", "cleaning"]
+    civil = key("Civil services", desc)
+    tiling = key("Tiling", "Tiling dismantle for Modular Kitchen.")
+    assert civil != tiling
+    assert civil.endswith("::intent:dismantling")
+    assert tiling.endswith("::intent:dismantling")
 
 
 def test_seater_unit_does_not_fold_into_crockery_or_bench():

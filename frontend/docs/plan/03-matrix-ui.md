@@ -60,7 +60,9 @@ qty and rate when both quoted those figures, then `specified …` only if the
 vendor wrote a finish or brand in `description`. Qty/rate clauses name both
 vendors rather than relying on column order; two quotes from the same company
 are called `Vendor Q1` and `Vendor Q2`. True N/A and `incl. in …` stay as they
-are. The column does not regroup and does not change totals
+are. When S5 sets `named_in` / a description-cover `summary`, render that
+sentence instead of “did not quote this line” — the cell can stay `N/A`. The
+column does not regroup and does not change totals
 ([ACTION.md](../../../ACTION.md) §8). Refreshing a compare URL reuses the
 saved `session_id`; qty/rate notes need a matrix that includes `measures`, so
 the page starts a new compare once if that field is missing.

@@ -12,6 +12,7 @@ import pandas as pd
 from services.comparator import _build_coverage, _build_space_rows
 from services.comparison_summary import (
     apply_description_covers,
+    pricing_methods_differ,
     row_comparison_summary,
     space_header_summary,
 )
@@ -409,3 +410,87 @@ def test_space_totals_unchanged_by_parent_pointer():
     mbr = next(r for r in rows if r["space_id"] == "mbr")
     assert wic[A] + mbr[A] == 50000
     assert wic[B] + mbr[B] == 40000
+
+
+# --- quantity basis vs catalog id ------------------------------------------
+
+
+def test_direct_entry_and_length_breadth_share_an_area_basis():
+    """Different catalog ids, same physical unit — still comparable by qty."""
+    ma = {
+        "pricing_method": "Area – Direct Entry (sq ft)",
+        "pricing_method_id": "pm_direct_entry",
+    }
+    mb = {
+        "pricing_method": "Area – Length × Breadth (sq ft)",
+        "pricing_method_id": "pm_length_breadth",
+    }
+    assert pricing_methods_differ(ma, mb) is False
+
+
+def test_tv_unit_direct_entry_vs_lxb_keeps_quantity_language():
+    """Project 0F42C9 shape: both 10 sqft, different area-entry methods."""
+    row = {
+        A: 20000,
+        B: 25000,
+        "coverage": {A: "quoted", B: "quoted"},
+        "measures": {
+            A: {
+                "quantity": 10,
+                "rate": 2000,
+                "pricing_method": "Area – Direct Entry (sq ft)",
+                "pricing_method_id": "pm_direct_entry",
+            },
+            B: {
+                "quantity": 10,
+                "rate": 2500,
+                "pricing_method": "Area – Length × Breadth (sq ft)",
+                "pricing_method_id": "pm_length_breadth",
+            },
+        },
+    }
+    text = row_comparison_summary(row, VENDORS)
+    assert "same area" in text
+    assert "rate is higher" in text
+    assert "different pricing methods" not in text
+
+
+def test_unit_vs_area_still_flags_as_incomparable():
+    """Rolling-shutter case: unit-count vs sq ft must never use qty language."""
+    ma = {
+        "pricing_method": "Per Unit / Each",
+        "pricing_method_id": "pm_unit",
+        "quantity": 1,
+        "rate": 27258,
+    }
+    mb = {
+        "pricing_method": "Area – Direct Entry (sq ft)",
+        "pricing_method_id": "pm_area",
+        "quantity": 8,
+        "rate": 2212,
+    }
+    assert pricing_methods_differ(ma, mb) is True
+    row = {
+        A: 27258,
+        B: 17700,
+        "coverage": {A: "quoted", B: "quoted"},
+        "measures": {A: ma, B: mb},
+    }
+    text = row_comparison_summary(row, VENDORS)
+    assert "different pricing methods" in text
+    assert "not directly comparable by quantity" in text
+    assert "1 units" not in text
+    assert "8 units" not in text
+    assert "8 sqft" not in text
+
+
+def test_sqm_and_sqft_are_different_bases():
+    ma = {
+        "pricing_method": "Area – Direct Entry (sq m)",
+        "pricing_method_id": "pm_sqm",
+    }
+    mb = {
+        "pricing_method": "Area – Direct Entry (sq ft)",
+        "pricing_method_id": "pm_sqft",
+    }
+    assert pricing_methods_differ(ma, mb) is True

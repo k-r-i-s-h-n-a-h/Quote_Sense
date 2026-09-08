@@ -476,6 +476,35 @@ describe("client-safety guards on the shipped payload", () => {
     expect(summary).not.toContain("8 units");
   });
 
+  it("keeps quantity language when two area methods share sq ft", () => {
+    const row: SpaceRow = {
+      ...spaceRowsOf(matrix)[0],
+      sub_service: "Tv unit",
+      [A]: 20000,
+      [B]: 25000,
+      measures: {
+        [A]: {
+          quantity: 10,
+          rate: 2000,
+          pricing_method: "Area – Direct Entry (sq ft)",
+          pricing_method_id: "pm_direct_entry",
+        },
+        [B]: {
+          quantity: 10,
+          rate: 2500,
+          pricing_method: "Area – Length × Breadth (sq ft)",
+          pricing_method_id: "pm_length_breadth",
+        },
+      },
+      coverage: {},
+      summary: "",
+    } as SpaceRow;
+    const summary = rowComparisonSummary(row, [A, B]);
+    expect(summary).toContain("same area");
+    expect(summary).toContain("rate is higher");
+    expect(summary).not.toContain("different pricing methods");
+  });
+
   it("keeps quantity language when both sides price the same way", () => {
     const row = spaceRowsOf(matrix).find(
       (candidate) =>

@@ -672,6 +672,22 @@ function qtyUnit(pricingMethod: string): string {
   return "units";
 }
 
+/** Coarse physical unit of a pricing-method LABEL, not its catalog id. */
+function quantityBasis(pricingMethod: string): string {
+  const pm = String(pricingMethod || "").toLowerCase().trim();
+  if (!pm) return "other";
+  if (/lump|fixed\s*amount|per\s*project|whole\s*project/.test(pm)) return "lump";
+  if (/cubic\s*(ft|feet|foot)|cu\.?\s*ft|\bcft\b/.test(pm)) return "cubic_ft";
+  if (/sq\.?\s*m\b|sqm|square\s*me?t(?:er|re)s?/.test(pm)) return "area_sqm";
+  if (/sq\.?\s*ft|sqft|square\s*fe?e?t/.test(pm)) return "area_sqft";
+  if (/\brft\b|running\s*(ft|feet|foot|length)|linear\s*(ft|feet|foot)/.test(pm)) {
+    return "rft";
+  }
+  if (/\bmt\b|metric\s*tonn|\btonne\b|\bton\b|\bweight\b/.test(pm)) return "weight";
+  if (/per\s*unit|per\s*each|unit\s*\/\s*each|\/\s*each\b/.test(pm)) return "unit";
+  return "other";
+}
+
 function inrDelta(amount: number): string {
   const n = Math.round(Number(amount) || 0);
   return `₹${n.toLocaleString("en-IN")}`;
@@ -757,15 +773,20 @@ function specClause(
 }
 
 /**
- * True when the two sides did not price this item the same way.
+ * True when quantity language would compare unlike physical units.
  *
- * IDs first: `pricing_method_id` is the catalog fact and the label is only a
- * fallback for a lane that never supplied ids.
+ * Physical basis first: Direct Entry and Length × Breadth are different
+ * catalog ids that both mean square feet, so they stay comparable. Only when
+ * a side's basis is unknown do we fall back to `pricing_method_id`, then the
+ * raw label.
  */
 export function pricingMethodsDiffer(
   ma: VendorMeasures,
   mb: VendorMeasures
 ): boolean {
+  const basisA = quantityBasis(String(ma.pricing_method || ""));
+  const basisB = quantityBasis(String(mb.pricing_method || ""));
+  if (basisA !== "other" && basisB !== "other") return basisA !== basisB;
   const idA = String(ma.pricing_method_id || "").trim();
   const idB = String(mb.pricing_method_id || "").trim();
   if (idA && idB) return idA !== idB;

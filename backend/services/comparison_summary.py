@@ -436,6 +436,35 @@ def _qty_unit(pricing_method: str) -> str:
     return "units"
 
 
+def _quantity_basis(pricing_method: str) -> str:
+    """Coarse physical unit of a pricing-method LABEL, not its catalog id.
+
+    `Area – Direct Entry (sq ft)` and `Area – Length × Breadth (sq ft)` are
+    different catalog ids that both mean square feet. Comparing ids would
+    suppress a real area comparison; comparing units would not. `"other"` means
+    we do not know — the caller then falls back to ids / labels.
+    """
+    pm = (pricing_method or "").casefold().strip()
+    if not pm:
+        return "other"
+    if re.search(r"lump|fixed\s*amount|per\s*project|whole\s*project", pm):
+        return "lump"
+    # Cubic before plain area so "cubic feet" never collapses into sq ft.
+    if re.search(r"cubic\s*(ft|feet|foot)|cu\.?\s*ft|\bcft\b", pm):
+        return "cubic_ft"
+    if re.search(r"sq\.?\s*m\b|sqm|square\s*me?t(?:er|re)s?", pm):
+        return "area_sqm"
+    if re.search(r"sq\.?\s*ft|sqft|square\s*fe?e?t", pm):
+        return "area_sqft"
+    if re.search(r"\brft\b|running\s*(ft|feet|foot|length)|linear\s*(ft|feet|foot)", pm):
+        return "rft"
+    if re.search(r"\bmt\b|metric\s*tonn|\btonne\b|\bton\b|\bweight\b", pm):
+        return "weight"
+    if re.search(r"per\s*unit|per\s*each|unit\s*/\s*each|/\s*each\b", pm):
+        return "unit"
+    return "other"
+
+
 def _inr(amount: float) -> str:
     n = int(round(float(amount) or 0))
     return f"₹{n:,}"
@@ -476,12 +505,18 @@ def _measure(row: dict[str, Any], vendor: str) -> dict[str, Any]:
 
 
 def pricing_methods_differ(ma: dict[str, Any], mb: dict[str, Any]) -> bool:
-    """True when the two sides did not price this item the same way.
+    """True when quantity language would compare unlike physical units.
 
-    IDs first: `pricing_method_id` is the catalog fact. The label is only the
-    fallback for a lane that never supplied ids. When neither side states a
-    method we assume nothing and let the quantity clauses run as before.
+    Physical basis first: Direct Entry and Length × Breadth are different
+    catalog ids that both mean square feet, so they stay comparable. Unit-count
+    vs area still differ. Only when a side's basis is unknown do we fall back
+    to `pricing_method_id`, then the raw label — same order as before. This
+    gate only decides wording; IDs-first matching elsewhere is untouched.
     """
+    basis_a = _quantity_basis(str(ma.get("pricing_method") or ""))
+    basis_b = _quantity_basis(str(mb.get("pricing_method") or ""))
+    if basis_a != "other" and basis_b != "other":
+        return basis_a != basis_b
     id_a = str(ma.get("pricing_method_id") or "").strip()
     id_b = str(mb.get("pricing_method_id") or "").strip()
     if id_a and id_b:

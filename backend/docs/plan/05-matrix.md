@@ -117,12 +117,18 @@ block. `scripts/check_reconciliation.py` runs the same gate in CI.
 `Rolling shutter` read `EXCESS: 1 units; INT360: 8 units` — one priced per unit,
 the other by area. The sentence implied INT360 quoted eight shutters.
 
-So before any clause that compares quantities, `pricing_methods_differ` checks
-`pricing_method_id` on both sides (falling back to the method name when a quote
-has no id). When they differ, `pricing_method_clause` replaces the quantity
-language: it names both methods, says the item is not comparable by quantity,
-and gives the two rates. Quantity-diff wording is only used when both sides
-share a pricing method.
+So before any clause that compares quantities, `pricing_methods_differ` classifies
+each side's pricing-method **label** into a coarse physical basis (`area_sqft`,
+`unit`, `lump`, …). When both bases are known, that comparison decides — not
+`pricing_method_id`. Direct Entry and Length × Breadth are different catalog ids
+that both mean square feet; suppressing quantity language there hid real rate
+comparisons on TV units, base units, and paneling. Unit-count vs any area basis
+still differs, and still produces the "different pricing methods… rate
+difference only" sentence.
+
+Only when a basis is unknown on either side does the guard fall back to
+`pricing_method_id`, then the raw label. Matching and lineage still use ids;
+this gate only decides wording.
 
 ## Ordering
 

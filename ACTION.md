@@ -313,13 +313,20 @@ A real room is never a bundled zone — bedrooms hold several trades
 legitimately. The generic-label requirement is what keeps them out; do not
 drop it to catch more zones.
 
-### 13.7 Different pricing methods are not a quantity difference
+### 13.7 Different physical units are not a quantity difference
 
-Before any sentence comparing quantities, check `pricing_method_id` on both
-sides. When they differ, name both methods, say it is not comparable by
-quantity, and compare the rates only. `1 units vs 8 units` for a shutter one
-vendor priced per unit and the other per sq ft implied one of them quoted
-eight shutters.
+Before any sentence comparing quantities, classify each side's pricing-method
+label into a coarse physical unit (`area_sqft`, `unit`, `lump`, …). When the
+bases differ — unit-count vs sq ft, sq m vs sq ft — name both methods, say it
+is not comparable by quantity, and compare the rates only. `1 units vs 8 units`
+for a shutter one vendor priced per unit and the other per sq ft implied one of
+them quoted eight shutters.
+
+Same physical unit, different catalog id, is still comparable: Direct Entry and
+Length × Breadth both mean square feet. Do not suppress quantity language just
+because the Tatva ids differ. Fall back to `pricing_method_id` only when a
+basis is unknown. This rule gates wording only; IDs-first matching elsewhere
+is unchanged.
 
 ### 13.8 Abstention tiers do not loosen the structural guards
 

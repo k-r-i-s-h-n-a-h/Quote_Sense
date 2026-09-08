@@ -77,6 +77,8 @@ export type VendorMeta = {
   quote_date?: string;
   /** How the vendor entered prices: excluding GST, including GST, or mixed. */
   gst_mode?: "exclusive" | "inclusive" | "mixed" | "";
+  /** Vendor contact from the quote payload. Empty when none was stored. */
+  phone?: string;
 };
 
 export type VendorLabel = {

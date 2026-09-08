@@ -230,7 +230,10 @@ def _unwrap_mongodb_quote(quote_entry: dict) -> dict:
 
 def _mongodb_quote_metadata(quote_data: dict) -> dict:
     """Map TatvaOps MongoDB quote fields to Supabase quotes columns."""
+    from services.vendor_contact import vendor_phone_from_detail
+
     client_detail = quote_data.get("clientDetail") or {}
+    vendor_detail = quote_data.get("vendorDetail") or {}
     quote_number = str(quote_data.get("quoteNumber") or "").lstrip("#").strip()
     client_name = (
         client_detail.get("clientName")
@@ -243,6 +246,7 @@ def _mongodb_quote_metadata(quote_data: dict) -> dict:
         "client_name": client_name,
         "quote_date": _format_quote_date(raw_date),
         "source_filename": quote_number or "DIRECT_SYNC",
+        "vendor_phone": vendor_phone_from_detail(vendor_detail),
     }
 
 
@@ -1036,12 +1040,15 @@ async def sync_mongodb_quotes(payload: Any=Body(...), session_id: str = None): #
                     grand_total = item.get("value", 0)
 
             # Push to Supabase 'quotes' table
+            from services.vendor_contact import vendor_phone_from_detail
+
             quote_res = get_supabase_client().table("quotes").insert({
                 "vendor_name": vendor_detail.get("companyName", "Unknown Vendor"),
                 "grand_total": grand_total,
                 "session_id": session_id,
                 "source_type": "mongodb_integrated",
-                "source_filename": data.get("quoteNumber", "DIRECT_SYNC")
+                "source_filename": data.get("quoteNumber", "DIRECT_SYNC"),
+                "vendor_phone": vendor_phone_from_detail(vendor_detail),
             }).execute()
             
             quote_id = quote_res.data[0]['id']
@@ -1142,12 +1149,15 @@ async def sync_mongodb_quotes(payload: Any = Body(...), session_id: str = None):
                     grand_total = item.get("value", 0)
 
             # --- STEP 1: PUSH TO 'quotes' TABLE ---
+            from services.vendor_contact import vendor_phone_from_detail
+
             quote_res = get_supabase_client().table("quotes").insert({
                 "vendor_name": vendor_detail.get("companyName", "Unknown Vendor"),
                 "grand_total": grand_total,
                 "session_id": session_id,
                 "source_type": "mongodb_integrated",
                 "source_filename": data.get("quoteNumber", "DIRECT_SYNC"),
+                "vendor_phone": vendor_phone_from_detail(vendor_detail),
                 #"quote_number": data.get("quoteNumber", "DIRECT_SYNC")
             }).execute()
             
@@ -1267,7 +1277,7 @@ def _ingest_quotes_to_supabase(quotes_list: list, session_id: str) -> int:
                 "keeping for comparison display."
             )
 
-        quote_res = get_supabase_client().table("quotes").insert({
+        insert_payload = {
             "vendor_name": vendor_name,
             "client_name": meta["client_name"],
             "quote_date": meta["quote_date"],
@@ -1276,8 +1286,17 @@ def _ingest_quotes_to_supabase(quotes_list: list, session_id: str) -> int:
             "session_id": session_id,
             "source_type": "mongodb_integrated",
             "source_filename": meta["source_filename"],
+            "vendor_phone": meta.get("vendor_phone") or "",
             "market_rates_applied_at": datetime.now(timezone.utc).isoformat() if is_rate_duplicate else None,
-        }).execute()
+        }
+        try:
+            quote_res = get_supabase_client().table("quotes").insert(insert_payload).execute()
+        except Exception as e:
+            if "vendor_phone" in str(e):
+                insert_payload.pop("vendor_phone", None)
+                quote_res = get_supabase_client().table("quotes").insert(insert_payload).execute()
+            else:
+                raise
 
         if not quote_res.data:
             continue

@@ -92,6 +92,8 @@ def push_to_supabase(structured_data, filename, session_id):
             "keeping for comparison display."
         )
 
+    from services.vendor_contact import normalize_vendor_phone
+
     quote_payload = {
         "vendor_name": structured_data.get("vendor_name", "Unknown"),
         "client_name": structured_data.get("client_name", "Unknown"),
@@ -100,6 +102,7 @@ def push_to_supabase(structured_data, filename, session_id):
         "source_filename": filename,
         "session_id": session_id,
         "quote_number": quote_number,
+        "vendor_phone": normalize_vendor_phone(structured_data.get("vendor_phone")),
         # Pre-mark duplicate quote numbers for staging lifecycle.
         "market_rates_applied_at": datetime.now(timezone.utc).isoformat() if is_rate_duplicate else None,
     }
@@ -108,7 +111,20 @@ def push_to_supabase(structured_data, filename, session_id):
     try:
         quote_res = get_supabase_client().table("quotes").insert(quote_payload).execute()
     except Exception as e:
-        if "quote_number" in str(e):
+        msg = str(e)
+        if "vendor_phone" in msg:
+            print("  -> 'vendor_phone' column missing in Supabase; inserting without it.")
+            quote_payload.pop("vendor_phone", None)
+            try:
+                quote_res = get_supabase_client().table("quotes").insert(quote_payload).execute()
+            except Exception as e2:
+                if "quote_number" in str(e2):
+                    print("  -> 'quote_number' column missing in Supabase; inserting without it.")
+                    quote_payload.pop("quote_number", None)
+                    quote_res = get_supabase_client().table("quotes").insert(quote_payload).execute()
+                else:
+                    raise
+        elif "quote_number" in msg:
             print("  -> 'quote_number' column missing in Supabase; inserting without it.")
             quote_payload.pop("quote_number", None)
             quote_res = get_supabase_client().table("quotes").insert(quote_payload).execute()

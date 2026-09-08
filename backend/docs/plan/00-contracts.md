@@ -119,7 +119,7 @@ Allocating a lumpsum across rooms would invent numbers the vendor never quoted.
 ```jsonc
 {
   "vendors": ["Infosys (Q2OE1CX)", "TCS (QGT3A1I)"],
-  "vendorMeta": { "<vendor>": { "company": "", "filename": "", "quote_number": "", "quote_date": "", "gst_mode": "" } },
+  "vendorMeta": { "<vendor>": { "company": "", "filename": "", "quote_number": "", "quote_date": "", "gst_mode": "", "phone": "" } },
   "chartData": [{ "vendor": "...", "total": 0 }],
   "spaceTier": [ /* SpaceRow */ ],
   "bundleTier": [ /* BundleRow */ ],

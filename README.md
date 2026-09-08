@@ -244,7 +244,7 @@ cd frontend && ./run_dev.sh         # http://localhost:3000
  → /compare?projectId=&quotes=
  → resolveQuotesForCompare (sessionStorage cache → BFF)
  → POST /api/compare/sync-mongodb → poll FastAPI /api/progress/:session_id
- → VendorChart + matrix + VendorInsights + RecommendationView + chat + PDF export
+ → VendorChart + matrix + AskVendors + RecommendationView + chat + PDF export
 ```
 
 ### Compare lanes (`compare-lane.ts`)
@@ -606,7 +606,7 @@ Interactive market guidance demo (not auth-guarded).
 |------|------|
 | `components/CompareLoadingPanel.tsx` | Staged progress (extract → matrix → recommend) |
 | `components/VendorChart.tsx` | Recharts bar chart of vendor totals |
-| `components/VendorInsights.tsx` | Category filter, totals, relative bars |
+| `components/compare/AskVendors.tsx` | Questions the comparison cannot settle + customer notes |
 | `components/RecommendationView.tsx` | AI recommendation bullets |
 | `components/quote/MarketRatePanel.tsx` | Lookup/recommend + low/fair/high verdict UI |
 
@@ -707,7 +707,7 @@ Base tables (`quotes`, `quote_items`, `market_moving_averages`) are assumed to e
 | `supabase/migrations/001_market_moving_avg_sessions.sql` | Creates session-dedup table for MA updates |
 | `supabase/migrations/002_market_rate_bundle.sql` | Bundle columns: `pricing_method`, `rate_moving_average`, `service_type` on MA; item fields + index |
 | `supabase/migrations/003_market_rate_tier_multipliers.sql` | **Deprecated historical** synthetic MID/LUXURY multipliers — removed by 006 |
-| `supabase/migrations/004_quotes_market_rates_applied.sql` | Adds `quotes.market_rates_applied_at` + index for cleanup |
+| `supabase/migrations/011_quotes_vendor_phone.sql` | Adds `quotes.vendor_phone` for WhatsApp send |
 | `supabase/migrations/005_fix_placeholder_rate_junk.sql` | Deletes MA rows with `rate_moving_average <= 1` |
 | `supabase/migrations/006_remove_tier_multiplier_math.sql` | Deletes `TIER_MULTIPLIER_%` synthetic rows |
 | `supabase/migrations/007_seed_interiors_base_rates.sql` | Truncates MA tables; seeds ~19 Interiors bundles × 3 tiers |

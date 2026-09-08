@@ -2,10 +2,9 @@
 
 import { useMemo } from "react";
 import {
-  Bar,
-  BarChart,
   CartesianGrid,
-  Cell,
+  Line,
+  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -103,7 +102,7 @@ export default function VendorChart({
   return (
     <div className="h-[22rem] sm:h-[24rem] w-full">
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart
+        <LineChart
           data={points}
           margin={{ top: 8, right: 12, left: 8, bottom: 96 }}
         >
@@ -127,7 +126,7 @@ export default function VendorChart({
             tickLine={false}
           />
           <Tooltip
-            cursor={{ fill: "rgba(28, 25, 23, 0.04)" }}
+            cursor={{ stroke: "#d6d3d1", strokeDasharray: "3 3" }}
             formatter={(value) => [formatInrFull(Number(value)), "Grand total"]}
             labelFormatter={(_, payload) => {
               const row = payload?.[0]?.payload as ChartPoint | undefined;
@@ -140,12 +139,33 @@ export default function VendorChart({
               boxShadow: "0 4px 12px rgba(28,25,23,0.08)",
             }}
           />
-          <Bar dataKey="total" radius={[4, 4, 0, 0]}>
-            {points.map((entry) => (
-              <Cell key={entry.key} fill={entry.color} />
-            ))}
-          </Bar>
-        </BarChart>
+          <Line
+            type="linear"
+            dataKey="total"
+            stroke="#57534e"
+            strokeWidth={2}
+            dot={(props: {
+              cx?: number;
+              cy?: number;
+              payload?: ChartPoint;
+            }) => {
+              const { cx, cy, payload } = props;
+              if (cx == null || cy == null || !payload) return <g />;
+              return (
+                <circle
+                  key={payload.key}
+                  cx={cx}
+                  cy={cy}
+                  r={6}
+                  fill={payload.color}
+                  stroke="#fff"
+                  strokeWidth={2}
+                />
+              );
+            }}
+            activeDot={{ r: 7 }}
+          />
+        </LineChart>
       </ResponsiveContainer>
     </div>
   );

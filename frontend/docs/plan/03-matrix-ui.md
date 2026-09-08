@@ -109,6 +109,41 @@ Column chips `Entered excl. GST` / `Entered incl. GST` come from
 `vendorMeta.gst_mode`. A banner above the table fires only when those modes
 differ. Cell amounts stay billed totals (GST included).
 
+## Cost comparison chart
+
+`VendorChart` plots each vendor's billed grand total as a **line** with a
+coloured dot per quote. The Y-axis stays rupees; the X-axis stays the vendor
+labels. This is the same `chartData` as before — only the mark changed.
+
+## Ask the vendors
+
+Space insights (cheapest overall / cheapest by room) is gone. That board
+invited a "lowest bar wins" reading of rooms that are not like-for-like.
+
+In its place, `AskVendors` (`components/compare/AskVendors.tsx`) lists
+questions the comparison cannot settle:
+
+- UNASSIGNED rooms — which numbered room?
+- bundled zones — please break out
+- possible cross-scope matches — same work or not?
+- pricing-method unit mismatches
+- GST entered excl vs incl
+- two standing asks: N/A vs bundled, and lumpsum contents
+
+Two quotes from the **same company** → one checklist, headed with that
+name and both quote numbers.
+
+Two **different companies** → two checklists, one after the other, each
+headed `Ask {company}` with that quote number. A bundled zone or unassigned
+room that belongs to one vendor is only on that vendor's list.
+
+The customer ticks what to send, writes notes **on that vendor's card**, then
+**Copy questions** / **WhatsApp {company}** at the **end of that card**. The
+first checklist never goes to the second vendor. MSG91 send is not wired yet;
+the button copies that vendor's preview and uses `vendorMeta.phone` when present.
+
+Ticks and notes persist in `sessionStorage` for the comparison session.
+
 ## Letterhead
 
 The matrix card repeats the document identity the PDF uses: Tatva Ops logo,

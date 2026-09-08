@@ -915,6 +915,7 @@ def run_comparison(session_id, on_matrix_ready=None, df=None, fast_moving_avg=Tr
         has_quote_number = 'quote_number' in df.columns
         has_quote_date = 'quote_date' in df.columns
         has_gst_mode = 'gst_mode' in df.columns
+        has_vendor_phone = 'vendor_phone' in df.columns
         vendor_meta = {}
         for _, r in df.drop_duplicates('vendor_name').iterrows():
             key = r['vendor_name']
@@ -924,6 +925,7 @@ def run_comparison(session_id, on_matrix_ready=None, df=None, fast_moving_avg=Tr
                 "quote_number": (str(r.get('quote_number', '') or '').strip() if has_quote_number else ''),
                 "quote_date": (str(r.get('quote_date', '') or '').strip() if has_quote_date else ''),
                 "gst_mode": (str(r.get('gst_mode', '') or '').strip() if has_gst_mode else ''),
+                "phone": (str(r.get('vendor_phone', '') or '').strip() if has_vendor_phone else ''),
             }
 
         # 2. Space-first matrix: cluster rooms, roll up lighting lumpsum vs itemized.
@@ -1194,6 +1196,8 @@ def mongodb_quotes_to_dataframe(quotes_list: list):
         client_detail = quote_data.get("clientDetail") or {}
         quote_date = str(quote_data.get("quoteDate") or quote_data.get("createdAt") or "")
         gst_mode = gst_mode_from_quote(quote_data)
+        from services.vendor_contact import vendor_phone_from_detail
+        vendor_phone = vendor_phone_from_detail(vendor_detail)
 
         grand_total = 0.0
         for item in quote_data.get("pricingSummary") or []:
@@ -1247,6 +1251,7 @@ def mongodb_quotes_to_dataframe(quotes_list: list):
                         "quote_number": quote_number,
                         "quote_date": quote_date[:10] if len(quote_date) >= 10 else quote_date,
                         "gst_mode": gst_mode,
+                        "vendor_phone": vendor_phone,
                         "grand_total": grand_total,
                         "client_name": client_detail.get("clientName") or "",
                         "service_type": quote_service_type,

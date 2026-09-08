@@ -6,7 +6,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import CompareLoadingPanel, {
   type CompareProgressStage,
 } from "../../components/CompareLoadingPanel";
-import VendorInsights from "../../components/VendorInsights";
+import AskVendors from "../../components/compare/AskVendors";
 import RecommendationView from "../../components/RecommendationView";
 import VendorSummary from "../../components/compare/VendorSummary";
 import ComparisonMatrix from "../../components/compare/ComparisonMatrix";
@@ -996,10 +996,16 @@ function QuoteSenseContent() {
         )}
 
         {tableData.length > 0 && vendors.length > 0 && (
-          <VendorInsights
-            tableData={tableData}
+          <AskVendors
             vendors={vendors}
-            meta={vendorMeta}
+            vendorMeta={vendorMeta}
+            spaceNotes={spaceNotes}
+            crossScope={crossScope}
+            rows={[
+              ...(spaceTier.length ? spaceTier : tableData),
+              ...projectTier,
+            ]}
+            storageKey={sessionId ? `qs-ask-vendors:${sessionId}` : undefined}
           />
         )}
 

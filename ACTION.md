@@ -335,3 +335,11 @@ identity remain **hard overrides** on model confidence (§1). Matching still
 happens on `service_id` / `sub_service_id` / `pricing_method_id` first; label
 similarity is a fallback and is never the primary signal for placing a line in
 a room.
+
+### 13.9 A generic word plus a room noun is still a room
+
+`Common Washroom` / `Common Bathroom` are rooms, not `BUNDLE_NOT_DECOMPOSABLE`
+zones. Plumbing plus tiling in a washroom is normal room scope. A catch-all
+stays a catch-all only when the label is a generic word without a room-type
+noun (`Common`, `General`, `Whole home electrical`). Do not lower the zone
+line or trade thresholds to compensate.

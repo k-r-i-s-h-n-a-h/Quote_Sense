@@ -310,7 +310,113 @@ def test_project_wide_items_have_no_room():
         assert resolve_space({"space_raw": raw})["space"] == "Project-level"
 
 
-def test_run_comparison_omits_moving_average(monkeypatch):
+def test_expanded_scope_qualifier_still_joins_the_same_room():
+    """Living-area false ceiling that later names bedrooms stays one living space.
+
+    The quantity sentence (400 vs 950 sqft) only works if both labels share
+    `space_id`. The extra rooms in the qualifier must not mint a new cluster.
+    """
+    living = resolve_space({"space_raw": "Living area"})
+    expanded = resolve_space({"space_raw": "Living area & All Bedrooms"})
+    assert living["space_id"] == "living"
+    assert expanded["space_id"] == "living"
+    mapping = cluster_spaces_heuristic(
+        ["Living area", "Living area & All Bedrooms"]
+    )
+    assert (
+        mapping["Living area"]["cluster_id"]
+        == mapping["Living area & All Bedrooms"]["cluster_id"]
+    )
+
+
+def test_same_vendor_revision_drop_surfaces_as_na(monkeypatch):
+    """A line removed in a revision must stay visible as a genuine N/A gap.
+
+    Same company, two quote numbers. Existing fixtures all used two companies.
+    """
+    monkeypatch.setattr(
+        "services.comparator._generate_recommendation",
+        lambda prompt, chart, bundles=None: "- **Stub:** ok.",
+    )
+    from services.comparator import run_comparison
+
+    company = "EXCESS INTERIORS"
+    q1, q2 = "QCN21BW", "Q4GPZNM"
+    v1, v2 = f"{company} ({q1})", f"{company} ({q2})"
+
+    def line(quote, vendor_key, **kwargs):
+        row = {
+            "vendor_name": vendor_key,
+            "company": company,
+            "source_filename": quote,
+            "quote_number": quote,
+            "grand_total": 0,
+            "service_category": "Interiors",
+            "service_type": "midlevel",
+            "description": "",
+            "pricing_method": "Area – Direct Entry (sq ft)",
+            "work_title": kwargs.get("space_raw", ""),
+            "quantity": 1.0,
+            "rate": 0.0,
+        }
+        row.update(kwargs)
+        return row
+
+    df = pd.DataFrame(
+        [
+            line(
+                q1,
+                v1,
+                sub_service="Flooring tiles",
+                item_name="Flooring tiles",
+                space_raw="Ground Floor Bedroom 1",
+                quantity=200,
+                rate=530,
+                amount=106000.0,
+                grand_total=186000.0,
+            ),
+            line(
+                q1,
+                v1,
+                sub_service="Wardrobe",
+                item_name="Wardrobe",
+                space_raw="Ground Floor Bedroom 1",
+                quantity=50,
+                rate=1600,
+                amount=80000.0,
+                grand_total=186000.0,
+            ),
+            line(
+                q2,
+                v2,
+                sub_service="Wardrobe",
+                item_name="Wardrobe",
+                space_raw="Ground Floor Bedroom 1",
+                quantity=50,
+                rate=1600,
+                amount=80000.0,
+                grand_total=80000.0,
+            ),
+        ]
+    )
+    out = run_comparison("revision-drop", df=df)
+    assert "error" not in out
+    flooring = [
+        row
+        for row in out["spaceTier"]
+        if "floor" in str(row.get("sub_service") or "").casefold()
+        or "tile" in str(row.get("sub_service") or "").casefold()
+    ]
+    assert flooring, "dropped flooring must remain on the matrix as a gap"
+    row = flooring[0]
+    assert row[v1] == 106000
+    assert row[v2] == 0
+    assert row["coverage"][v1] == "quoted"
+    assert row["coverage"][v2] == "not_quoted"
+    assert "did not quote" in row["summary"]
+    assert row.get("match_tier") != "BUNDLE_NOT_DECOMPOSABLE"
+    assert out["reconciliation"]["ok"] is True
+
     monkeypatch.setattr(
         "services.comparator._generate_recommendation",
         lambda prompt, chart, bundles=None: "- **Lowest Total:** Excess is cheaper.",

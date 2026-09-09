@@ -157,7 +157,8 @@ labour is not a comparison.
 `bundle_zone_map` marks a space `BUNDLE_NOT_DECOMPOSABLE` when all of:
 
 - the space label is generic (`Common`, `Miscellaneous`, `Others`, …) rather
-  than a room,
+  than a room. A generic word plus a room-type noun (`Common Washroom`,
+  `Common Bathroom`) is a room, not a catch-all; bare `Common` still is,
 - its lines span ≥ `BUNDLE_ZONE_MIN_CATEGORIES` distinct trades from the fixed
   `TRADE_CATEGORIES` list, and
 - it holds ≥ `BUNDLE_ZONE_MIN_LINES` lines.

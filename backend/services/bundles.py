@@ -134,6 +134,16 @@ _GENERIC_ZONE_RE = re.compile(
     re.I,
 )
 
+# A generic word plus a room-type noun is a room ("Common Washroom"), not a
+# catch-all. Bare "Common" / "General" / "Whole home electrical" still qualify.
+_ROOM_NOUN_RE = re.compile(
+    r"\b(washrooms?|bathrooms?|toilets?|bedrooms?|kitchens?|closets?|"
+    r"dressing|balcon(?:y|ies)|pooja|utility|stores?|storage|halls?|"
+    r"living|dining|foyers?|lobb(?:y|ies)|stud(?:y|ies)|offices?|"
+    r"garages?|terraces?|verandahs?|verandas?|decks?)\b",
+    re.I,
+)
+
 # Below this a "zone" is just a couple of stray lines, not a bundled scope.
 BUNDLE_ZONE_MIN_LINES = 3
 BUNDLE_ZONE_MIN_CATEGORIES = 2
@@ -164,7 +174,12 @@ def trade_category_of(row: dict[str, Any]) -> str:
 
 
 def _is_generic_zone(label: str) -> bool:
-    return bool(_GENERIC_ZONE_RE.search(str(label or "")))
+    text = str(label or "")
+    if not _GENERIC_ZONE_RE.search(text):
+        return False
+    if _ROOM_NOUN_RE.search(text):
+        return False
+    return True
 
 
 def bundle_zone_map(df) -> dict[tuple[str, str], list[str]]:

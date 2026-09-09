@@ -3,6 +3,7 @@ import {
   buildAskVendorPanels,
   buildVendorQuestions,
   formatVendorBrief,
+  whatsappPayloadForPanel,
 } from "../vendor-questions";
 
 const A = "EXCESS INTERIORS (QCN21BW)";
@@ -180,5 +181,23 @@ describe("formatVendorBrief", () => {
     expect(brief).toContain("1. Break out Common.");
     expect(brief).not.toContain("Confirm GST");
     expect(brief).toContain("Also: who supplies the WC?");
+  });
+
+  it("treats empty notes as a dash so the template can still send", () => {
+    const payload = whatsappPayloadForPanel(
+      {
+        key: A,
+        title: "Ask EXCESS",
+        subtitle: "Quote #Q1",
+        company: "EXCESS INTERIORS",
+        quoteNumber: "QCN21BW",
+        phone: "9513158197",
+        questions: [{ id: "a", text: "Confirm GST.", why: "" }],
+      },
+      ["a"],
+      ""
+    );
+    expect(payload.notes).toBe("—");
+    expect(payload.questions).toContain("Confirm GST");
   });
 });

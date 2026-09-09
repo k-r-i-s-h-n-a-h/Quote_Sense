@@ -7,8 +7,6 @@ import type { CrossScopeRow, SpaceNote, SpaceRow, Vendor } from "../../lib/compa
 import {
   buildAskVendorPanels,
   formatVendorBrief,
-  formatWhatsAppPreview,
-  whatsappPayloadForPanel,
   type AskVendorPanel,
 } from "../../lib/vendor-questions";
 
@@ -116,6 +114,8 @@ export default function AskVendors({
   );
   const [copiedKey, setCopiedKey] = useState("");
   const [waKey, setWaKey] = useState("");
+  const [waMessage, setWaMessage] = useState("");
+  const [sendingKey, setSendingKey] = useState("");
 
   useEffect(() => {
     try {
@@ -179,15 +179,41 @@ export default function AskVendors({
 
   const sendWhatsApp = async (panel: AskVendorPanel) => {
     const state = byPanel[panel.key] || { checked: [], notes: "" };
-    const payload = whatsappPayloadForPanel(panel, state.checked, state.notes);
-    const text = formatWhatsAppPreview(payload);
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch {
-      /* still show status */
+    if (!panel.phone) {
+      setWaKey(panel.key);
+      setWaMessage("No vendor phone on this quote yet.");
+      return;
     }
+    const chosen = panel.questions
+      .filter((q) => state.checked.includes(q.id))
+      .map((q) => q.text);
+    if (!chosen.length) return;
+    setSendingKey(panel.key);
     setWaKey(panel.key);
-    window.setTimeout(() => setWaKey(""), 4000);
+    setWaMessage("Sending…");
+    try {
+      const res = await fetch("/api/ask-vendors/whatsapp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          phone: panel.phone,
+          vendor_name: panel.company,
+          quote_number: panel.quoteNumber,
+          questions: chosen,
+          notes: state.notes || "",
+        }),
+      });
+      const data = (await res.json()) as { status?: string };
+      if (!res.ok || data.status === "error") {
+        setWaMessage("Couldn’t send WhatsApp. Try again or copy the questions.");
+        return;
+      }
+      setWaMessage("Sent.");
+    } catch {
+      setWaMessage("Couldn’t send WhatsApp. Try again or copy the questions.");
+    } finally {
+      setSendingKey("");
+    }
   };
 
   return (
@@ -240,11 +266,13 @@ export default function AskVendors({
                 <button
                   type="button"
                   onClick={() => sendWhatsApp(panel)}
-                  disabled={!state.checked.length}
+                  disabled={!state.checked.length || !panel.phone || sendingKey === panel.key}
                   className="qs-btn inline-flex items-center gap-2 !bg-[#25D366] !text-white hover:!bg-[#1ebe5d] disabled:opacity-50"
                 >
                   <WhatsAppIcon className="w-4 h-4 text-white" />
-                  WhatsApp {panel.company}
+                  {sendingKey === panel.key
+                    ? "Sending…"
+                    : `WhatsApp ${panel.company}`}
                 </button>
                 <p className="text-[11px] text-stone-400">
                   {state.checked.length} selected
@@ -253,12 +281,8 @@ export default function AskVendors({
                     : " · no phone on this quote yet"}
                 </p>
               </div>
-              {waKey === panel.key ? (
-                <p className="mt-2 text-xs text-stone-500">
-                  {panel.phone
-                    ? `Ready for MSG91 to ${panel.phone} — message copied. Template not connected yet.`
-                    : "No vendor phone on this quote yet. Message copied; MSG91 send needs the number first."}
-                </p>
+              {waKey === panel.key && waMessage ? (
+                <p className="mt-2 text-xs text-stone-500">{waMessage}</p>
               ) : null}
             </div>
           );

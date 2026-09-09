@@ -355,6 +355,14 @@ class ChatRequest(BaseModel):
     message: str
 
 
+class AskVendorWhatsAppRequest(BaseModel):
+    phone: str
+    vendor_name: str
+    quote_number: str = ""
+    questions: List[str]
+    notes: str = ""
+
+
 @app.get("/")
 def read_root():
     return {"status": "QuoteSense Backend is running perfectly! 🚀"}
@@ -1511,6 +1519,27 @@ async def get_existing_comparison(session_id: str):
     comparison_result = await run_in_threadpool(run_comparison, session_id)
 
     return _comparison_api_payload(comparison_result, session_id=session_id)
+
+
+@app.post("/api/ask-vendors/whatsapp")
+async def send_ask_vendor_whatsapp(request: AskVendorWhatsAppRequest):
+    """One checklist → one vendor. Empty notes send as an em dash."""
+    from services.msg91_whatsapp import WhatsAppSendError, send_ask_vendor
+
+    try:
+        result = send_ask_vendor(
+            phone=request.phone,
+            vendor_name=request.vendor_name,
+            quote_number=request.quote_number,
+            questions=request.questions,
+            notes=request.notes or "",
+        )
+    except WhatsAppSendError as exc:
+        return JSONResponse(
+            {"status": "error", "message": str(exc)},
+            status_code=exc.status_code,
+        )
+    return {"status": "success", **result}
 
 
 @app.post("/api/chat")

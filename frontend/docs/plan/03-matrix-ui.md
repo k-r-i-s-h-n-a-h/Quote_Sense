@@ -139,8 +139,16 @@ room that belongs to one vendor is only on that vendor's list.
 
 The customer ticks what to send, writes notes **on that vendor's card**, then
 **Copy questions** / **WhatsApp {company}** at the **end of that card**. The
-first checklist never goes to the second vendor. MSG91 send is not wired yet;
-the button copies that vendor's preview and uses `vendorMeta.phone` when present.
+first checklist never goes to the second vendor. **WhatsApp {company}** POSTs
+that card only to `/api/ask-vendors/whatsapp` → MSG91. WhatsApp does not
+allow newlines inside a variable, so the approved v2 template
+(`tatvaops_quotesense_ask_vendor_v2_en`) puts each question on its own
+static line (`{{4}}`–`{{6}}`) and notes in `{{7}}`. Until that template is
+approved, the original 5-variable template packs questions as
+`1) … | 2) …`. Empty notes send as `—`. Notes are flattened to one line
+(Meta rejects line breaks in a placeholder). Questions in the packed
+template are clipped to 400 characters, each v2 slot to 220, notes to 200.
+Copy questions still holds the full text.
 
 Ticks and notes persist in `sessionStorage` for the comparison session.
 

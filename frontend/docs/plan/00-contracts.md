@@ -65,6 +65,8 @@ export interface BundleRow {
   basis: Record<Vendor, PriceBasis>;
   placement?: Record<Vendor, "space" | "project" | "bundle" | "mixed" | "none">;
   takeaway?: { kind?: string; text?: string };
+  source_line_ids?: string[];
+  line_ids?: Record<Vendor, string[]>;
   [vendor: string]: unknown;
 }
 

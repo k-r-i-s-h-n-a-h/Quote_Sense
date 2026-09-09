@@ -343,3 +343,17 @@ zones. Plumbing plus tiling in a washroom is normal room scope. A catch-all
 stays a catch-all only when the label is a generic word without a room-type
 noun (`Common`, `General`, `Whole home electrical`). Do not lower the zone
 line or trade thresholds to compensate.
+
+### 13.10 Whole-home is hidden only when that line is already in the recap
+
+A scattered "Same work, different spaces" recap must not blank every
+Whole-home row of the same coarse family. Hide the Whole-home row only when
+its own `source_line_ids` are already in the recap. A whole-home hardware
+line that was never in a kitchen-hardware recap must still print.
+
+### 13.11 Washroom civil work is flagged across containers
+
+Tile, plaster, waterproofing and grouting in a washroom-scoped space are a
+`POSSIBLE_CROSS_SCOPE_MATCH` group (`washroom_civil`), same rule as fixtures
+in §13.5: confirm with vendor, **totals never merged**. Kitchen or living-room
+tiling without a wet-area container is not this group.

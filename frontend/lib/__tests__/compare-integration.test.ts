@@ -197,9 +197,10 @@ describe("golden MatrixV1 payload", () => {
       work_key: "norm:electrical_work",
       [B]: 17700,
     } as SpaceRow;
+    // No lineage: it was never counted in the recap, so it must stay visible.
     expect(
       projectRowsForDisplay([unlabeled], bundleRowsOf(matrix))
-    ).toEqual([]);
+    ).toEqual([unlabeled]);
 
     const quoted = Object.fromEntries(
       (matrix.chartData ?? []).map((point) => [point.vendor, point.total])

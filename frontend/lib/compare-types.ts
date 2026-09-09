@@ -117,6 +117,9 @@ export interface BundleRow {
   placement?: Record<Vendor, "space" | "project" | "bundle" | "mixed" | "none">;
   /** Plain-English package vs itemised note. Absent on scattered recaps. */
   takeaway?: { kind?: "package_higher" | "package_lower"; text?: string };
+  /** Lineage for both vendors. Used to hide Whole-home rows already in a recap. */
+  source_line_ids?: string[];
+  line_ids?: Record<Vendor, string[]>;
   [key: string]: unknown;
 }
 
@@ -328,17 +331,25 @@ export function partitionBundleRows(rows: BundleRow[]): {
   return { lumpSums, scattered };
 }
 
+/** Line ids a matrix row was built from — list or per-vendor map. */
+export function lineIdsOfRow(
+  row: Pick<SpaceRow, "source_line_ids" | "line_ids"> | BundleRow
+): string[] {
+  const listed = (row.source_line_ids ?? [])
+    .map((id) => String(id || "").trim())
+    .filter(Boolean);
+  if (listed.length) return listed;
+  const byVendor = row.line_ids;
+  if (!byVendor || typeof byVendor !== "object") return [];
+  return Object.values(byVendor)
+    .flat()
+    .map((id) => String(id || "").trim())
+    .filter(Boolean);
+}
+
 /**
- * Whole-home rows to paint. Accounting still uses the full project tier.
- *
- * A scattered recap ("Same work, different spaces") already compares a family
- * that one vendor parked in Whole home. Showing those rupees again there looks
- * like a second add. Rows with no family, or a family the recap does not
- * cover (blinds, tissue), stay visible.
- *
- * `bundle_family` is the primary signal. When an older payload omits it, infer
- * lighting/hardware from the work key and labels so Electrical Work / Per Point
- * does not repeat under Whole home after the recap already compared it.
+ * Coarse family when `bundle_family` is missing — used for recap placement
+ * copy, not for hiding Whole-home rows.
  */
 export function familyOfProjectRow(row: SpaceRow): string {
   const explicit = String(row.bundle_family || "").trim();
@@ -365,20 +376,23 @@ export function familyOfProjectRow(row: SpaceRow): string {
   return "";
 }
 
+/**
+ * Whole-home rows to paint. Accounting still uses the full project tier.
+ *
+ * Hide a row only when one of its own line ids is already in a scattered
+ * recap. Sharing a coarse family name with a recap is not enough.
+ */
 export function projectRowsForDisplay(
   projectRows: SpaceRow[],
   bundleRows: BundleRow[]
 ): SpaceRow[] {
   const { scattered } = partitionBundleRows(bundleRows);
-  const recapped = new Set(
-    scattered
-      .map((row) => String(row.bundle_family || "").trim())
-      .filter(Boolean)
-  );
+  const recapped = new Set(scattered.flatMap((row) => lineIdsOfRow(row)));
   if (recapped.size === 0) return projectRows;
   return projectRows.filter((row) => {
-    const family = familyOfProjectRow(row);
-    return !family || !recapped.has(family);
+    const ids = lineIdsOfRow(row);
+    if (ids.length === 0) return true;
+    return !ids.some((id) => recapped.has(id));
   });
 }
 

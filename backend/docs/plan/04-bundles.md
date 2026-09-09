@@ -184,10 +184,14 @@ pair them, so both printed as unrelated N/A blocks, which told the client
 "nobody else quoted this". That was false.
 
 `cross_scope_candidates` classifies lines into `FUNCTIONAL_GROUPS` (bathroom
-fit-out, wardrobe/storage, and so on) and emits a `POSSIBLE_CROSS_SCOPE_MATCH`
+fit-out, wardrobe/storage, structural walls, and washroom civil / tiling)
+and emits a `POSSIBLE_CROSS_SCOPE_MATCH`
 when, for one group, the two vendors' spaces are entirely disjoint and both
 sides exceed `CROSS_SCOPE_MIN_INR`. If any space already holds both vendors,
 nothing is flagged: the space tier is comparing that work honestly.
+`washroom_civil` also requires a wet-area container signal (`bath` / `wash` /
+`toilet` / `wc` on the space label or description) so kitchen or living-room
+tiling is not flagged.
 
 Abstain and flag, in both directions:
 

@@ -162,7 +162,7 @@ model confidence. These tiers add ways to abstain; they do not loosen a guard.
 | `sub_service` | str | Display label for the work. |
 | `pricing_method` | str | |
 | `breakdown` | list | `{vendor, item, amount}` per contributing line. |
-| `bundle_family` | str | S4 family, or `""`. Lets the UI hide Whole-home rows a scattered recap already compares. |
+| `bundle_family` | str | S4 family, or `""`. Whole-home display hides a row only when its `source_line_ids` already sit in a scattered recap, not merely because this family name appears there. |
 | `contained_in` | str | Parent `space_id` when this room is nested (walk-in → mbr). Empty if none. Not a merge. |
 | `measures` | dict | `{ "<vendor>": { quantity, rate, pricing_method, pricing_method_id, description } }` from the payload. Quantity/rate stay 0 when the vendor left them blank. Description is verbatim, not a work list. `pricing_method_id` is what gates quantity language. |
 | `source_line_ids` | list[str] | Every `line_id` this row was built from, both vendors. **Always populated.** |
@@ -190,6 +190,8 @@ model confidence. These tiers add ways to abstain; they do not loosen a guard.
 | `basis` | dict | `{ "<vendor>": "bundle" \| "itemized" \| "none" }` — how each vendor's figure was arrived at. |
 | `placement` | dict | `{ "<vendor>": "space" \| "project" \| "bundle" \| "mixed" \| "none" }` — where those rupees already sit. |
 | `takeaway` | dict or omitted | `{ kind, text }` when one vendor is a package and another is itemised with a large gap. Never on scattered recaps. |
+| `source_line_ids` | list[str] | Every `line_id` this recap was built from. Whole-home display uses this to avoid double-painting those same lines. |
+| `line_ids` | dict | `{ "<vendor>": [line_id, ...] }`. |
 | `<vendor name>` | int | Bundler's lumpsum, or the counterpart's summed itemised lines. |
 
 `basis` is what stops the row from lying. A figure produced by summing five

@@ -54,6 +54,15 @@ FUNCTIONAL_GROUPS: tuple[tuple[str, str, "re.Pattern[str]"], ...] = (
             re.I,
         ),
     ),
+    (
+        "washroom_civil",
+        "Washroom civil / tiling",
+        re.compile(
+            r"\b(?:tiles?|tiling|dado|waterproof(?:ing)?|plaster(?:ing)?|"
+            r"epoxy|grout(?:ing)?)\b",
+            re.I,
+        ),
+    ),
 )
 
 # Below this the pair is noise rather than a decision the client needs.
@@ -65,18 +74,32 @@ CROSS_SCOPE_MIN_INR = 25_000
 _SPACE_PURPOSE = {
     "bathroom_fitout": re.compile(r"bath|wash|toilet|wc", re.I),
     "storage_units": re.compile(r"wardrobe|closet|walkin", re.I),
+    "washroom_civil": re.compile(r"bath|wash|toilet|wc", re.I),
 }
 
 
 def functional_group(row: dict[str, Any]) -> str:
-    """Functional purpose slug for a line, or "" when none applies."""
+    """Functional purpose slug for a line, or "" when none applies.
+
+    `washroom_civil` also needs a wet-area container signal. Tile and plaster
+    keywords show up in kitchens and living rooms constantly; without that
+    gate the group would flag half the quote.
+    """
     blob = " ".join(
         str(row.get(col, "") or "")
         for col in ("sub_service", "item_name", "work_label", "description")
     )
+    place = " ".join(
+        str(row.get(col, "") or "")
+        for col in ("space", "space_raw", "space_id", "description")
+    )
     for slug, _label, pattern in FUNCTIONAL_GROUPS:
-        if pattern.search(blob):
-            return slug
+        if not pattern.search(blob):
+            continue
+        purpose = _SPACE_PURPOSE.get(slug)
+        if slug == "washroom_civil" and purpose and not purpose.search(place):
+            continue
+        return slug
     return ""
 
 

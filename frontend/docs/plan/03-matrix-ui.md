@@ -161,10 +161,12 @@ full company name (no ellipsis) and show `Quote {number}` in the column.
 
 ## Project section
 
-Work with no room, labelled Whole home. Rows whose `bundle_family` is already
-compared in a scattered recap are **not painted** here — the recap is the
-comparison; painting them again looks like a second add. `reconcileQuoteTotals`
-still sums the full `projectTier`.
+Work with no room, labelled Whole home. A row is **not painted** here only
+when one of its own `source_line_ids` already sits in a scattered recap — the
+recap is that line's comparison. Sharing a family name (`hardware`,
+`lighting`) with a recap is not enough; a Whole-home hinges line must still
+show when the recap is some other hardware in two rooms.
+`reconcileQuoteTotals` still sums the full `projectTier`.
 
 ## Abstention tiers and notes
 

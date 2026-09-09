@@ -91,8 +91,9 @@ Everything load-bearing for a decision:
 | `combines: …` on a merged row | a relabelled row that traces back to nothing cannot be checked against the quote |
 
 Whole-home export uses `projectRowsForDisplay`, the same filter as the screen, so
-electrical compared in "Same work, different spaces" is not listed again. The
-export does not paint a Quote total row; grand totals stay on the chart.
+a line already in "Same work, different spaces" is not listed again — other
+Whole-home lines of that family still print. The export does not paint a Quote
+total row; grand totals stay on the chart.
 
 Since colour and hover are unavailable, every state is expressed in text.
 

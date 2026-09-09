@@ -605,7 +605,7 @@ Interactive market guidance demo (not auth-guarded).
 | File | Role |
 |------|------|
 | `components/CompareLoadingPanel.tsx` | Staged progress (extract → matrix → recommend) |
-| `components/VendorChart.tsx` | Recharts bar chart of vendor totals |
+| `components/VendorChart.tsx` | Horizontal bars of billed grand totals per quote |
 | `components/compare/AskVendors.tsx` | Questions the comparison cannot settle + customer notes |
 | `components/RecommendationView.tsx` | AI recommendation bullets |
 | `components/quote/MarketRatePanel.tsx` | Lookup/recommend + low/fair/high verdict UI |

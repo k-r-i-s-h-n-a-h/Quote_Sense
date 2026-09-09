@@ -2,18 +2,8 @@
 
 import { useMemo } from "react";
 import {
-  CartesianGrid,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
-import {
   buildVendorLabels,
   formatInrFull,
-  getChartYAxisConfig,
   truncateLabel,
   type VendorMeta,
 } from "../lib/format";
@@ -22,42 +12,13 @@ import { vendorColor } from "../lib/vendor-colors";
 type ChartRow = { vendor: string; total: number };
 
 type ChartPoint = ChartRow & {
-  key: string;
-  line1: string;
-  line2: string;
+  company: string;
+  quote: string;
   labelFull: string;
   color: string;
+  widthPct: number;
+  note: string;
 };
-
-/** Two-line tilted X-axis tick: company on top, variant / quote no. below. */
-function makeTick(points: ChartPoint[]) {
-  return function VendorXAxisTick(props: {
-    x?: string | number;
-    y?: string | number;
-    index?: number;
-  }) {
-    const { x, y, index } = props;
-    if (x == null || y == null || index == null) return null;
-    const px = Number(x);
-    const py = Number(y);
-    const p = points[index];
-    if (!p) return null;
-    return (
-      <g transform={`translate(${px},${py}) rotate(-38)`}>
-        <text x={0} y={0} textAnchor="end" fill="#57534e" fontSize={9}>
-          <tspan x={0} dy={10} fontWeight={600}>
-            {p.line1}
-          </tspan>
-          {p.line2 ? (
-            <tspan x={0} dy={11} fill="#78716c">
-              {p.line2}
-            </tspan>
-          ) : null}
-        </text>
-      </g>
-    );
-  };
-}
 
 export default function VendorChart({
   data,
@@ -71,102 +32,74 @@ export default function VendorChart({
       data.map((d) => d.vendor),
       meta
     );
-    const seen: Record<string, number> = {};
+    const totals = data.map((d) => Number(d.total) || 0);
+    const max = Math.max(0, ...totals);
+    const positive = totals.filter((t) => t > 0);
+    const min = positive.length ? Math.min(...positive) : 0;
+
     return data.map((row, index) => {
       const info = labels[row.vendor];
-      const company = truncateLabel(info.company, 18);
-      const secondBits: string[] = [];
-      if (info.variant) secondBits.push(truncateLabel(info.variant, 16));
-      if (info.quoteNumber) secondBits.push(`#${info.quoteNumber}`);
-      const line2 = secondBits.join("  ");
+      const total = Number(row.total) || 0;
+      const quoteBits: string[] = [];
+      if (info.quoteNumber) quoteBits.push(`#${info.quoteNumber}`);
+      if (info.quoteDate) quoteBits.push(info.quoteDate);
+      if (info.variant && !info.quoteNumber) {
+        quoteBits.push(truncateLabel(info.variant, 20));
+      }
 
-      const base = info.label;
-      const count = seen[base] ?? 0;
-      seen[base] = count + 1;
-      const key = base + "\u200B".repeat(count);
+      let note = "";
+      if (total <= 0) note = "Not quoted";
+      else if (min === max) note = "Matched totals";
+      else if (total === min) note = "Lowest billed total";
+      else note = `${formatInrFull(total - min)} more than lowest`;
 
       return {
         ...row,
-        key,
-        line1: company,
-        line2,
+        total,
+        company: info.company || row.vendor,
+        quote: quoteBits.join(" · "),
         labelFull: info.full,
         color: vendorColor(index),
+        widthPct: max > 0 ? Math.max(4, (total / max) * 100) : 0,
+        note,
       };
     });
   }, [data, meta]);
 
-  const totals = useMemo(() => data.map((d) => Number(d.total) || 0), [data]);
-  const yAxis = useMemo(() => getChartYAxisConfig(totals), [totals]);
+  if (points.length === 0) return null;
 
   return (
-    <div className="h-[22rem] sm:h-[24rem] w-full">
-      <ResponsiveContainer width="100%" height="100%">
-        <LineChart
-          data={points}
-          margin={{ top: 8, right: 12, left: 8, bottom: 96 }}
-        >
-          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e7e5e4" />
-          <XAxis
-            dataKey="key"
-            interval={0}
-            height={108}
-            tick={makeTick(points)}
-            axisLine={{ stroke: "#d6d3d1" }}
-            tickLine={false}
-          />
-          <YAxis
-            domain={yAxis.domain}
-            ticks={yAxis.ticks}
-            allowDecimals={false}
-            tickFormatter={yAxis.formatTick}
-            tick={{ fontSize: 10, fill: "#78716c" }}
-            width={48}
-            axisLine={false}
-            tickLine={false}
-          />
-          <Tooltip
-            cursor={{ stroke: "#d6d3d1", strokeDasharray: "3 3" }}
-            formatter={(value) => [formatInrFull(Number(value)), "Grand total"]}
-            labelFormatter={(_, payload) => {
-              const row = payload?.[0]?.payload as ChartPoint | undefined;
-              return row?.labelFull ?? "";
-            }}
-            contentStyle={{
-              borderRadius: "8px",
-              border: "1px solid #e7e5e4",
-              fontSize: "13px",
-              boxShadow: "0 4px 12px rgba(28,25,23,0.08)",
-            }}
-          />
-          <Line
-            type="linear"
-            dataKey="total"
-            stroke="#57534e"
-            strokeWidth={2}
-            dot={(props: {
-              cx?: number;
-              cy?: number;
-              payload?: ChartPoint;
-            }) => {
-              const { cx, cy, payload } = props;
-              if (cx == null || cy == null || !payload) return <g />;
-              return (
-                <circle
-                  key={payload.key}
-                  cx={cx}
-                  cy={cy}
-                  r={6}
-                  fill={payload.color}
-                  stroke="#fff"
-                  strokeWidth={2}
-                />
-              );
-            }}
-            activeDot={{ r: 7 }}
-          />
-        </LineChart>
-      </ResponsiveContainer>
-    </div>
+    <ul className="space-y-5" aria-label="Billed grand total per quote">
+      {points.map((p) => (
+        <li key={p.vendor} title={p.labelFull}>
+          <div className="flex items-baseline justify-between gap-4 mb-1.5">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-stone-900 truncate">
+                {p.company}
+              </p>
+              {p.quote ? (
+                <p className="text-xs text-stone-500 mt-0.5 truncate">{p.quote}</p>
+              ) : null}
+            </div>
+            <p className="qs-money text-lg text-stone-900 tabular-nums shrink-0">
+              {p.total > 0 ? formatInrFull(p.total) : "—"}
+            </p>
+          </div>
+          <div
+            className="h-2.5 rounded-full bg-stone-100 overflow-hidden"
+            aria-hidden
+          >
+            <div
+              className="h-full rounded-full transition-[width] duration-300"
+              style={{
+                width: `${p.total > 0 ? p.widthPct : 0}%`,
+                backgroundColor: p.color,
+              }}
+            />
+          </div>
+          <p className="mt-1.5 text-[11px] text-stone-500">{p.note}</p>
+        </li>
+      ))}
+    </ul>
   );
 }

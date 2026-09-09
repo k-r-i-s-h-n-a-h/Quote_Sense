@@ -971,7 +971,7 @@ function QuoteSenseContent() {
           <section className="qs-card p-5 md:p-6">
             <h2 className="qs-section-title">Cost comparison</h2>
             <p className="qs-section-sub mb-4">
-              Grand total across all quoted services per vendor.
+              Billed grand total for each quote.
             </p>
             <VendorChart data={chartData} meta={vendorMeta} />
           </section>

@@ -111,9 +111,10 @@ differ. Cell amounts stay billed totals (GST included).
 
 ## Cost comparison chart
 
-`VendorChart` plots each vendor's billed grand total as a **line** with a
-coloured dot per quote. The Y-axis stays rupees; the X-axis stays the vendor
-labels. This is the same `chartData` as before — only the mark changed.
+`VendorChart` is a **horizontal comparison**: one row per quote, billed
+grand total in rupees, and a bar scaled to the highest total. Two quotes are
+not a time series, so a line chart is not used. The same `chartData` as
+before — only the mark changed.
 
 ## Ask the vendors
 

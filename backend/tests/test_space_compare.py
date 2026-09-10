@@ -480,7 +480,10 @@ def test_mongodb_keeps_nested_object_ids(monkeypatch):
         {
             "quoteNumber": "Q1",
             "quoteType": "midlevel",
-            "vendorDetail": {"companyName": "Excess"},
+            "vendorDetail": {
+                "companyName": "Excess",
+                "emailAddress": "Quotes@Excess.example",
+            },
             "pricingSummary": [{"label": "Grand Total", "value": 1000}],
             "workSummary": [
                 {
@@ -514,6 +517,7 @@ def test_mongodb_keeps_nested_object_ids(monkeypatch):
     assert df.iloc[0]["space_raw"] == "Bedroom 1"
     assert df.iloc[0]["quantity"] == 10
     assert df.iloc[0]["rate"] == 50
+    assert df.iloc[0]["vendor_email"] == "quotes@excess.example"
 
 
 def test_gst_mode_from_work_summary_flags():

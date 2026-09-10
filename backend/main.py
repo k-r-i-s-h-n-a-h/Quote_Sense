@@ -230,10 +230,12 @@ def _unwrap_mongodb_quote(quote_entry: dict) -> dict:
 
 def _mongodb_quote_metadata(quote_data: dict) -> dict:
     """Map TatvaOps MongoDB quote fields to Supabase quotes columns."""
-    from services.vendor_contact import vendor_phone_from_detail
+    from services.vendor_contact import (
+        vendor_email_from_quote,
+        vendor_phone_from_quote,
+    )
 
     client_detail = quote_data.get("clientDetail") or {}
-    vendor_detail = quote_data.get("vendorDetail") or {}
     quote_number = str(quote_data.get("quoteNumber") or "").lstrip("#").strip()
     client_name = (
         client_detail.get("clientName")
@@ -246,7 +248,8 @@ def _mongodb_quote_metadata(quote_data: dict) -> dict:
         "client_name": client_name,
         "quote_date": _format_quote_date(raw_date),
         "source_filename": quote_number or "DIRECT_SYNC",
-        "vendor_phone": vendor_phone_from_detail(vendor_detail),
+        "vendor_phone": vendor_phone_from_quote(quote_data),
+        "vendor_email": vendor_email_from_quote(quote_data),
     }
 
 
@@ -357,6 +360,14 @@ class ChatRequest(BaseModel):
 
 class AskVendorWhatsAppRequest(BaseModel):
     phone: str
+    vendor_name: str
+    quote_number: str = ""
+    questions: List[str]
+    notes: str = ""
+
+
+class AskVendorEmailRequest(BaseModel):
+    email: str
     vendor_name: str
     quote_number: str = ""
     questions: List[str]
@@ -1048,7 +1059,10 @@ async def sync_mongodb_quotes(payload: Any=Body(...), session_id: str = None): #
                     grand_total = item.get("value", 0)
 
             # Push to Supabase 'quotes' table
-            from services.vendor_contact import vendor_phone_from_detail
+            from services.vendor_contact import (
+                vendor_email_from_quote,
+                vendor_phone_from_quote,
+            )
 
             quote_res = get_supabase_client().table("quotes").insert({
                 "vendor_name": vendor_detail.get("companyName", "Unknown Vendor"),
@@ -1056,7 +1070,8 @@ async def sync_mongodb_quotes(payload: Any=Body(...), session_id: str = None): #
                 "session_id": session_id,
                 "source_type": "mongodb_integrated",
                 "source_filename": data.get("quoteNumber", "DIRECT_SYNC"),
-                "vendor_phone": vendor_phone_from_detail(vendor_detail),
+                "vendor_phone": vendor_phone_from_quote(data),
+                "vendor_email": vendor_email_from_quote(data),
             }).execute()
             
             quote_id = quote_res.data[0]['id']
@@ -1157,7 +1172,10 @@ async def sync_mongodb_quotes(payload: Any = Body(...), session_id: str = None):
                     grand_total = item.get("value", 0)
 
             # --- STEP 1: PUSH TO 'quotes' TABLE ---
-            from services.vendor_contact import vendor_phone_from_detail
+            from services.vendor_contact import (
+                vendor_email_from_quote,
+                vendor_phone_from_quote,
+            )
 
             quote_res = get_supabase_client().table("quotes").insert({
                 "vendor_name": vendor_detail.get("companyName", "Unknown Vendor"),
@@ -1165,7 +1183,8 @@ async def sync_mongodb_quotes(payload: Any = Body(...), session_id: str = None):
                 "session_id": session_id,
                 "source_type": "mongodb_integrated",
                 "source_filename": data.get("quoteNumber", "DIRECT_SYNC"),
-                "vendor_phone": vendor_phone_from_detail(vendor_detail),
+                "vendor_phone": vendor_phone_from_quote(data),
+                "vendor_email": vendor_email_from_quote(data),
                 #"quote_number": data.get("quoteNumber", "DIRECT_SYNC")
             }).execute()
             
@@ -1295,16 +1314,37 @@ def _ingest_quotes_to_supabase(quotes_list: list, session_id: str) -> int:
             "source_type": "mongodb_integrated",
             "source_filename": meta["source_filename"],
             "vendor_phone": meta.get("vendor_phone") or "",
+            "vendor_email": meta.get("vendor_email") or "",
             "market_rates_applied_at": datetime.now(timezone.utc).isoformat() if is_rate_duplicate else None,
         }
-        try:
-            quote_res = get_supabase_client().table("quotes").insert(insert_payload).execute()
-        except Exception as e:
-            if "vendor_phone" in str(e):
-                insert_payload.pop("vendor_phone", None)
-                quote_res = get_supabase_client().table("quotes").insert(insert_payload).execute()
-            else:
-                raise
+        phone_on = "yes" if insert_payload["vendor_phone"] else "missing"
+        email_on = "yes" if insert_payload["vendor_email"] else "missing"
+        print(
+            f"  -> {vendor_name} #{quote_number or '—'} "
+            f"contact phone={phone_on} email={email_on}"
+        )
+        while True:
+            try:
+                quote_res = (
+                    get_supabase_client()
+                    .table("quotes")
+                    .insert(insert_payload)
+                    .execute()
+                )
+                break
+            except Exception as exc:
+                message = str(exc)
+                missing = next(
+                    (
+                        column
+                        for column in ("vendor_email", "vendor_phone")
+                        if column in insert_payload and column in message
+                    ),
+                    "",
+                )
+                if not missing:
+                    raise
+                insert_payload.pop(missing, None)
 
         if not quote_res.data:
             continue
@@ -1535,6 +1575,27 @@ async def send_ask_vendor_whatsapp(request: AskVendorWhatsAppRequest):
             notes=request.notes or "",
         )
     except WhatsAppSendError as exc:
+        return JSONResponse(
+            {"status": "error", "message": str(exc)},
+            status_code=exc.status_code,
+        )
+    return {"status": "success", **result}
+
+
+@app.post("/api/ask-vendors/email")
+async def send_ask_vendor_email(request: AskVendorEmailRequest):
+    """Send one vendor's selected clarification brief through MSG91 Email."""
+    from services.msg91_email import EmailSendError, send_ask_vendor_email
+
+    try:
+        result = send_ask_vendor_email(
+            email=request.email,
+            vendor_name=request.vendor_name,
+            quote_number=request.quote_number,
+            questions=request.questions,
+            notes=request.notes or "",
+        )
+    except EmailSendError as exc:
         return JSONResponse(
             {"status": "error", "message": str(exc)},
             status_code=exc.status_code,

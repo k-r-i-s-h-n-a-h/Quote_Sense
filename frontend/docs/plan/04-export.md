@@ -92,8 +92,10 @@ Everything load-bearing for a decision:
 
 Whole-home export uses `projectRowsForDisplay`, the same filter as the screen, so
 a line already in "Same work, different spaces" is not listed again — other
-Whole-home lines of that family still print. The export does not paint a Quote
-total row; grand totals stay on the chart.
+Whole-home lines of that family still print. A suppressed line is named with
+its amount beneath that recap from `project_items`; it cannot survive only as
+an anonymous share of a family total. The export does not paint a Quote total
+row; grand totals stay on the chart.
 
 Since colour and hover are unavailable, every state is expressed in text.
 

@@ -52,7 +52,7 @@ QuoteSense:
 
 - **AI PDF extraction** — Gemini Vision → taxonomy-constrained JSON → Supabase `quotes` / `quote_items`.
 - **Tatva Mongo sync compare** — Project hub payloads (or server-side Tatva fetch) → async compare job with progress polling.
-- **Cost matrix & charts** — Category / sub-service breakdown, Recharts vendor totals, relative insights.
+- **Comparison matrix** — Space-first category / work breakdown with vendor totals and client-safety guards.
 - **AI recommendation + chat** — Gemini report over the comparison session; `/api/chat` Q&A.
 - **Market rates** — Bundle-keyed moving averages (`service_type` + category + sub-service + pricing method); vendor-form suggest/by-category; finalize-only writes.
 - **Auth** — WhatsApp OTP and PM JWT SSO via Next.js BFF → Tatva Users API.
@@ -66,7 +66,7 @@ QuoteSense:
 | Layer | Stack |
 |-------|--------|
 | Backend | Python 3.10+, FastAPI, Uvicorn, Pydantic, Google Genai, Pandas, Supabase client, httpx, PyMuPDF |
-| Frontend | Next.js 16.1.6, React 19, TypeScript, Tailwind CSS 4, Recharts, jsPDF, Vitest |
+| Frontend | Next.js 16.1.6, React 19, TypeScript, Tailwind CSS 4, jsPDF, Vitest |
 | Data | Supabase PostgreSQL |
 | Auth / PM | Tatva Users + Vendor APIs (`devopsapi.withtatva.ai`) |
 | Hosting | Frontend → Vercel; Backend → Render; DB → Supabase |
@@ -244,7 +244,7 @@ cd frontend && ./run_dev.sh         # http://localhost:3000
  → /compare?projectId=&quotes=
  → resolveQuotesForCompare (sessionStorage cache → BFF)
  → POST /api/compare/sync-mongodb → poll FastAPI /api/progress/:session_id
- → VendorChart + matrix + AskVendors + RecommendationView + chat + PDF export
+ → VendorSummary + matrix + AskVendors + RecommendationView + chat + PDF export
 ```
 
 ### Compare lanes (`compare-lane.ts`)
@@ -533,7 +533,7 @@ Loads project+quotes; canonicalizes to public code; renders `ProjectHub`.
 
 #### `frontend/app/compare/page.tsx` (~1002 lines)
 
-Main compare UX: lane detection, job start/poll, matrix, chart, insights, recommendation, chat, PDF download.  
+Main compare UX: lane detection, job start/poll, vendor overview, matrix, vendor questions, recommendation, chat, PDF download.
 **Exports:** `Home`, `QuoteSenseContent`, helpers.
 
 #### `frontend/app/compare/loading.tsx`
@@ -556,6 +556,8 @@ Interactive market guidance demo (not auth-guarded).
 | `app/api/projects/route.ts` | `GET` | Multi-page merge; `X-Projects-*` headers |
 | `app/api/projects/[projectId]/quotes/route.ts` | `GET` | Quotes + finalize/catalog side effects + dual badges |
 | `app/api/compare/sync-mongodb/route.ts` | `POST` | CORS-safe compare start |
+| `app/api/ask-vendors/email/route.ts` | `POST` | One-vendor clarification email → backend MSG91 |
+| `app/api/ask-vendors/whatsapp/route.ts` | `POST` | One-vendor WhatsApp → backend MSG91 |
 | `app/api/market-rate/apply-finalized/route.ts` | `POST` | Finalized → MA |
 
 ---
@@ -570,7 +572,8 @@ Interactive market guidance demo (not auth-guarded).
 | `components/AuthPageLayout.tsx` | Centered auth card + `inputClass` + legal footer |
 | `components/TatvaLogo.tsx` | Brand mark / link |
 | `components/TatvaEcosystemMenu.tsx` | Ops/Connect/Direct/Finance/Vantage/Vision switcher |
-| `components/WhatsAppIcon.tsx` | WhatsApp SVG for OTP CTAs |
+| `components/WhatsAppIcon.tsx` | WhatsApp SVG for OTP CTAs and Ask vendors |
+| `components/MailIcon.tsx` | Envelope SVG for Ask-the-vendors email CTA |
 | `components/WelcomeNameModal.tsx` | Blocking name capture via profile PUT |
 | `components/ProfileModal.tsx` | Edit name/username/email |
 | `components/LoginModal.tsx` | Modal OTP login (alternate to `/login`) |
@@ -605,8 +608,8 @@ Interactive market guidance demo (not auth-guarded).
 | File | Role |
 |------|------|
 | `components/CompareLoadingPanel.tsx` | Staged progress (extract → matrix → recommend) |
-| `components/VendorChart.tsx` | Horizontal bars of billed grand totals per quote |
-| `components/compare/AskVendors.tsx` | Questions the comparison cannot settle + customer notes |
+| `components/compare/VendorSummary.tsx` | One total-at-a-glance card per quote |
+| `components/compare/AskVendors.tsx` | Questions the comparison cannot settle; copy / email / WhatsApp |
 | `components/RecommendationView.tsx` | AI recommendation bullets |
 | `components/quote/MarketRatePanel.tsx` | Lookup/recommend + low/fair/high verdict UI |
 
@@ -708,6 +711,7 @@ Base tables (`quotes`, `quote_items`, `market_moving_averages`) are assumed to e
 | `supabase/migrations/002_market_rate_bundle.sql` | Bundle columns: `pricing_method`, `rate_moving_average`, `service_type` on MA; item fields + index |
 | `supabase/migrations/003_market_rate_tier_multipliers.sql` | **Deprecated historical** synthetic MID/LUXURY multipliers — removed by 006 |
 | `supabase/migrations/011_quotes_vendor_phone.sql` | Adds `quotes.vendor_phone` for WhatsApp send |
+| `supabase/migrations/012_quotes_vendor_email.sql` | Adds `quotes.vendor_email` for private vendor email briefs |
 | `supabase/migrations/005_fix_placeholder_rate_junk.sql` | Deletes MA rows with `rate_moving_average <= 1` |
 | `supabase/migrations/006_remove_tier_multiplier_math.sql` | Deletes `TIER_MULTIPLIER_%` synthetic rows |
 | `supabase/migrations/007_seed_interiors_base_rates.sql` | Truncates MA tables; seeds ~19 Interiors bundles × 3 tiers |

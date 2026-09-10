@@ -79,6 +79,8 @@ export type VendorMeta = {
   gst_mode?: "exclusive" | "inclusive" | "mixed" | "";
   /** Vendor contact from the quote payload. Empty when none was stored. */
   phone?: string;
+  /** Vendor email from the quote payload. Empty when none was stored. */
+  email?: string;
 };
 
 export type VendorLabel = {

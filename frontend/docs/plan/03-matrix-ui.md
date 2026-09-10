@@ -109,12 +109,11 @@ Column chips `Entered excl. GST` / `Entered incl. GST` come from
 `vendorMeta.gst_mode`. A banner above the table fires only when those modes
 differ. Cell amounts stay billed totals (GST included).
 
-## Cost comparison chart
+## Vendor totals
 
-`VendorChart` is a **horizontal comparison**: one row per quote, billed
-grand total in rupees, and a bar scaled to the highest total. Two quotes are
-not a time series, so a line chart is not used. The same `chartData` as
-before — only the mark changed.
+`VendorSummary` is the only total-at-a-glance section. Do not add a separate
+Cost comparison chart: it repeats the same two grand totals and pushes the
+comparison matrix farther down the page.
 
 ## Ask the vendors
 
@@ -139,9 +138,25 @@ headed `Ask {company}` with that quote number. A bundled zone or unassigned
 room that belongs to one vendor is only on that vendor's list.
 
 The customer ticks what to send, writes notes **on that vendor's card**, then
-**Copy questions** / **WhatsApp {company}** at the **end of that card**. The
-first checklist never goes to the second vendor. **WhatsApp {company}** POSTs
-that card only to `/api/ask-vendors/whatsapp` → MSG91. WhatsApp does not
+**Copy questions** / **Email {company}** / **WhatsApp {company}** at the **end
+of that card**. The first checklist never goes to the second vendor.
+
+**Email {company}** POSTs that card only to `/api/ask-vendors/email` → MSG91
+Email. The body is the full ticked list plus notes (variable length — no
+WhatsApp 1024-character cap). MSG91 template
+`tatvaops_quotesense_vendor_clarifications` (id in
+`MSG91_ASK_VENDOR_EMAIL_TEMPLATE`) uses Handlebars:
+
+- `{{vendor_name}}`, `{{quote_number}}`, `{{question_count}}`
+- `{{#each questions}}{{number}}. {{text}}{{/each}}`
+- `{{#if has_notes}}{{notes}}{{/if}}`
+
+From is `info@mail.withtatva.ai` on verified domain `mail.withtatva.ai`.
+Reply-To is `contact@withtatva.ai`. Template name
+`tatvaops_quotesense_vendor_clarifications` is the default
+`MSG91_ASK_VENDOR_EMAIL_TEMPLATE` value after MSG91 approval.
+
+**WhatsApp {company}** POSTs that card only to `/api/ask-vendors/whatsapp` → MSG91. WhatsApp does not
 allow newlines inside a variable, so the approved v2 template
 (`tatvaops_quotesense_ask_vendor_v2_en`) puts each question on its own
 static line (`{{4}}`–`{{6}}`) and notes in `{{7}}`. Until that template is
@@ -150,6 +165,16 @@ approved, the original 5-variable template packs questions as
 (Meta rejects line breaks in a placeholder). Questions in the packed
 template are clipped to 400 characters, each v2 slot to 220, notes to 200.
 Copy questions still holds the full text.
+
+Outbound text is vendor-private. A card may name that vendor's own quote,
+space and scope, but must never contain the other vendor's company, quote
+number, space label, price or contact. Cross-scope findings therefore become
+one question per vendor about that vendor's own container. The customer-facing
+matrix may still show both sides.
+
+Email sends this same vendor-specific clarification brief, not the comparison
+report. `vendorMeta.email` comes from `quotes.vendor_email` (Tatva
+`vendorDetail` or a printed PDF header). Empty when the source had none.
 
 Ticks and notes persist in `sessionStorage` for the comparison session.
 
@@ -166,6 +191,9 @@ when one of its own `source_line_ids` already sits in a scattered recap — the
 recap is that line's comparison. Sharing a family name (`hardware`,
 `lighting`) with a recap is not enough; a Whole-home hinges line must still
 show when the recap is some other hardware in two rooms.
+When a Whole-home line really is absorbed, the recap names it and its amount
+from `project_items`; a family total alone is not proof to the reader that the
+line survived. A merged row is kept if any of its source lines is not recapped.
 `reconcileQuoteTotals` still sums the full `projectTier`.
 
 ## Abstention tiers and notes

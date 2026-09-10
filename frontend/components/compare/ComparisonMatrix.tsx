@@ -23,6 +23,7 @@ import {
   parseCellStatus,
   partitionBundleRows,
   projectRowsForDisplay,
+  recapProjectItems,
   recapPlacementNote,
   recapPlacementNotes,
   reconciliationBlockReason,
@@ -259,6 +260,8 @@ export default function ComparisonMatrix({
             {vendors.map((vendor, vIdx) => {
               const value = amountOf(bundle, vendor);
               const note = bundlePriceNote(bundle, vendor);
+              const projectItems =
+                accent === "sky" ? recapProjectItems(bundle, vendor) : [];
               return (
                 <td
                   key={vIdx}
@@ -272,6 +275,16 @@ export default function ComparisonMatrix({
                       {note ? (
                         <div className="text-[10px] text-stone-500 mt-0.5 normal-case">
                           {note}
+                        </div>
+                      ) : null}
+                      {projectItems.length ? (
+                        <div className="mt-1.5 text-[10px] leading-snug text-stone-600 normal-case">
+                          {projectItems.map((item) => (
+                            <div key={item.line_id}>
+                              Whole home: {item.label} ·{" "}
+                              {formatInrFull(item.amount)}
+                            </div>
+                          ))}
                         </div>
                       ) : null}
                     </>

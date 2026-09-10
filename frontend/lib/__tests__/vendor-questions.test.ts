@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildAskVendorPanels,
   buildVendorQuestions,
+  emailPayloadForPanel,
   formatVendorBrief,
   whatsappPayloadForPanel,
 } from "../vendor-questions";
@@ -48,9 +49,13 @@ describe("buildVendorQuestions", () => {
     expect(qs.some((q) => q.id === "bundle:common")).toBe(true);
   });
 
-  it("adds a possible cross-scope match without merging totals", () => {
+  it("creates one anonymized cross-scope question per vendor", () => {
     const qs = buildVendorQuestions({
       vendors: [A, B],
+      vendorMeta: {
+        [A]: { company: "EXCESS INTERIORS", quote_number: "QCN21BW" },
+        [B]: { company: "INT360 DESIGN", quote_number: "Q1K7W0G" },
+      },
       crossScope: [
         {
           group: "bathroom_fitout",
@@ -63,10 +68,18 @@ describe("buildVendorQuestions", () => {
         },
       ],
     });
-    const q = qs.find((item) => item.id === "cross:bathroom_fitout");
-    expect(q?.text).toMatch(/Walkin Closet/);
-    expect(q?.text).toMatch(/First Floor Bathroom/);
-    expect(q?.text).toMatch(/did not merge/);
+    const forA = qs.find((item) => item.id === `cross:bathroom_fitout:${A}`);
+    const forB = qs.find((item) => item.id === `cross:bathroom_fitout:${B}`);
+    expect(forA?.text).toContain("Walkin Closet");
+    expect(forA?.text).toContain("#QCN21BW");
+    expect(forA?.text).not.toContain("INT360");
+    expect(forA?.text).not.toContain("First Floor Bathroom");
+    expect(forB?.text).toContain("First Floor Bathroom");
+    expect(forB?.text).toContain("#Q1K7W0G");
+    expect(forB?.text).not.toContain("EXCESS");
+    expect(forB?.text).not.toContain("Walkin Closet");
+    expect(forA?.vendors).toEqual([A]);
+    expect(forB?.vendors).toEqual([B]);
   });
 
   it("flags unit vs area pricing as a quantity question", () => {
@@ -139,11 +152,13 @@ describe("buildAskVendorPanels", () => {
           company: "EXCESS INTERIORS",
           quote_number: "QCN21BW",
           phone: "9876543210",
+          email: "quotes@excess.example",
         },
         [B]: {
           company: "INT360 DESIGN",
           quote_number: "Q1K7W0G",
           phone: "9123456789",
+          email: "sales@int360.example",
         },
       },
       spaceNotes: [
@@ -165,6 +180,48 @@ describe("buildAskVendorPanels", () => {
     expect(panels[1].questions.some((q) => q.id === "bundle:common")).toBe(true);
     expect(panels[0].phone).toBe("9876543210");
     expect(panels[1].phone).toBe("9123456789");
+    expect(panels[0].email).toBe("quotes@excess.example");
+    expect(panels[1].email).toBe("sales@int360.example");
+  });
+
+  it("never puts the other vendor's identity in an outbound checklist", () => {
+    const { panels } = buildAskVendorPanels({
+      vendors: [A, B],
+      vendorMeta: {
+        [A]: {
+          company: "EXCESS INTERIORS",
+          quote_number: "QCN21BW",
+        },
+        [B]: {
+          company: "INT360 DESIGN",
+          quote_number: "Q1K7W0G",
+        },
+      },
+      crossScope: [
+        {
+          group: "washroom_civil",
+          label: "Washroom civil / tiling",
+          vendors: {
+            [A]: {
+              space_id: "closet",
+              space: "Walk-in Closet",
+              amount: 214500,
+            },
+            [B]: {
+              space_id: "bathroom",
+              space: "First Floor Bathroom",
+              amount: 236590,
+            },
+          },
+          note:
+            "Possible match between EXCESS INTERIORS and INT360 DESIGN.",
+        },
+      ],
+    });
+    const excessText = panels[0].questions.map((q) => q.text).join(" ");
+    const int360Text = panels[1].questions.map((q) => q.text).join(" ");
+    expect(excessText).not.toContain("INT360 DESIGN");
+    expect(int360Text).not.toContain("EXCESS INTERIORS");
   });
 });
 
@@ -192,6 +249,7 @@ describe("formatVendorBrief", () => {
         company: "EXCESS INTERIORS",
         quoteNumber: "QCN21BW",
         phone: "9513158197",
+        email: "quotes@excess.example",
         questions: [{ id: "a", text: "Confirm GST.", why: "" }],
       },
       ["a"],
@@ -199,5 +257,31 @@ describe("formatVendorBrief", () => {
     );
     expect(payload.notes).toBe("—");
     expect(payload.questions).toContain("Confirm GST");
+  });
+
+  it("keeps the full ticked list for email, including empty notes", () => {
+    const payload = emailPayloadForPanel(
+      {
+        key: A,
+        title: "Ask EXCESS",
+        subtitle: "Quote #Q1",
+        company: "EXCESS INTERIORS",
+        quoteNumber: "QCN21BW",
+        phone: "9513158197",
+        email: "quotes@excess.example",
+        questions: [
+          { id: "a", text: "Confirm GST.", why: "" },
+          { id: "b", text: "List package contents.", why: "" },
+        ],
+      },
+      ["a", "b"],
+      ""
+    );
+    expect(payload.email).toBe("quotes@excess.example");
+    expect(payload.questions).toEqual([
+      "Confirm GST.",
+      "List package contents.",
+    ]);
+    expect(payload.notes).toBe("");
   });
 });

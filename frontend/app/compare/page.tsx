@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useMemo, Suspense } from "react";
-import dynamic from "next/dynamic";
 import { useSearchParams, useRouter } from "next/navigation";
 import CompareLoadingPanel, {
   type CompareProgressStage,
@@ -52,15 +51,6 @@ import {
 import { pollCompareProgress } from "../../lib/compare-progress";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ErrorState } from "@/components/ui/EmptyState";
-
-const VendorChart = dynamic(() => import("../../components/VendorChart"), {
-  ssr: false,
-  loading: () => (
-    <div className="h-80 w-full flex items-center justify-center text-gray-400 text-sm">
-      Loading chart…
-    </div>
-  ),
-});
 
 /** Ask QuoteSense is kept in the tree but gated off for the space-first compare slice. */
 const SHOW_COMPARE_CHAT = false;
@@ -965,16 +955,6 @@ function QuoteSenseContent() {
             tableData={tableData}
             meta={vendorMeta}
           />
-        )}
-
-        {chartData.length > 0 && (
-          <section className="qs-card p-5 md:p-6">
-            <h2 className="qs-section-title">Cost comparison</h2>
-            <p className="qs-section-sub mb-4">
-              Billed grand total for each quote.
-            </p>
-            <VendorChart data={chartData} meta={vendorMeta} />
-          </section>
         )}
 
         {tableData.length > 0 && (

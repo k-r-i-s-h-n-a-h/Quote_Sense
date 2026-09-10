@@ -542,6 +542,7 @@ def _comparison_row_for_subset(subset, vendors: list[str], family: str, has_bund
     # counts a bundle row's rupees when that vendor's basis is "bundle" — an
     # itemised figure is already counted in the space or project tier.
     line_ids: dict[str, list[str]] = {}
+    project_items: list[dict[str, Any]] = []
     for vendor in vendors:
         vrows = subset[subset["vendor_name"] == vendor]
         if basis.get(vendor) == "bundle":
@@ -551,11 +552,35 @@ def _comparison_row_for_subset(subset, vendors: list[str], family: str, has_bund
             for v in (vrows["line_id"].tolist() if "line_id" in vrows.columns else [])
             if str(v)
         ]
+        if basis.get(vendor) != "itemized":
+            continue
+        for _, item in vrows[vrows["scope"] == "project"].iterrows():
+            line_id = str(item.get("line_id") or "").strip()
+            if not line_id:
+                continue
+            label = str(
+                item.get("work_label")
+                or item.get("sub_service")
+                or item.get("item_name")
+                or "Whole-home work"
+            ).strip()
+            project_items.append(
+                {
+                    "line_id": line_id,
+                    "vendor": vendor,
+                    "label": label,
+                    "amount": round(float(item.get("amount") or 0)),
+                }
+            )
 
     row_dict: dict[str, Any] = {
         "match_tier": "MATCH",
         "line_ids": line_ids,
         "source_line_ids": [lid for ids in line_ids.values() for lid in ids],
+        # Scattered recaps can replace a Whole-home row in the painted matrix.
+        # Name those contributing lines here so a family total never makes an
+        # individual source line visually anonymous.
+        "project_items": project_items,
         "bundle_id": (
             str(bundle_rows.iloc[0]["bundle_id"])
             if len(bundle_rows) > 0

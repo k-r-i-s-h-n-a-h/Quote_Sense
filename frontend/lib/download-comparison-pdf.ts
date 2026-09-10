@@ -17,6 +17,7 @@ import {
   parseCellStatus,
   partitionBundleRows,
   projectRowsForDisplay,
+  recapProjectItems,
   recapPlacementNote,
   recapPlacementNotes,
   reconciliationBlockReason,
@@ -702,8 +703,21 @@ export async function downloadComparisonPdf(
             const value = amountOf(bundle, v);
             if (value <= 0) return centeredCell("N/A");
             const note = bundlePriceNote(bundle, v);
+            const projectItems = withPlacement
+              ? recapProjectItems(bundle, v)
+              : [];
             return centeredCell(
-              [formatPdfAmount(value, unicode), note && `(${note})`]
+              [
+                formatPdfAmount(value, unicode),
+                note && `(${note})`,
+                ...projectItems.map(
+                  (item) =>
+                    `Whole home: ${item.label} · ${formatPdfAmount(
+                      item.amount,
+                      unicode
+                    )}`
+                ),
+              ]
                 .filter(Boolean)
                 .join("\n")
             );

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { MailIcon } from "../MailIcon";
 import { WhatsAppIcon } from "../WhatsAppIcon";
 import type { VendorMeta } from "../../lib/format";
 import type { CrossScopeRow, SpaceNote, SpaceRow, Vendor } from "../../lib/compare-types";
@@ -9,6 +10,8 @@ import {
   formatVendorBrief,
   type AskVendorPanel,
 } from "../../lib/vendor-questions";
+
+type SendChannel = "whatsapp" | "email";
 
 type PanelState = { checked: string[]; notes: string };
 
@@ -113,9 +116,10 @@ export default function AskVendors({
     defaultState(panels)
   );
   const [copiedKey, setCopiedKey] = useState("");
-  const [waKey, setWaKey] = useState("");
-  const [waMessage, setWaMessage] = useState("");
+  const [statusKey, setStatusKey] = useState("");
+  const [statusMessage, setStatusMessage] = useState("");
   const [sendingKey, setSendingKey] = useState("");
+  const [sendingChannel, setSendingChannel] = useState<SendChannel | "">("");
 
   useEffect(() => {
     try {
@@ -177,11 +181,16 @@ export default function AskVendors({
     }
   };
 
-  const sendWhatsApp = async (panel: AskVendorPanel) => {
+  const sendToVendor = async (panel: AskVendorPanel, channel: SendChannel) => {
     const state = byPanel[panel.key] || { checked: [], notes: "" };
-    if (!panel.phone) {
-      setWaKey(panel.key);
-      setWaMessage("No vendor phone on this quote yet.");
+    if (channel === "whatsapp" && !panel.phone) {
+      setStatusKey(panel.key);
+      setStatusMessage("No vendor phone on this quote yet.");
+      return;
+    }
+    if (channel === "email" && !panel.email) {
+      setStatusKey(panel.key);
+      setStatusMessage("No vendor email on this quote yet.");
       return;
     }
     const chosen = panel.questions
@@ -189,30 +198,60 @@ export default function AskVendors({
       .map((q) => q.text);
     if (!chosen.length) return;
     setSendingKey(panel.key);
-    setWaKey(panel.key);
-    setWaMessage("Sending…");
+    setSendingChannel(channel);
+    setStatusKey(panel.key);
+    setStatusMessage("Sending…");
+    const path =
+      channel === "email" ? "/api/ask-vendors/email" : "/api/ask-vendors/whatsapp";
+    const body =
+      channel === "email"
+        ? {
+            email: panel.email,
+            vendor_name: panel.company,
+            quote_number: panel.quoteNumber,
+            questions: chosen,
+            notes: state.notes || "",
+          }
+        : {
+            phone: panel.phone,
+            vendor_name: panel.company,
+            quote_number: panel.quoteNumber,
+            questions: chosen,
+            notes: state.notes || "",
+          };
     try {
-      const res = await fetch("/api/ask-vendors/whatsapp", {
+      const res = await fetch(path, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          phone: panel.phone,
-          vendor_name: panel.company,
-          quote_number: panel.quoteNumber,
-          questions: chosen,
-          notes: state.notes || "",
-        }),
+        body: JSON.stringify(body),
       });
       const data = (await res.json()) as { status?: string };
       if (!res.ok || data.status === "error") {
-        setWaMessage("Couldn’t send WhatsApp. Try again or copy the questions.");
+        if (channel === "email" && res.status === 503) {
+          setStatusMessage(
+            "Email isn’t ready yet. Copy the questions or use WhatsApp."
+          );
+        } else if (channel === "email") {
+          setStatusMessage(
+            "Couldn’t send email. Try again or copy the questions."
+          );
+        } else {
+          setStatusMessage(
+            "Couldn’t send WhatsApp. Try again or copy the questions."
+          );
+        }
         return;
       }
-      setWaMessage("Sent.");
+      setStatusMessage("Sent.");
     } catch {
-      setWaMessage("Couldn’t send WhatsApp. Try again or copy the questions.");
+      setStatusMessage(
+        channel === "email"
+          ? "Couldn’t send email. Try again or copy the questions."
+          : "Couldn’t send WhatsApp. Try again or copy the questions."
+      );
     } finally {
       setSendingKey("");
+      setSendingChannel("");
     }
   };
 
@@ -222,8 +261,8 @@ export default function AskVendors({
         <h2 className="qs-section-title">Ask the vendors</h2>
         <p className="qs-section-sub">
           {sameCompany
-            ? "Both quotes are from the same vendor — one checklist. Tick what they still need to confirm."
-            : "Each vendor gets their own checklist. Tick what to send, then copy or WhatsApp."}
+            ? "Both quotes are from the same vendor — one checklist. Tick what they still need to confirm, then email, WhatsApp, or copy."
+            : "Each vendor gets their own checklist. Tick what to send, then email, WhatsApp, or copy."}
         </p>
       </div>
 
@@ -265,24 +304,46 @@ export default function AskVendors({
                 </button>
                 <button
                   type="button"
-                  onClick={() => sendWhatsApp(panel)}
-                  disabled={!state.checked.length || !panel.phone || sendingKey === panel.key}
+                  onClick={() => sendToVendor(panel, "email")}
+                  disabled={
+                    !state.checked.length ||
+                    !panel.email ||
+                    sendingKey === panel.key
+                  }
+                  className="qs-btn qs-btn-primary inline-flex items-center gap-2"
+                >
+                  <MailIcon className="w-4 h-4 text-white" />
+                  {sendingKey === panel.key && sendingChannel === "email"
+                    ? "Sending…"
+                    : `Email ${panel.company}`}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => sendToVendor(panel, "whatsapp")}
+                  disabled={
+                    !state.checked.length ||
+                    !panel.phone ||
+                    sendingKey === panel.key
+                  }
                   className="qs-btn inline-flex items-center gap-2 !bg-[#25D366] !text-white hover:!bg-[#1ebe5d] disabled:opacity-50"
                 >
                   <WhatsAppIcon className="w-4 h-4 text-white" />
-                  {sendingKey === panel.key
+                  {sendingKey === panel.key && sendingChannel === "whatsapp"
                     ? "Sending…"
                     : `WhatsApp ${panel.company}`}
                 </button>
                 <p className="text-[11px] text-stone-400">
                   {state.checked.length} selected
+                  {panel.email
+                    ? ` · ${panel.email}`
+                    : " · no email on this quote yet"}
                   {panel.phone
                     ? ` · ${panel.phone}`
                     : " · no phone on this quote yet"}
                 </p>
               </div>
-              {waKey === panel.key && waMessage ? (
-                <p className="mt-2 text-xs text-stone-500">{waMessage}</p>
+              {statusKey === panel.key && statusMessage ? (
+                <p className="mt-2 text-xs text-stone-500">{statusMessage}</p>
               ) : null}
             </div>
           );

@@ -120,6 +120,13 @@ export interface BundleRow {
   /** Lineage for both vendors. Used to hide Whole-home rows already in a recap. */
   source_line_ids?: string[];
   line_ids?: Record<Vendor, string[]>;
+  /** Whole-home source lines absorbed into this recap; these must be named. */
+  project_items?: {
+    line_id: string;
+    vendor: Vendor;
+    label: string;
+    amount: number;
+  }[];
   [key: string]: unknown;
 }
 
@@ -392,8 +399,19 @@ export function projectRowsForDisplay(
   return projectRows.filter((row) => {
     const ids = lineIdsOfRow(row);
     if (ids.length === 0) return true;
-    return !ids.some((id) => recapped.has(id));
+    // A merged display row can contain recapped and unrecapped source lines.
+    // Keep it when even one contributing line has nowhere else to be painted.
+    return !ids.every((id) => recapped.has(id));
   });
+}
+
+export function recapProjectItems(
+  row: BundleRow,
+  vendor: Vendor
+): NonNullable<BundleRow["project_items"]> {
+  return (row.project_items ?? []).filter(
+    (item) => String(item.vendor) === String(vendor)
+  );
 }
 
 /** Short customer-facing note under a bundle amount — no internal jargon. */

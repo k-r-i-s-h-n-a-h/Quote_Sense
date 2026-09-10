@@ -916,6 +916,7 @@ def run_comparison(session_id, on_matrix_ready=None, df=None, fast_moving_avg=Tr
         has_quote_date = 'quote_date' in df.columns
         has_gst_mode = 'gst_mode' in df.columns
         has_vendor_phone = 'vendor_phone' in df.columns
+        has_vendor_email = 'vendor_email' in df.columns
         vendor_meta = {}
         for _, r in df.drop_duplicates('vendor_name').iterrows():
             key = r['vendor_name']
@@ -926,6 +927,7 @@ def run_comparison(session_id, on_matrix_ready=None, df=None, fast_moving_avg=Tr
                 "quote_date": (str(r.get('quote_date', '') or '').strip() if has_quote_date else ''),
                 "gst_mode": (str(r.get('gst_mode', '') or '').strip() if has_gst_mode else ''),
                 "phone": (str(r.get('vendor_phone', '') or '').strip() if has_vendor_phone else ''),
+                "email": (str(r.get('vendor_email', '') or '').strip() if has_vendor_email else ''),
             }
 
         # 2. Space-first matrix: cluster rooms, roll up lighting lumpsum vs itemized.
@@ -1196,8 +1198,12 @@ def mongodb_quotes_to_dataframe(quotes_list: list):
         client_detail = quote_data.get("clientDetail") or {}
         quote_date = str(quote_data.get("quoteDate") or quote_data.get("createdAt") or "")
         gst_mode = gst_mode_from_quote(quote_data)
-        from services.vendor_contact import vendor_phone_from_detail
-        vendor_phone = vendor_phone_from_detail(vendor_detail)
+        from services.vendor_contact import (
+            vendor_email_from_quote,
+            vendor_phone_from_quote,
+        )
+        vendor_phone = vendor_phone_from_quote(quote_data)
+        vendor_email = vendor_email_from_quote(quote_data)
 
         grand_total = 0.0
         for item in quote_data.get("pricingSummary") or []:
@@ -1252,6 +1258,7 @@ def mongodb_quotes_to_dataframe(quotes_list: list):
                         "quote_date": quote_date[:10] if len(quote_date) >= 10 else quote_date,
                         "gst_mode": gst_mode,
                         "vendor_phone": vendor_phone,
+                        "vendor_email": vendor_email,
                         "grand_total": grand_total,
                         "client_name": client_detail.get("clientName") or "",
                         "service_type": quote_service_type,

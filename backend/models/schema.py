@@ -24,6 +24,7 @@ class ExtractedQuote(BaseModel):
     quote_number: str = Field(description="The quote/quotation reference number, e.g. 'Q52OW75' (strip any leading '#'). Empty string if not present.")
     quote_date: str = Field(description="The date of the quote, e.g. '07/05/2026'.")
     vendor_phone: str = Field(description="The vendor's contact / WhatsApp number as printed on the quote (digits, with country code if shown). Empty string if not present.")
+    vendor_email: str = Field(description="The vendor's email address as printed on the quote. Empty string if not present.")
     subtotal: float = Field(description="The 'Subtotal' amount BEFORE TatvaOps service charges and taxes (the sum of all line-item amounts). Use 0.0 if not present.")
     grand_total: float = Field(description="The final total price including GST.")
     services: List[MainService] = Field(description="A list of all the main service categories added to this quote")

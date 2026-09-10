@@ -119,7 +119,7 @@ Allocating a lumpsum across rooms would invent numbers the vendor never quoted.
 ```jsonc
 {
   "vendors": ["Infosys (Q2OE1CX)", "TCS (QGT3A1I)"],
-  "vendorMeta": { "<vendor>": { "company": "", "filename": "", "quote_number": "", "quote_date": "", "gst_mode": "", "phone": "" } },
+  "vendorMeta": { "<vendor>": { "company": "", "filename": "", "quote_number": "", "quote_date": "", "gst_mode": "", "phone": "", "email": "" } },
   "chartData": [{ "vendor": "...", "total": 0 }],
   "spaceTier": [ /* SpaceRow */ ],
   "bundleTier": [ /* BundleRow */ ],
@@ -192,6 +192,7 @@ model confidence. These tiers add ways to abstain; they do not loosen a guard.
 | `takeaway` | dict or omitted | `{ kind, text }` when one vendor is a package and another is itemised with a large gap. Never on scattered recaps. |
 | `source_line_ids` | list[str] | Every `line_id` this recap was built from. Whole-home display uses this to avoid double-painting those same lines. |
 | `line_ids` | dict | `{ "<vendor>": [line_id, ...] }`. |
+| `project_items` | list | Whole-home lines absorbed into a scattered recap: `{line_id, vendor, label, amount}`. The UI/PDF names these beneath the recap total. |
 | `<vendor name>` | int | Bundler's lumpsum, or the counterpart's summed itemised lines. |
 
 `basis` is what stops the row from lying. A figure produced by summing five

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   lineIdsOfRow,
   projectRowsForDisplay,
+  recapProjectItems,
   type BundleRow,
   type SpaceRow,
 } from "../compare-types";
@@ -65,10 +66,35 @@ describe("projectRowsForDisplay line membership", () => {
       has_bundle: false,
       basis: { [A]: "itemized", [B]: "itemized" },
       source_line_ids: ["wh:elec", "room:b-light"],
+      project_items: [
+        {
+          line_id: "wh:elec",
+          vendor: A,
+          label: "Electrical Work",
+          amount: 17700,
+        },
+      ],
       [A]: 17700,
       [B]: 12000,
     };
     expect(projectRowsForDisplay([electrical], [recap])).toEqual([]);
+    expect(recapProjectItems(recap, A)).toEqual([
+      {
+        line_id: "wh:elec",
+        vendor: A,
+        label: "Electrical Work",
+        amount: 17700,
+      },
+    ]);
+  });
+
+  it("keeps a merged row when only some source lines are recapped", () => {
+    const merged = projectRow("wh:recapped", {
+      source_line_ids: ["wh:recapped", "wh:not-recapped"],
+      line_ids: { [A]: ["wh:recapped", "wh:not-recapped"], [B]: [] },
+    });
+    const recap = scatteredHardware(["wh:recapped", "room:b-hw"]);
+    expect(projectRowsForDisplay([merged], [recap])).toEqual([merged]);
   });
 
   it("does not hide a whole-home hardware line just because another hardware recap exists", () => {

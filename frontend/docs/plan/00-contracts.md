@@ -67,6 +67,7 @@ export interface BundleRow {
   takeaway?: { kind?: string; text?: string };
   source_line_ids?: string[];
   line_ids?: Record<Vendor, string[]>;
+  project_items?: { line_id: string; vendor: Vendor; label: string; amount: number }[];
   [vendor: string]: unknown;
 }
 
@@ -121,6 +122,10 @@ export interface MatrixV1 {
   session_id?: string;
 }
 ```
+
+`vendorMeta` may carry `phone` and `email` from that quote's `vendorDetail`.
+Either is empty when the source did not provide a valid contact; the UI must
+not invent one.
 
 ## The gate the UI must respect
 

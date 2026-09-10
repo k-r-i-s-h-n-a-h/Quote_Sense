@@ -357,3 +357,29 @@ Tile, plaster, waterproofing and grouting in a washroom-scoped space are a
 `POSSIBLE_CROSS_SCOPE_MATCH` group (`washroom_civil`), same rule as fixtures
 in §13.5: confirm with vendor, **totals never merged**. Kitchen or living-room
 tiling without a wet-area container is not this group.
+
+### 13.12 A recap total does not make its source lines visible
+
+When a Whole-home row is suppressed because its line ids are already in a
+scattered recap, that recap must name each suppressed Whole-home line and its
+amount. Showing only `Hardware & accessories — 3 lines` is not enough: the
+reader cannot verify that a specific quoted line survived. If a merged row has
+even one source line outside the recap, keep the row visible.
+
+### 13.13 Vendor outreach never identifies another vendor
+
+WhatsApp, copied questions and any future email are one-vendor clarification
+briefs. They may name that vendor's own quote, spaces and scope, but never the
+other vendor's identity, quote number, space labels, prices or contact details.
+Do not send the comparison report to a vendor. The customer-facing matrix can
+show both vendors; outbound vendor communication cannot.
+
+### 13.14 Ask the vendors: email is the full list; WhatsApp stays
+
+Each vendor card has Copy, Email, and WhatsApp. Email sends that vendor's
+ticked questions and notes in full (MSG91 Email, variable-length checklist).
+WhatsApp remains the existing short-channel send. Neither channel is a
+comparison report or a vendor-only page. `quotes.vendor_email` is captured
+from Tatva `vendorDetail` the same way as `vendor_phone`; empty means no
+send. From address is the verified MSG91 domain (`info@mail.withtatva.ai`);
+Reply-To may be `contact@withtatva.ai`.

@@ -54,10 +54,17 @@ interpretation out of S1 means a model swap cannot corrupt grouping.
    quote them on Comparison Summary; it must not invent area from amount÷rate
    when qty is 0. `description` stays full text so a named finish can appear
    in the summary without becoming extra work rows ([ACTION.md](../../../ACTION.md) §8).
-8. `vendor_phone` is copied from Tatva `vendorDetail` (phoneNumber / mobile /
-   contactNumber / …) or from the PDF header when printed. Empty when absent.
-   Stored on `quotes.vendor_phone`, surfaced on `vendorMeta.phone`. Do not
-   invent a number. WhatsApp send uses this quote's phone only.
+8. `vendor_phone` is copied from Tatva `vendorDetail` or a populated `vendorId`
+   object (phoneNumber / mobile / contactNumber / …) or from the PDF header
+   when printed. Empty when absent. Stored on `quotes.vendor_phone`, surfaced
+   on `vendorMeta.phone`. Do not invent a number. WhatsApp send uses this
+   quote's phone only.
+9. `vendor_email` is copied from Tatva `vendorDetail` or a populated `vendorId`
+   object (`email`, `emailAddress`, `vendorEmail`, `companyEmail`, including
+   nested contact/profile objects) or from the PDF header when printed. It is
+   normalized and validated, stored on `quotes.vendor_email`, and surfaced on
+   `vendorMeta.email`. Do not infer one from the company name or domain, and
+   never use `clientDetail.email`.
 
 ## Validation
 

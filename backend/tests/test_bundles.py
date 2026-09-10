@@ -368,6 +368,62 @@ def test_hardware_placement_is_package_vs_rooms(bundle_rows):
     assert row["placement"][VENDOR_B] == "space"
 
 
+def test_scattered_recap_names_whole_home_lines_it_absorbs():
+    """A recapped project line must be visible by name, not only in a family sum."""
+    df = pd.DataFrame(
+        [
+            {
+                "vendor_name": "North (Q1)",
+                "space_id": "project_level",
+                "space": "Project-level",
+                "scope": "project",
+                "bundle_family": "hardware",
+                "line_id": "q1:hinges",
+                "work_label": "Door closer hinges",
+                "sub_service": "Door closer hinges",
+                "item_name": "Door closer hinges",
+                "amount": 29146,
+            },
+            {
+                "vendor_name": "North (Q1)",
+                "space_id": "kitchen",
+                "space": "Kitchen",
+                "scope": "space",
+                "bundle_family": "hardware",
+                "line_id": "q1:tandem",
+                "work_label": "Tandem drawers",
+                "sub_service": "Tandem drawers",
+                "item_name": "Tandem drawers",
+                "amount": 12000,
+            },
+            {
+                "vendor_name": "South (Q2)",
+                "space_id": "utility",
+                "space": "Utility",
+                "scope": "space",
+                "bundle_family": "hardware",
+                "line_id": "q2:cutlery",
+                "work_label": "Cutlery tray",
+                "sub_service": "Cutlery tray",
+                "item_name": "Cutlery tray",
+                "amount": 14000,
+            },
+        ]
+    )
+    rows = bundle_comparison_rows(df, ["North (Q1)", "South (Q2)"])
+    assert len(rows) == 1
+    row = rows[0]
+    assert "q1:hinges" in row["source_line_ids"]
+    assert row["project_items"] == [
+        {
+            "line_id": "q1:hinges",
+            "vendor": "North (Q1)",
+            "label": "Door closer hinges",
+            "amount": 29146,
+        }
+    ]
+
+
 def test_package_lower_takeaway():
     row = {
         "bundle_label": "Hardware & accessories",

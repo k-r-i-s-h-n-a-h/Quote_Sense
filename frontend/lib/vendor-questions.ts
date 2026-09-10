@@ -33,6 +33,7 @@ export type AskVendorPanel = {
   company: string;
   quoteNumber: string;
   phone: string;
+  email: string;
   questions: VendorQuestion[];
 };
 
@@ -106,19 +107,24 @@ export function buildVendorQuestions(input: {
   }
 
   for (const entry of input.crossScope ?? []) {
-    const names = vendors
-      .map((v) => {
-        const side = entry.vendors?.[v];
-        if (!side) return "";
-        const place = side.space ? ` in ${side.space}` : "";
-        return `${who(v, labels)}${place}`;
-      })
-      .filter(Boolean);
-    add({
-      id: `cross:${entry.group || names.join("|") || "scope"}`,
-      text: `Confirm whether ${names.join(" and ")} are the same ${(entry.label || "scope").toLowerCase()} — the comparison did not merge them.`,
-      why: entry.note || "",
-    });
+    for (const vendor of vendors) {
+      const side = entry.vendors?.[vendor];
+      if (!side) continue;
+      const quote = labels[vendor]?.quoteNumber;
+      const quotePrefix = quote ? `For quote #${quote}, ` : "";
+      const place = side.space ? ` under "${side.space}"` : "";
+      add({
+        id: `cross:${entry.group || "scope"}:${vendor}`,
+        text:
+          `${quotePrefix}confirm exactly what is included${place} for your ` +
+          `${(entry.label || "scope").toLowerCase()}, including exclusions and ` +
+          "anything billed separately.",
+        why:
+          "This scope is recorded under a different project area in another " +
+          "quote, so it was not merged automatically.",
+        vendors: [vendor],
+      });
+    }
   }
 
   const priced = (input.rows ?? []).filter((row) => {
@@ -138,7 +144,7 @@ export function buildVendorQuestions(input: {
     add({
       id: "pricing-methods",
       text:
-        "Confirm quantities are in the same physical unit on both quotes" +
+        "Confirm the physical unit used for these quantities in your quote" +
         (samples.length ? ` (e.g. ${samples.join(", ")})` : "") +
         ".",
       why: "The comparison found rows priced in different units (for example per unit vs sq ft). Those quantities are not comparable as written.",
@@ -147,7 +153,7 @@ export function buildVendorQuestions(input: {
 
   add({
     id: "standing-na",
-    text: "For every line shown as N/A against you, confirm it was not quoted — not bundled inside another room or package.",
+    text: "Confirm whether each scope missing from your itemised quote was not quoted — not bundled inside another room or package.",
     why: "A missing cell can mean a true gap or work sitting inside another space. Only you can say which.",
   });
   add({
@@ -187,6 +193,10 @@ export function buildAskVendorPanels(input: {
       vendors
         .map((v) => String(input.vendorMeta?.[v]?.phone || "").trim())
         .find(Boolean) || "";
+    const email =
+      vendors
+        .map((v) => String(input.vendorMeta?.[v]?.email || "").trim())
+        .find(Boolean) || "";
     return {
       sameCompany: true,
       panels: [
@@ -199,6 +209,7 @@ export function buildAskVendorPanels(input: {
           company,
           quoteNumber: quoteBits.join(", "),
           phone,
+          email,
           questions,
         },
       ],
@@ -219,6 +230,7 @@ export function buildAskVendorPanels(input: {
         company,
         quoteNumber,
         phone: String(input.vendorMeta?.[vendor]?.phone || "").trim(),
+        email: String(input.vendorMeta?.[vendor]?.email || "").trim(),
         questions: questions.filter((q) => questionForPanel(q, vendor)),
       };
     }),
@@ -265,6 +277,29 @@ export function whatsappPayloadForPanel(
     questions: questions || "—",
     notes: extra || "—",
     phone: panel.phone || "",
+  };
+}
+
+export type AskVendorsEmailPayload = {
+  vendor_name: string;
+  quote_number: string;
+  questions: string[];
+  notes: string;
+  email: string;
+};
+
+export function emailPayloadForPanel(
+  panel: AskVendorPanel,
+  checkedIds: string[],
+  notes: string
+): AskVendorsEmailPayload {
+  const chosen = panel.questions.filter((q) => checkedIds.includes(q.id));
+  return {
+    vendor_name: panel.company,
+    quote_number: panel.quoteNumber || "—",
+    questions: chosen.map((q) => q.text),
+    notes: notes.trim(),
+    email: panel.email || "",
   };
 }
 

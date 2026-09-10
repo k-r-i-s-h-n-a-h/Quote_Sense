@@ -383,3 +383,20 @@ comparison report or a vendor-only page. `quotes.vendor_email` is captured
 from Tatva `vendorDetail` the same way as `vendor_phone`; empty means no
 send. From address is the verified MSG91 domain (`info@mail.withtatva.ai`);
 Reply-To may be `contact@withtatva.ai`.
+
+### 13.15 Vendor email goes through Tatva notification, not MSG91
+
+Ask-the-vendors **Email** POSTs `{TATVA_API_BASE}/notification/api/notifications/send`
+(`type: generic`, `to`, `data.subject` / `message` / `html`). PM Nodemailer
+sends as `info@withtatva.ai`. Do not add MSG91 Email DNS on Hostinger for that
+address. WhatsApp stays on MSG91. The email names one quote number only — never
+the other quote in the comparison. Number the checklist with an HTML `<ol>`
+only (no doubled `1. 1.`).
+
+### 13.16 A merge always discloses, even when sub-item titles match the heading
+
+When merged lines reuse the row's own title (distinguished only in description,
+or not at all), still print a `combines:` note: prefer the lines' own titles,
+then a short description snippet, then count and amounts
+(`combines: 3 line items (₹70,210 + ₹43,365 + ₹75,048)`). Never skip
+disclosure because names matched the heading.

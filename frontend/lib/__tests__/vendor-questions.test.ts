@@ -142,6 +142,7 @@ describe("buildAskVendorPanels", () => {
     expect(panels[0].title).toBe("Ask INFOSYS LIMITED");
     expect(panels[0].subtitle).toContain("#Q2OE1CX");
     expect(panels[0].subtitle).toContain("#QGT3A1I");
+    expect(panels[0].quoteNumber).toBe("Q2OE1CX");
   });
 
   it("splits a checklist per vendor when the companies differ", () => {

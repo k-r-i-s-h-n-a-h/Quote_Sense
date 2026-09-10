@@ -360,6 +360,156 @@ def test_merged_lines_say_so_and_do_not_collide(matrix):
     assert len(labels) == len(set(labels)), f"duplicate display labels: {labels}"
 
 
+def test_every_merge_has_a_combines_note(matrix):
+    """A merge of 2+ source lines must never ship silent (ACTION.md §13.16)."""
+    _assert_merges_disclose(matrix, VENDORS)
+
+
+def _assert_merges_disclose(payload, vendors):
+    for row in all_rows(payload):
+        line_ids = row.get("line_ids") or {}
+        combines = row.get("combines") or {}
+        for vendor in vendors:
+            ids = line_ids.get(vendor) or []
+            if len(ids) < 2:
+                continue
+            note = [str(v).strip() for v in (combines.get(vendor) or []) if str(v).strip()]
+            assert note, (
+                f"silent merge on {row.get('sub_service')} / {vendor}: "
+                f"combined_from={row.get('combined_from')}"
+            )
+            summary = str(row.get("summary") or "")
+            assert "combines:" in summary, row.get("sub_service")
+
+
+def _run_stubbed_comparison(df, session_id: str):
+    import services.comparator as comparator
+
+    original = comparator._generate_recommendation
+    comparator._generate_recommendation = lambda *a, **k: "- **Stub:** ok."
+    try:
+        return comparator.run_comparison(session_id, df=df)
+    finally:
+        comparator._generate_recommendation = original
+
+
+def test_identical_headings_disclose_via_description():
+    """Sub-items that reuse the heading still get a combines note from description."""
+    import pandas as pd
+
+    items_a = [
+        _line(
+            sub_service="Storage cabinet",
+            item_name="Storage cabinet",
+            space_raw="Kitchen",
+            description="Storage cabinet base carcass with drawers and laminate shutters",
+            pricing_method="Per Unit / Each",
+            pricing_method_id="pm_unit",
+            amount=70210.0,
+        ),
+        _line(
+            sub_service="Storage cabinet",
+            item_name="Storage cabinet",
+            space_raw="Kitchen",
+            description="Storage cabinet wall hanging unit with open shelves above the hob",
+            pricing_method="Per Unit / Each",
+            pricing_method_id="pm_unit",
+            amount=43365.0,
+        ),
+        _line(
+            sub_service="Storage cabinet",
+            item_name="Storage cabinet",
+            space_raw="Kitchen",
+            description="Storage cabinet loft over the cabinets along the wet wall",
+            pricing_method="Per Unit / Each",
+            pricing_method_id="pm_unit",
+            amount=75048.0,
+        ),
+    ]
+    items_b = [
+        _line(
+            sub_service="Storage cabinet",
+            item_name="Storage cabinet",
+            space_raw="Kitchen",
+            description="Single storage cabinet line",
+            pricing_method="Per Unit / Each",
+            pricing_method_id="pm_unit",
+            amount=180000.0,
+        ),
+    ]
+    df = pd.DataFrame(
+        _quote(VENDOR_A, "EXCESS INTERIORS", "QCN21BW", items_a)
+        + _quote(VENDOR_B, "INT360 DESIGN", "Q1K7W0G", items_b)
+    )
+    payload = _run_stubbed_comparison(df, "merge-desc")
+    _assert_merges_disclose(payload, VENDORS)
+    merged = [
+        row
+        for row in all_rows(payload)
+        if len((row.get("line_ids") or {}).get(VENDOR_A) or []) >= 2
+    ]
+    assert len(merged) == 1, [row.get("sub_service") for row in merged]
+    note = merged[0]["combines"][VENDOR_A]
+    joined = " ".join(note).casefold()
+    assert "base carcass" in joined
+    assert "wall hanging" in joined
+    assert "loft over" in joined
+    assert "line items" not in joined
+    assert abs(merged[0][VENDOR_A] - 188623) < 1
+
+
+def test_identical_headings_and_descriptions_disclose_via_amounts():
+    """When labels and descriptions cannot name the parts, still disclose count + ₹."""
+    import pandas as pd
+
+    shared = dict(
+        sub_service="Display unit",
+        item_name="Display unit",
+        space_raw="Living Room",
+        description="Display unit",
+        pricing_method="Per Unit / Each",
+        pricing_method_id="pm_unit",
+    )
+    items_a = [
+        _line(**shared, amount=70210.0),
+        _line(**shared, amount=43365.0),
+        _line(**shared, amount=75048.0),
+    ]
+    items_b = [
+        _line(
+            sub_service="Display unit",
+            item_name="Display unit",
+            space_raw="Living Room",
+            description="One display unit",
+            pricing_method="Per Unit / Each",
+            pricing_method_id="pm_unit",
+            amount=200000.0,
+        ),
+    ]
+    df = pd.DataFrame(
+        _quote(VENDOR_A, "EXCESS INTERIORS", "QCN21BW", items_a)
+        + _quote(VENDOR_B, "INT360 DESIGN", "Q1K7W0G", items_b)
+    )
+    payload = _run_stubbed_comparison(df, "merge-amounts")
+    _assert_merges_disclose(payload, VENDORS)
+    merged = [
+        row
+        for row in all_rows(payload)
+        if len((row.get("line_ids") or {}).get(VENDOR_A) or []) >= 2
+    ]
+    assert len(merged) == 1, [row.get("sub_service") for row in merged]
+    note = merged[0]["combines"][VENDOR_A]
+    assert len(note) >= 1
+    text = " ".join(note)
+    assert "3 line items" in text
+    assert "₹70,210" in text
+    assert "₹43,365" in text
+    assert "₹75,048" in text
+    summary = merged[0]["summary"]
+    assert "combines:" in summary
+    assert "3 line items" in summary
+
+
 def test_the_lighting_work_meets_on_one_row(matrix):
     """One vendor wrote the catalog title itself; it must still pair up.
 

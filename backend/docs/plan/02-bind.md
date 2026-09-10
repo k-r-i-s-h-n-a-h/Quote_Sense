@@ -183,7 +183,8 @@ With the switch off, S2 is pure and deterministic. The test suite runs this way.
 `tests/test_work_catalog.py`:
 
 - casing and plural collapse (`Side table` ≡ `Side Table`),
-- alias folding (`False Ceiling` ≡ `False ceiling with painting`),
+- alias folding (`False Ceiling` ≡ `False ceiling with painting`;
+  `Janitor Unit` ≡ `Utility Unit`),
 - 1:N folding (both crockery lines share vendor A's key),
 - `Base Unit` and `Wall Unit` stay distinct,
 - description-wins fires on the mirror row and nowhere else,

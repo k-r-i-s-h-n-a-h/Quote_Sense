@@ -47,7 +47,7 @@ export interface SpaceRow {
   source_line_ids?: string[];                 // lineage, always populated
   line_ids?: Record<Vendor, string[]>;
   combined_from?: string[];                   // several lines of one vendor merged
-  combines?: Record<Vendor, string[]>;
+  combines?: Record<Vendor, string[]>;        // titles, description snippets, or "N line items (₹…)"
   match_tier?: MatchTier;
   space_note?: string;                        // UNASSIGNED: confirm before allocating
   qty_scope_note?: string;

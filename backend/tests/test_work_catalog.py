@@ -41,6 +41,7 @@ def test_cross_vendor_synonyms_merge():
     assert key("Loft") == key("Loft unit")
     assert key("Loft") == key("Loft & Door Type")
     assert key("folding study table") == key("Study Table")
+    assert key("Janitor Unit") == key("Utility Unit")
 
 
 def test_one_to_many_shares_a_key():

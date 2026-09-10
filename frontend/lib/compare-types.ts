@@ -88,7 +88,7 @@ export interface SpaceRow {
   line_ids?: Record<Vendor, string[]>;
   /** Set when one display row merged several lines from the same vendor. */
   combined_from?: string[];
-  /** Vendor -> the merged lines' own titles, for the "combines:" note. */
+  /** Vendor -> merged lines' titles, description snippets, or count+amounts. */
   combines?: Record<Vendor, string[]>;
   match_tier?: MatchTier;
   /** Confirm-with-vendor note for an UNASSIGNED space. */
@@ -1002,7 +1002,7 @@ function lineagePrefix(
   const named: string[] = [];
   for (const vendor of vendors) {
     const labels = (combines[vendor] || []).map((v) => String(v).trim()).filter(Boolean);
-    if (labels.length < 2) continue;
+    if (!labels.length) continue;
     const joined = labels.join(", ");
     named.push(
       keys.length === 1

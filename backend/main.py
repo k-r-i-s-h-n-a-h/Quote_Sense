@@ -1584,8 +1584,8 @@ async def send_ask_vendor_whatsapp(request: AskVendorWhatsAppRequest):
 
 @app.post("/api/ask-vendors/email")
 async def send_ask_vendor_email(request: AskVendorEmailRequest):
-    """Send one vendor's selected clarification brief through MSG91 Email."""
-    from services.msg91_email import EmailSendError, send_ask_vendor_email
+    """Send one vendor's selected clarification brief through Tatva notification."""
+    from services.tatva_notify import EmailSendError, send_ask_vendor_email
 
     try:
         result = send_ask_vendor_email(

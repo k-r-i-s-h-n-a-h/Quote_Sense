@@ -94,6 +94,8 @@ WORK_ALIASES = {
     "wall": "wall_unit",
     "tall": "tall_unit",
     "janitor": "janitor_unit",
+    "utility": "janitor_unit",
+    "utility unit": "janitor_unit",
     "rolling shutter": "rolling_shutter",
     "additional storage": "additional_storage",
     # Bedroom furniture.

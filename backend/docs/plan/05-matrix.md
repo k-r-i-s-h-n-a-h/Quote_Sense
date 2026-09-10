@@ -78,7 +78,10 @@ intent and a family token matches (`tiling`, `furniture`), the gap row gets
 
 Each row carries `source_line_ids` (all contributing `line_id`s) and `line_ids`
 (the same, per vendor). `combined_from` and `combines` are set only when one row
-merged several lines from the *same* vendor.
+merged several lines from the *same* vendor. `combines` always names the merge:
+distinct sub-item titles first, then a short description snippet per line, then
+count and amounts (`3 line items (₹70,210 + ₹43,365 + ₹75,048)`) when names
+cannot tell the parts apart. A merge of 2+ source lines never ships silent.
 
 This exists because a line went missing and nobody could tell. `Soft closing
 hinges` (Rs 29,146) never reached the comparison, and two other lines were

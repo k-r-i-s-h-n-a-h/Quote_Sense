@@ -207,7 +207,7 @@ export function buildAskVendorPanels(input: {
             ? `Both quotes · ${quoteBits.join(" and ")}`
             : "Both quotes from the same vendor",
           company,
-          quoteNumber: quoteBits.join(", "),
+          quoteNumber: (labels[first]?.quoteNumber || "").trim(),
           phone,
           email,
           questions,

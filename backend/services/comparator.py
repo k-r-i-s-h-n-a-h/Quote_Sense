@@ -44,6 +44,7 @@ from services.bundles import (
     bundle_zone_rows,
     bundled_families_by_vendor,
     bundled_space_ids,
+    inr_indian,
 )
 from services.cross_scope import cross_scope_candidates
 from services.lineage import (
@@ -486,6 +487,8 @@ _EMPTY_MEASURE = {
     "description": "",
     "line_ids": [],
     "labels": [],
+    "descriptions": [],
+    "line_amounts": [],
 }
 
 
@@ -550,6 +553,15 @@ def _vendor_measures(line_slice, vendor: str) -> dict:
         ]
         if labels:
             break
+    descriptions = []
+    if "description" in slice_.columns:
+        descriptions = [str(raw or "").strip() for raw in slice_["description"].tolist()]
+    line_amounts = []
+    if "amount" in slice_.columns:
+        line_amounts = [
+            float(v)
+            for v in pd.to_numeric(slice_["amount"], errors="coerce").fillna(0).tolist()
+        ]
     return {
         "quantity": round(qty, 4),
         "rate": round(rate, 2),
@@ -558,7 +570,77 @@ def _vendor_measures(line_slice, vendor: str) -> dict:
         "description": desc,
         "line_ids": line_ids,
         "labels": labels,
+        "descriptions": descriptions,
+        "line_amounts": line_amounts,
     }
+
+
+def _collapse_ws(text: str) -> str:
+    return " ".join((text or "").split())
+
+
+def _strip_heading_prefix(text: str, heading: str) -> str:
+    cleaned = _collapse_ws(text)
+    head = _collapse_ws(heading)
+    if head and cleaned[: len(head)].casefold() == head.casefold():
+        return cleaned[len(head) :].lstrip(" -–—:,.")
+    return cleaned
+
+
+def _description_snippet(text: str, heading: str, max_words: int = 6) -> str:
+    """Short per-line description for a merge note. Empty if it adds nothing."""
+    cleaned = _collapse_ws(text)
+    if not cleaned:
+        return ""
+    body = _collapse_ws(_strip_heading_prefix(cleaned, heading))
+    if not body or body.casefold() == _collapse_ws(heading).casefold():
+        if cleaned.casefold() == _collapse_ws(heading).casefold():
+            return ""
+        body = cleaned
+    words = body.split()
+    snippet = " ".join(words[:max_words])
+    if len(words) > max_words:
+        snippet += "…"
+    return snippet
+
+
+def _merge_disclosure(
+    heading: str,
+    *,
+    labels: list[str],
+    descriptions: list[str],
+    amounts: list[float],
+    n_lines: int,
+) -> list[str]:
+    """Name what a merged row combined. Never return empty for n_lines >= 2.
+
+    Prefer the sub-items' own titles when they differ from the display heading,
+    then a short description snippet, then count + amounts with no invented names.
+    """
+    named = [
+        text
+        for text in labels
+        if text and text.casefold() != str(heading).casefold()
+    ]
+    if len(named) >= 2:
+        return named[:4]
+
+    snippets: list[str] = []
+    seen: set[str] = set()
+    for raw in descriptions:
+        snippet = _description_snippet(raw, heading)
+        key = snippet.casefold()
+        if not snippet or key in seen:
+            continue
+        seen.add(key)
+        snippets.append(snippet)
+    if len(snippets) >= 2:
+        return snippets[:4]
+
+    shown = [inr_indian(value) for value in amounts[:n_lines]]
+    if shown:
+        return [f"{n_lines} line items ({' + '.join(shown)})"]
+    return [f"{n_lines} line items"]
 
 
 def _parent_id_for_slice(line_slice, space_id: str, present: set[str]) -> str:
@@ -689,16 +771,19 @@ def _build_space_rows(subset, vendors, bundled_families=None):
             if len(ids) < 2:
                 continue
             combined_from.extend(ids)
-            # Name the merged lines only when they were called something other
-            # than the row's own heading — "combines: Profile lights, Strip
-            # lights" under a row headed "Lighting points".
-            named = [
-                text
-                for text in (measures[vendor].get("labels") or [])
-                if text.casefold() != str(label).casefold()
-            ]
-            if len(named) >= 2:
-                combines[vendor] = named[:4]
+            # Always disclose a merge (ACTION.md §13.3 / §13.16). Distinct
+            # sub-item titles first ("Profile lights, Strip lights" under
+            # "Lighting points"); if every line reused the heading, fall
+            # back to description snippets, then count + amounts.
+            combines[vendor] = _merge_disclosure(
+                label,
+                labels=list(measures[vendor].get("labels") or []),
+                descriptions=list(measures[vendor].get("descriptions") or []),
+                amounts=[
+                    float(v) for v in (measures[vendor].get("line_amounts") or [])
+                ],
+                n_lines=len(ids),
+            )
         if combined_from:
             row_dict["combined_from"] = combined_from
         if combines:

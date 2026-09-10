@@ -168,7 +168,7 @@ model confidence. These tiers add ways to abstain; they do not loosen a guard.
 | `source_line_ids` | list[str] | Every `line_id` this row was built from, both vendors. **Always populated.** |
 | `line_ids` | dict | `{ "<vendor>": [line_id, ...] }` — the same lineage, per vendor. |
 | `combined_from` | list[str] | Set only when one display row merged several lines from the *same* vendor. |
-| `combines` | dict | `{ "<vendor>": ["Profile lights", "Strip lights"] }` — those lines' own titles, for the `combines:` note. |
+| `combines` | dict | `{ "<vendor>": ["Profile lights", "Strip lights"] }` — those lines' own titles, for the `combines:` note. When titles match the row heading, entries are description snippets or a single `"N line items (₹… + ₹…)"` string. Always set when `combined_from` has 2+ ids for that vendor. |
 | `match_tier` | str | See [Match tiers](#match-tiers). |
 | `space_note` | str | Carried through from S3 for an `UNASSIGNED` space. |
 | `qty_scope_note` | str | Carried through from S3. |

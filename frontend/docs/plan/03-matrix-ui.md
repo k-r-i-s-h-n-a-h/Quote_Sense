@@ -141,20 +141,14 @@ The customer ticks what to send, writes notes **on that vendor's card**, then
 **Copy questions** / **Email {company}** / **WhatsApp {company}** at the **end
 of that card**. The first checklist never goes to the second vendor.
 
-**Email {company}** POSTs that card only to `/api/ask-vendors/email` → MSG91
-Email. The body is the full ticked list plus notes (variable length — no
-WhatsApp 1024-character cap). MSG91 template
-`tatvaops_quotesense_vendor_clarifications` (id in
-`MSG91_ASK_VENDOR_EMAIL_TEMPLATE`) uses Handlebars:
-
-- `{{vendor_name}}`, `{{quote_number}}`, `{{question_count}}`
-- `{{#each questions}}{{number}}. {{text}}{{/each}}`
-- `{{#if has_notes}}{{notes}}{{/if}}`
-
-From is `info@mail.withtatva.ai` on verified domain `mail.withtatva.ai`.
-Reply-To is `contact@withtatva.ai`. Template name
-`tatvaops_quotesense_vendor_clarifications` is the default
-`MSG91_ASK_VENDOR_EMAIL_TEMPLATE` value after MSG91 approval.
+**Email {company}** POSTs that card only to `/api/ask-vendors/email` → Tatva
+`POST {TATVA_API_BASE}/notification/api/notifications/send` with
+`type: "generic"`, vendor `to`, and HTML/plain `data`. No MSG91 email
+template. From is PM’s `info@withtatva.ai`. The body is the full ticked list
+plus notes as an `<ol>` of `{{text}}` only (no extra `{{number}}`). The
+payload’s `quote_number` is **one** quote id — the other comparison quote is
+never in the subject or body. Same-company UI still shows both numbers on the
+card subtitle for the customer.
 
 **WhatsApp {company}** POSTs that card only to `/api/ask-vendors/whatsapp` → MSG91. WhatsApp does not
 allow newlines inside a variable, so the approved v2 template

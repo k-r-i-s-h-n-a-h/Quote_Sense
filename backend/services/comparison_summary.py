@@ -233,7 +233,8 @@ def _lineage_prefix(
     """"combines: A, B" when one display row merged several of a vendor's lines.
 
     A silent relabel is what let `Profile lights` + `Strip lights` render as a
-    single `Lighting points` row that traced back to nothing.
+    single `Lighting points` row that traced back to nothing. A single
+    count-and-amounts entry is still a disclosure and must print.
     """
     combines = row.get("combines")
     if not isinstance(combines, dict) or not combines:
@@ -241,7 +242,7 @@ def _lineage_prefix(
     named: list[str] = []
     for vendor in vendors:
         labels = [str(v).strip() for v in (combines.get(vendor) or []) if str(v).strip()]
-        if len(labels) < 2:
+        if not labels:
             continue
         who = refs.get(vendor, _who(vendor))
         joined = ", ".join(labels)
